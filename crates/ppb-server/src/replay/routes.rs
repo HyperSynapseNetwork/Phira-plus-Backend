@@ -10,7 +10,6 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
@@ -259,10 +258,10 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
             Ok(Message::Close(_)) | Err(_) => break,
             _ => continue,
         };
-        let parsed: Value = match serde_json::from_str(&text) {
+        let parsed: Value = match serde_json::from_str(text.as_str()) {
             Ok(v) => v,
             Err(_) => {
-                let _ = sink.send(Message::Text(json!({"type":"error","message":"invalid json"}).to_string())).await;
+                let _ = sink.send(Message::text(json!({"type":"error","message":"invalid json"}).to_string())).await;
                 continue;
             }
         };
@@ -271,12 +270,12 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
             break;
         }
         if typ != "fetch" {
-            let _ = sink.send(Message::Text(json!({"type":"error","message":"expected fetch"}).to_string())).await;
+            let _ = sink.send(Message::text(json!({"type":"error","message":"expected fetch"}).to_string())).await;
             continue;
         }
         let stream = parsed.get("stream").and_then(Value::as_str).unwrap_or("touches").to_string();
         if !matches!(stream.as_str(), "touches" | "judges") {
-            let _ = sink.send(Message::Text(json!({"type":"error","message":"stream must be touches|judges"}).to_string())).await;
+            let _ = sink.send(Message::text(json!({"type":"error","message":"stream must be touches|judges"}).to_string())).await;
             continue;
         }
         since = parsed.get("since").and_then(Value::as_i64).unwrap_or(since);
@@ -293,7 +292,7 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
                     .unwrap_or(since);
                 let done = batches.is_empty();
                 let _ = sink
-                    .send(Message::Text(
+                    .send(Message::text(
                         json!({
                             "type": "batches",
                             "stream": stream,
@@ -310,7 +309,7 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
                 }
             }
             Err(e) => {
-                let _ = sink.send(Message::Text(json!({"type":"error","message":e.to_string()}).to_string())).await;
+                let _ = sink.send(Message::text(json!({"type":"error","message":e.to_string()}).to_string())).await;
                 break;
             }
         }

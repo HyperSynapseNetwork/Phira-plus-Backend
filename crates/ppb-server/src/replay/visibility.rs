@@ -4,8 +4,6 @@
 //! inherit | public | friends | private | unlisted | custom. Custom uses
 //! `replay_acl` allow/deny. Share links are explicit grants (token-hash only).
 
-use uuid::Uuid;
-
 use crate::auth::types::AuthPrincipal;
 use crate::error::{ApiError, ErrorCode};
 

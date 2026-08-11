@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
-use axum::response::IntoResponse;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -65,7 +64,7 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                             if let Some(p) = prev {
                                 if seq > p + 1 {
                                     let _ = sink
-                                        .send(Message::Text(json!({
+                                        .send(Message::text(json!({
                                             "type": "resync",
                                             "stream": key,
                                             "expected": p + 1,
@@ -79,7 +78,7 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                             if last_round.as_deref() != Some(&round) {
                                 last_round = Some(round.clone());
                                 let _ = sink
-                                    .send(Message::Text(json!({
+                                    .send(Message::text(json!({
                                         "type": "round_switch",
                                         "round": round,
                                     }).to_string()))
@@ -103,7 +102,7 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         let _ = sink
-                            .send(Message::Text(json!({"type":"resync","reason":"lagged"}).to_string()))
+                            .send(Message::text(json!({"type":"resync","reason":"lagged"}).to_string()))
                             .await;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -113,15 +112,15 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                 if !buffer.is_empty() {
                     let batch = std::mem::take(&mut buffer);
                     let _ = sink
-                        .send(Message::Text(json!({"type":"batch","frames":batch}).to_string()))
+                        .send(Message::text(json!({"type":"batch","frames":batch}).to_string()))
                         .await;
                 }
-                let _ = sink.send(Message::Text(json!({"type":"heartbeat"}).to_string())).await;
+                let _ = sink.send(Message::text(json!({"type":"heartbeat"}).to_string())).await;
             }
             msg = stream.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                        if let Ok(v) = serde_json::from_str::<Value>(text.as_str()) {
                             match v.get("type").and_then(Value::as_str) {
                                 Some("set_players") => {
                                     players = v.get("players").and_then(Value::as_array)
