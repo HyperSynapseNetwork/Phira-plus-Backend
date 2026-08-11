@@ -10,6 +10,8 @@ use crate::error::{ApiError, ErrorCode};
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct Job {
     pub id: Uuid,
+    #[sqlx(rename = "type")]
+    #[serde(rename = "type")]
     pub r#type: String,
     pub state: String,
     pub progress: Option<f32>,

@@ -24,7 +24,7 @@ pub async fn get(
     namespace: &str,
 ) -> Result<Option<UserPreference>, ApiError> {
     sqlx::query_as::<_, UserPreference>(
-        "SELECT user_id, namespace, revision, json_data, updated_at
+        "SELECT user_id, namespace, revision, json_data AS data, updated_at
          FROM user_preferences WHERE user_id = $1 AND namespace = $2",
     )
     .bind(user_id)
@@ -65,7 +65,7 @@ pub async fn upsert(
          VALUES ($1, $2, $3, $4, now())
          ON CONFLICT (user_id, namespace) DO UPDATE
             SET revision = EXCLUDED.revision, json_data = EXCLUDED.json_data, updated_at = now()
-         RETURNING user_id, namespace, revision, json_data, updated_at",
+         RETURNING user_id, namespace, revision, json_data AS data, updated_at",
     )
     .bind(user_id)
     .bind(namespace)

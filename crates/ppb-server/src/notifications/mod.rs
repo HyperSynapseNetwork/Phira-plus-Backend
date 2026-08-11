@@ -10,6 +10,8 @@ use crate::error::{ApiError, ErrorCode};
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct NotificationEvent {
     pub id: Uuid,
+    #[sqlx(rename = "type")]
+    #[serde(rename = "type")]
     pub r#type: String,
     #[serde(rename = "actorUserId")]
     pub actor_user_id: Option<Uuid>,
@@ -132,7 +134,7 @@ pub async fn list_for_user(
 ) -> Result<Vec<UserNotificationWithEvent>, ApiError> {
     let rows: Vec<UserNotificationWithEvent> = sqlx::query_as(
         "SELECT un.id, un.event_id, un.user_id, un.read_at, un.dismissed_at, un.created_at,
-                ev.type, ev.actor_user_id, ev.payload, ev.created_at
+                ev.type AS event_type, ev.actor_user_id, ev.payload, ev.created_at AS event_created_at
          FROM user_notifications un
          JOIN notification_events ev ON ev.id = un.event_id
          WHERE un.user_id = $1
