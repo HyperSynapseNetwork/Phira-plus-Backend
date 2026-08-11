@@ -33,6 +33,8 @@ use crate::middleware::rate_limit::RateLimiter;
 use crate::permissions::resolver::PermissionResolver;
 use crate::phira::client::{PhiraApi, PhiraClient};
 use crate::phira::credential::CredentialCipher;
+use crate::phira::aggregator::Aggregator;
+use crate::phira::gateway::PhiraGateway;
 use crate::pmp::events::{EventBus, PpbEvent, ResourceRef};
 use crate::pmp::openuds::client::{OpenUdsClient, OpenUdsConfig};
 use crate::rooms::service::RoomService;
@@ -58,6 +60,7 @@ pub struct AppState {
     pub rooms: RoomService,
     pub player: PlayerService,
     pub jobs: JobRunner,
+    pub phira_gateway: Arc<PhiraGateway>,
 }
 
 impl AppState {
@@ -141,6 +144,15 @@ pub async fn build_state(
     let rooms = RoomService::new(Arc::clone(&openuds));
     let player = PlayerService::new(Arc::clone(&openuds));
     let jobs = JobRunner::new(db.clone(), events.clone(), Arc::clone(&openuds));
+    let phira_gateway = Arc::new(PhiraGateway::new(
+        &runtime.phira.base_url,
+        runtime.phira.timeout_ms,
+        runtime.phira.gateway_ttl_secs,
+        runtime.phira.gateway_rate_per_minute,
+    )?);
+    let aggregator_enabled = runtime.phira.aggregator_enabled;
+    let aggregator_interval_hours = runtime.phira.aggregator_interval_hours;
+    let aggregator_top_n = runtime.phira.aggregator_top_n;
 
     let state = Arc::new(AppState {
         config: Arc::new(runtime),
@@ -160,6 +172,7 @@ pub async fn build_state(
         rooms,
         player,
         jobs,
+        phira_gateway,
     });
 
     if let Some(db) = &state.db {
@@ -174,6 +187,15 @@ pub async fn build_state(
     spawn_pmp_event_forwarder(&state);
     spawn_heartbeat_task(&state);
     spawn_audit_purge_task(&state);
+
+    if aggregator_enabled {
+        let aggregator = Arc::new(Aggregator::new(
+            state.db.clone(),
+            Arc::clone(&state.phira_gateway),
+            aggregator_top_n,
+        ));
+        aggregator.spawn(aggregator_interval_hours);
+    }
 
     Ok(state)
 }
@@ -254,6 +276,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/auth", crate::auth::routes::routes())
         .nest("/admin", crate::admin::routes::routes())
         .nest("/rooms", crate::rooms::routes::routes())
+        .merge(crate::phira::routes::routes())
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
@@ -436,6 +459,10 @@ impl AppState {
         let rooms = RoomService::new(Arc::clone(&openuds));
         let player = PlayerService::new(Arc::clone(&openuds));
         let jobs = JobRunner::new(None, EventBus::new(16, 8), Arc::clone(&openuds));
+        let phira_gateway = Arc::new(
+            PhiraGateway::new("https://phira.example.test", 1000, 60, 100)
+                .expect("test gateway builds"),
+        );
         AppState {
             config: Arc::new(config),
             secrets: Arc::new(Secrets {
@@ -461,6 +488,7 @@ impl AppState {
             rooms,
             player,
             jobs,
+            phira_gateway,
         }
     }
 }

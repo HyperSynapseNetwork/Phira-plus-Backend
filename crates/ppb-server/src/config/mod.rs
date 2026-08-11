@@ -164,6 +164,14 @@ pub struct PhiraConfig {
     pub base_url: String,
     pub timeout_ms: u64,
     pub access_token_ttl_secs: i64,
+    /// Data gateway cache TTL for public data.
+    pub gateway_ttl_secs: i64,
+    /// Data gateway rate limit (requests/min).
+    pub gateway_rate_per_minute: u32,
+    /// Aggregator (TopChart hourly snapshots).
+    pub aggregator_enabled: bool,
+    pub aggregator_interval_hours: u64,
+    pub aggregator_top_n: i32,
 }
 
 impl Default for PhiraConfig {
@@ -172,6 +180,11 @@ impl Default for PhiraConfig {
             base_url: "https://phira.5wyxi.com".to_string(),
             timeout_ms: 15000,
             access_token_ttl_secs: 21600,
+            gateway_ttl_secs: 120,
+            gateway_rate_per_minute: 60,
+            aggregator_enabled: true,
+            aggregator_interval_hours: 1,
+            aggregator_top_n: 50,
         }
     }
 }

@@ -45,6 +45,8 @@ pub enum PhiraError {
     ReauthRequired(String),
     #[error("phira error: {0}")]
     Other(String),
+    #[error("phira api rate limited")]
+    RateLimited,
 }
 
 impl From<PhiraError> for ApiError {
@@ -60,6 +62,7 @@ impl From<PhiraError> for ApiError {
                 ApiError::new(ErrorCode::PhiraApiUnavailable, m)
             }
             PhiraError::Unavailable(m) => ApiError::new(ErrorCode::PhiraApiUnavailable, m),
+            PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimit, "phira api rate limited"),
         }
     }
 }

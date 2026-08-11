@@ -48,6 +48,13 @@ base_url = "https://phira.5wyxi.com"
 timeout_ms = 15000
 # Access token lives in memory only; refresh token encrypted at rest.
 access_token_ttl_secs = 21600 # 6h
+# Public-data gateway (charts/records/users proxy): TTL cache + rate limit.
+gateway_ttl_secs = 120
+gateway_rate_per_minute = 60
+# TopChart aggregator: hourly record-count snapshots for popular charts.
+aggregator_enabled = true
+aggregator_interval_hours = 1
+aggregator_top_n = 50
 
 [rate_limit]
 login_per_minute = 10
