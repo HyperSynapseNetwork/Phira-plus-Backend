@@ -249,6 +249,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .nest("/api/v1", api)
+        .route("/auth/phira/login", get(crate::auth::gateway::phira_login_page))
         .route("/healthz", get(healthz))
         .with_state(state.clone())
         .layer(cors)

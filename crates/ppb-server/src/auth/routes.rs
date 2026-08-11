@@ -38,7 +38,8 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub fn root_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/auth/root/login", post(root_login))
-        .route("/auth/root/password", post(root_change_password))
+        .route("/auth/root/session", get(root_session))
+        .route("/auth/root/change-password", post(root_change_password))
 }
 
 // ── Request / response bodies ─────────────────────────────────
@@ -118,11 +119,20 @@ fn validate_return_to(allowlist: &[String], return_to: &str) -> Result<(), ApiEr
     if return_to.is_empty() {
         return Ok(());
     }
+    // Accept an exact whitelisted origin, or a safe relative path (no scheme,
+    // no protocol-relative `//`, no backslash, no userinfo `@`).
     if allowlist.iter().any(|u| u == return_to) {
-        Ok(())
-    } else {
-        Err(ApiError::validation("return_to 不在白名单内"))
+        return Ok(());
     }
+    let is_relative = return_to.starts_with('/')
+        && !return_to.starts_with("//")
+        && !return_to.contains('\\')
+        && !return_to.contains('@')
+        && !return_to.contains("://");
+    if is_relative {
+        return Ok(());
+    }
+    Err(ApiError::validation("return_to 不在白名单内"))
 }
 
 /// Issue the three auth cookies (access, refresh, csrf).
@@ -507,9 +517,28 @@ pub async fn root_login(
     .await?;
 
     let body_json = serde_json::json!({
+        "principal_type": "root",
         "must_change_password": outcome.must_change_password,
     });
     Ok(auth_response(body_json, &state.config.session, &access_token, &refresh_token))
+}
+
+/// GET /api/v1/admin/auth/root/session — root session probe (P1).
+pub async fn root_session(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let must_change = RootAuthService::must_change_password(db).await?;
+    Ok(Json(serde_json::json!({
+        "principal_type": "root",
+        "user_id": null,
+        "session_id": auth.sid,
+        "must_change_password": must_change,
+    })))
 }
 
 pub async fn root_change_password(

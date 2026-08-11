@@ -1,5 +1,6 @@
 //! Auth domain: JWT, sessions, Phira login, Root, reauth, GitHub bind.
 
+pub mod gateway;
 pub mod github;
 pub mod jwt;
 pub mod phira;
