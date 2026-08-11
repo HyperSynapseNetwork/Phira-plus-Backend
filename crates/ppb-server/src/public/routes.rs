@@ -87,7 +87,7 @@ pub async fn events_sse(
 
     let replay_stream = stream::iter(replay.into_iter().map(Ok::<_, Infallible>));
     let live_stream = BroadcastStream::new(rx)
-        .filter_map(|r| r.ok())
+        .filter_map(Result::ok)
         .map(Ok::<_, Infallible>);
 
     let stream = replay_stream.chain(live_stream).map(|item| {

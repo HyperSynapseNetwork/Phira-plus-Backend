@@ -3,6 +3,14 @@
 //! Domain-vertical modules (design §24.1). Each domain owns its model/service/
 //! repo/routes; there is no global `models/` + `services/` dump.
 
+// Clippy stylistic allows (warn-by-default lints that don't indicate bugs).
+// - uninlined_format_args: the codebase mixes positional and inlined format
+//   args; this is stylistic and not worth churn on a foundation.
+// - new_without_default: many services require config arguments and
+//   deliberately do not implement Default.
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::new_without_default)]
+
 pub mod actions;
 pub mod admin;
 pub mod app;
