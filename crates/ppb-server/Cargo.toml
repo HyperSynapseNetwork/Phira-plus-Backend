@@ -44,6 +44,7 @@ cookie = { workspace = true }
 url = { workspace = true }
 dashmap = { workspace = true }
 subtle = { workspace = true }
+sha2 = { workspace = true }
 percent-encoding = { workspace = true }
 
 [dev-dependencies]
