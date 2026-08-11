@@ -139,3 +139,20 @@ fn csv_escape(s: &str) -> String {
         s.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn csv_escape_plain() {
+        assert_eq!(csv_escape("room.kick"), "room.kick");
+    }
+
+    #[test]
+    fn csv_escape_quotes_comma_and_newline() {
+        assert_eq!(csv_escape("a,b"), "\"a,b\"");
+        assert_eq!(csv_escape("say \"hi\""), "\"say \"\"hi\"\"\"");
+        assert_eq!(csv_escape("line1\nline2"), "\"line1\nline2\"");
+    }
+}

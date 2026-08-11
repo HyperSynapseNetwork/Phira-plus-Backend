@@ -1,6 +1,7 @@
 //! Group management repo (admin operations).
 
 use serde::Serialize;
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use super::groups::Group;
@@ -138,7 +139,7 @@ pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), 
 }
 
 /// A group member with the PPB account display fields.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct GroupMember {
     pub user_id: Uuid,
     #[serde(rename = "phiraId")]
