@@ -1,4 +1,7 @@
-//! Long-running Job domain (design §9.4). Phase A: model + repo.
+//! Long-running Job domain (design §9.4). Model + repo + runner + routes.
+
+pub mod routes;
+pub mod runner;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;

@@ -6,7 +6,7 @@ use std::time::Duration;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -93,7 +93,6 @@ async fn send_chat(
     state
         .rate_limiter
         .check(&format!("chat-send:{room_id}"), state.config.rate_limit.chat_send_per_minute)?;
-    let db = state.require_db()?;
     let phira_id = caller_phira_id(&state, &auth).await?;
     let result = state
         .rooms

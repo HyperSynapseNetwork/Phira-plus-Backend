@@ -26,7 +26,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
         .route("/audit", get(audit_list))
-        .route("/jobs", get(jobs_list))
+        .merge(super::server::routes())
+        .merge(super::plugins::routes())
+        .merge(crate::jobs::routes::routes())
         .merge(auth_routes::root_routes())
         .merge(permission_routes::routes())
         .merge(action_routes::routes())
@@ -116,25 +118,3 @@ pub async fn audit_list(
     Ok(Json(events))
 }
 
-/// GET /api/v1/admin/jobs — recent jobs.
-pub async fn jobs_list(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<crate::jobs::Job>>, ApiError> {
-    state
-        .permissions
-        .require(&state.db, &auth, "dashboard:view")
-        .await?;
-    let db = state.require_db()?;
-    let jobs = sqlx::query_as::<_, crate::jobs::Job>(
-        "SELECT id, type, state, progress, stage, created_at, started_at, finished_at, error
-         FROM jobs ORDER BY created_at DESC LIMIT 100",
-    )
-    .fetch_all(db)
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "jobs query failed");
-        ApiError::internal()
-    })?;
-    Ok(Json(jobs))
-}

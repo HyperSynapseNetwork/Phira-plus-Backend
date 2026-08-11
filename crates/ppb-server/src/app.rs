@@ -25,6 +25,7 @@ use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::CommandBroker;
 use crate::config::deployment::Secrets;
 use crate::config::RuntimeConfig;
+use crate::jobs::runner::JobRunner;
 use crate::error::{ApiError, ErrorCode};
 use crate::identities::repo as identities_repo;
 use crate::middleware::csrf;
@@ -56,6 +57,7 @@ pub struct AppState {
     pub heartbeat: HeartbeatCache,
     pub rooms: RoomService,
     pub player: PlayerService,
+    pub jobs: JobRunner,
 }
 
 impl AppState {
@@ -129,6 +131,7 @@ pub async fn build_state(
     let metrics = crate::metrics::Metrics::new(); // returns Arc<Metrics>
     let rooms = RoomService::new(Arc::clone(&openuds));
     let player = PlayerService::new(Arc::clone(&openuds));
+    let jobs = JobRunner::new(db.clone(), events.clone(), Arc::clone(&openuds));
 
     let state = Arc::new(AppState {
         config: Arc::new(runtime),
@@ -147,6 +150,7 @@ pub async fn build_state(
         heartbeat: HeartbeatCache::default(),
         rooms,
         player,
+        jobs,
     });
 
     if let Some(db) = &state.db {
@@ -422,6 +426,7 @@ impl AppState {
         ));
         let rooms = RoomService::new(Arc::clone(&openuds));
         let player = PlayerService::new(Arc::clone(&openuds));
+        let jobs = JobRunner::new(None, EventBus::new(16, 8), Arc::clone(&openuds));
         AppState {
             config: Arc::new(config),
             secrets: Arc::new(Secrets {
@@ -446,6 +451,7 @@ impl AppState {
             heartbeat: HeartbeatCache::default(),
             rooms,
             player,
+            jobs,
         }
     }
 }
