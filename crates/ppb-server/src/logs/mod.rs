@@ -1,8 +1,11 @@
-//! Logs domain. Phase A: PMP log stream subscriber scaffold.
+//! Logs domain.
 //!
 //! PMP provides `logs.history` / `logs.input` and the `logs` OpenUDS stream.
 //! PPB keeps its own structured logs; the PMP Console path is via Action
-//! Registry (`pmp.cli.execute`) in Phase B.
+//! Registry (`pmp.cli.execute`) and `/admin/logs/input`.
+
+pub mod routes;
+pub mod translator;
 
 use serde_json::Value;
 

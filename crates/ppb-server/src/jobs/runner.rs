@@ -98,7 +98,7 @@ impl JobRunner {
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update check");
                 let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
                 self.tick(job_id, "checking", 0.5, cancel).await?;
-                result.map(|_| ("checked", 1.0)).map_err(|e| e.to_string())
+                result.map(|_| ("checked".to_string(), 1.0f32)).map_err(|e| e.to_string())
             }
             "pmp.update.apply" => {
                 self.tick(job_id, "downloading", 0.3, cancel).await?;
@@ -106,17 +106,17 @@ impl JobRunner {
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update apply");
                 let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
                 self.tick(job_id, "applying", 0.9, cancel).await?;
-                result.map(|_| ("applied", 1.0)).map_err(|e| e.to_string())
+                result.map(|_| ("applied".to_string(), 1.0f32)).map_err(|e| e.to_string())
             }
             "ppf.build" => {
                 for i in 1..=5 {
                     self.tick(job_id, "building", i as f32 / 5.0, cancel).await?;
                 }
-                Ok(("built", 1.0))
+                Ok(("built".to_string(), 1.0f32))
             }
             "backup" => {
                 self.tick(job_id, "backing-up", 0.5, cancel).await?;
-                Ok(("backup-complete", 1.0))
+                Ok(("backup-complete".to_string(), 1.0f32))
             }
             other => Err(format!("unknown job type: {other}")),
         }

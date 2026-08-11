@@ -25,7 +25,8 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
-        .route("/audit", get(audit_list))
+        .merge(crate::audit::routes::routes())
+        .merge(crate::logs::routes::routes())
         .merge(super::server::routes())
         .merge(super::plugins::routes())
         .merge(crate::jobs::routes::routes())
@@ -102,19 +103,5 @@ pub async fn server_status(
         "db_configured": state.db.is_some(),
         "metrics": state.metrics.snapshot(),
     })))
-}
-
-/// GET /api/v1/admin/audit — recent audit events.
-pub async fn audit_list(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<crate::audit::model::AuditEvent>>, ApiError> {
-    state
-        .permissions
-        .require(&state.db, &auth, "audit:view")
-        .await?;
-    let db = state.require_db()?;
-    let events = crate::audit::repo::list(db, 200).await?;
-    Ok(Json(events))
 }
 

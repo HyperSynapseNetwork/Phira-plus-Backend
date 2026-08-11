@@ -159,6 +159,23 @@ async fn room_action(
     command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
         .await?;
 
+    if action.audit {
+        crate::audit::service::record_principal(
+            db,
+            &auth,
+            action.id,
+            "action",
+            &queue_key,
+            args_redacted.clone(),
+            "success",
+            "",
+            &command_id.to_string(),
+            &ip_from_headers(&headers),
+            &user_agent_from_headers(&headers),
+        )
+        .await?;
+    }
+
     let (completion, rx) = if action.long_running {
         (None, None)
     } else {
@@ -291,4 +308,22 @@ async fn verify_real_host(
     let phira_id = caller_phira_id(state, auth).await?;
     let host = state.rooms.host_id(room_id).await.map_err(ApiError::from)?;
     Ok(host == Some(phira_id))
+}
+
+fn ip_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn user_agent_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
 }

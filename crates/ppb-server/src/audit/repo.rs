@@ -54,6 +54,79 @@ pub async fn purge_older_than(db: &sqlx::PgPool, retention_days: i32) -> Result<
     Ok(result.rows_affected())
 }
 
+/// Filtered audit list (Panel §18.12).
+#[allow(clippy::too_many_arguments)]
+pub async fn list_filtered(
+    db: &sqlx::PgPool,
+    action: Option<&str>,
+    principal_type: Option<&str>,
+    actor: Option<uuid::Uuid>,
+    result: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<AuditEvent>, ApiError> {
+    let mut sql = String::from(
+        "SELECT id, occurred_at, principal_type, actor_user_id, actor_session_id, action,
+                resource_type, resource_id, parameters_redacted, result, error_code,
+                request_id, command_id, ip, user_agent
+         FROM audit_events WHERE 1=1",
+    );
+    if action.is_some() {
+        sql.push_str(" AND action = $");
+        sql.push_str(&(next_placeholder(&sql)).to_string());
+    }
+    if principal_type.is_some() {
+        sql.push_str(" AND principal_type = $");
+        sql.push_str(&(next_placeholder(&sql)).to_string());
+    }
+    if actor.is_some() {
+        sql.push_str(" AND actor_user_id = $");
+        sql.push_str(&(next_placeholder(&sql)).to_string());
+    }
+    if result.is_some() {
+        sql.push_str(" AND result = $");
+        sql.push_str(&(next_placeholder(&sql)).to_string());
+    }
+    sql.push_str(" ORDER BY occurred_at DESC LIMIT $");
+    sql.push_str(&(next_placeholder(&sql)).to_string());
+    sql.push_str(" OFFSET $");
+    sql.push_str(&(next_placeholder(&sql)).to_string());
+
+    let mut q = sqlx::query_as::<_, AuditEvent>(&sql);
+    if let Some(a) = action {
+        q = q.bind(a);
+    }
+    if let Some(p) = principal_type {
+        q = q.bind(p);
+    }
+    if let Some(a) = actor {
+        q = q.bind(a);
+    }
+    if let Some(r) = result {
+        q = q.bind(r);
+    }
+    q = q.bind(limit).bind(offset);
+    q.fetch_all(db).await.map_err(db_err)
+}
+
+/// Fetch a single audit event by id.
+pub async fn get(db: &sqlx::PgPool, id: uuid::Uuid) -> Result<Option<AuditEvent>, ApiError> {
+    sqlx::query_as::<_, AuditEvent>(
+        "SELECT id, occurred_at, principal_type, actor_user_id, actor_session_id, action,
+                resource_type, resource_id, parameters_redacted, result, error_code,
+                request_id, command_id, ip, user_agent
+         FROM audit_events WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)
+}
+
+fn next_placeholder(sql: &str) -> usize {
+    sql.matches('$').count() + 1
+}
+
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "audit event not found")
