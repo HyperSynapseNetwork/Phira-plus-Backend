@@ -22,9 +22,8 @@ use crate::actions::executor::PmpActionExecutor;
 use crate::actions::registry::ActionRegistry;
 use crate::audit;
 use crate::auth::github::GithubService;
-use crate::auth::jwt;
 use crate::auth::root::RootAuthService;
-use crate::auth::types::{AuthPrincipal, ClientType, PrincipalType};
+use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::CommandBroker;
 use crate::config::deployment::Secrets;
 use crate::config::RuntimeConfig;
@@ -441,10 +440,10 @@ impl AppState {
 pub fn test_access_token(
     state: &AppState,
     sub: uuid::Uuid,
-    principal_type: PrincipalType,
-    client_type: ClientType,
+    principal_type: crate::auth::types::PrincipalType,
+    client_type: crate::auth::types::ClientType,
 ) -> String {
-    let claims = jwt::AccessClaims::new(
+    let claims = crate::auth::jwt::AccessClaims::new(
         sub,
         uuid::Uuid::new_v4(),
         principal_type,

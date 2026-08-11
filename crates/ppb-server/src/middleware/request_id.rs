@@ -25,7 +25,6 @@ pub fn read_request_id(parts: &Parts) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::request::Request;
     use tower::ServiceExt as _;
     use tower_http::request_id::PropagateRequestIdLayer;
 

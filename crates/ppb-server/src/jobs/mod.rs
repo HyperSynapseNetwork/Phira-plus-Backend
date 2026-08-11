@@ -5,7 +5,7 @@ use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::error::{ApiError, ErrorCode};
+use crate::error::ApiError;
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct Job {
