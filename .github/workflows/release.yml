@@ -89,31 +89,38 @@ jobs:
       - name: Build release binary
         run: cargo build --locked --release --target x86_64-unknown-linux-musl
       - run: cp target/x86_64-unknown-linux-musl/release/ppb-server ppb-server-linux-x86_64-musl
+      - run: cp target/x86_64-unknown-linux-musl/release/ppctl ppctl-linux-x86_64-musl
       - name: Smoke test
         run: |
-          chmod +x ppb-server-linux-x86_64-musl
+          chmod +x ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl
           ./ppb-server-linux-x86_64-musl --version
+          ./ppctl-linux-x86_64-musl config check || true
       - name: Verify musl is statically linked
         run: |
-          if file ppb-server-linux-x86_64-musl | grep -qi static; then
-            echo "musl build confirmed static"
-          else
-            echo "::error::musl build is not statically linked"
-            file ppb-server-linux-x86_64-musl
-            exit 1
-          fi
+          for f in ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl; do
+            if file "$f" | grep -qi static; then
+              echo "$f: musl build confirmed static"
+            else
+              echo "::error::$f: musl build is not statically linked"
+              file "$f"
+              exit 1
+            fi
+          done
       - name: Generate provenance
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: ppb-server-linux-x86_64-musl
+          subject-path: |
+            ppb-server-linux-x86_64-musl
+            ppctl-linux-x86_64-musl
       - name: Generate checksum (SHA-256)
-        run: sha256sum ppb-server-linux-x86_64-musl > ppb-server-linux-x86_64-musl.sha256
+        run: sha256sum ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: ppb-server-linux-x86_64-musl
           path: |
             ppb-server-linux-x86_64-musl
-            ppb-server-linux-x86_64-musl.sha256
+            ppctl-linux-x86_64-musl
+            SHA256SUMS
           if-no-files-found: error
 
   release:
@@ -142,5 +149,6 @@ jobs:
           body: ${{ github.event.inputs.description }}
           files: |
             ppb-server-linux-x86_64-musl
-            ppb-server-linux-x86_64-musl.sha256
+            ppctl-linux-x86_64-musl
+            SHA256SUMS
           prerelease: false

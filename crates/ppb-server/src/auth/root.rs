@@ -86,6 +86,24 @@ impl RootAuthService {
         Ok(row.0)
     }
 
+    /// `ppctl root reset-password` — generate a new random password, force a
+    /// change on next login, and return the plaintext for one-time printing.
+    pub async fn reset_password(db: &PgPool) -> Result<String, ApiError> {
+        let password = generate_random_password();
+        let hash = bcrypt::hash(&password, BCRYPT_COST)
+            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root hash: {e}")))?;
+        sqlx::query(
+            "UPDATE root_credentials
+             SET password_hash = $1, must_change_password = TRUE, updated_at = now()
+             WHERE id = 1",
+        )
+        .bind(&hash)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
+        Ok(password)
+    }
+
     /// Set a new password and clear the must-change flag.
     pub async fn change_password(db: &PgPool, new_password: &str) -> Result<(), ApiError> {
         if new_password.len() < 12 {

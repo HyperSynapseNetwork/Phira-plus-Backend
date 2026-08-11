@@ -5,3 +5,4 @@ pub mod client;
 pub mod credential;
 pub mod gateway;
 pub mod routes;
+pub mod viewer;

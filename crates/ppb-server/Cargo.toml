@@ -11,6 +11,10 @@ default-run = "ppb-server"
 name = "ppb-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "ppctl"
+path = "src/bin/ppctl.rs"
+
 [dependencies]
 axum = { workspace = true }
 tokio = { workspace = true }
@@ -49,6 +53,8 @@ sha2 = { workspace = true }
 percent-encoding = { workspace = true }
 p256 = { workspace = true }
 hkdf = { workspace = true }
+bincode = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

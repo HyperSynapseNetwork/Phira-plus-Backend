@@ -16,6 +16,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if args.len() >= 3 && args[1] == "root" && args[2] == "init" {
         return root_init().await;
     }
+    if args.len() >= 3 && args[1] == "--check-config" {
+        // Used by deploy/update.sh stage validation.
+        let path = &args[2];
+        ppb_server::config::RuntimeConfig::from_toml_file(std::path::Path::new(path))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        println!("config OK: {path}");
+        return Ok(());
+    }
 
     ppb_server::telemetry::init();
 

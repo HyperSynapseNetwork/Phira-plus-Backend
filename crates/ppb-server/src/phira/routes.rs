@@ -18,6 +18,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/charts/popular", get(chart_popular))
         .route("/charts/{id}", get(chart_detail))
         .route("/charts/{id}/preview", get(chart_preview))
+        .route("/charts/{id}/viewer", get(chart_viewer))
         .route("/charts/{id}/records", get(chart_records))
         .route("/charts/{id}/top", get(chart_top))
         .route("/records", get(records_by_player))
@@ -99,6 +100,31 @@ async fn chart_preview(
         axum::http::header::CONTENT_TYPE,
         axum::http::HeaderValue::from_str(&content_type)
             .unwrap_or(axum::http::HeaderValue::from_static("application/octet-stream")),
+    );
+    resp.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("public, max-age=120"),
+    );
+    Ok(resp)
+}
+
+/// GET /api/v1/charts/{id}/viewer — bincode `(ChartInfo, Chart)` varint blob
+/// (contract §19). Uses the same TTL-cached chart file as `/preview`.
+async fn chart_viewer(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<axum::response::Response, ApiError> {
+    let bytes = state
+        .phira_gateway
+        .fetch_chart_file(id)
+        .await
+        .map_err(phira_gateway_error)?
+        .0;
+    let blob = crate::phira::viewer::build_chart_blob(&bytes)?;
+    let mut resp = axum::response::Response::new(axum::body::Body::from(blob));
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/octet-stream"),
     );
     resp.headers_mut().insert(
         axum::http::header::CACHE_CONTROL,
