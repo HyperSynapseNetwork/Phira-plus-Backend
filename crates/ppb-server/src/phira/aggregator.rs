@@ -60,7 +60,7 @@ impl Aggregator {
     }
 }
 
-fn extract_chart_ids(popular: &Value) -> Vec<i64> {
+pub(crate) fn extract_chart_ids(popular: &Value) -> Vec<i64> {
     popular
         .get("results")
         .and_then(Value::as_array)

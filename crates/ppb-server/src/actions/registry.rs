@@ -6,64 +6,52 @@ use serde_json::Value;
 
 use super::types::{ActionDescriptor, Executor, Risk};
 
-/// Seed actions (Phase A). More are added in Phase B as typed commands land.
+/// Seed actions covering the Phase B control set (design §9.1, §18.3/§18.6/§18.9).
+///
+/// Executor::OpenUds actions use the action id directly as the OpenUDS command
+/// name; args are the command params (room_id/user_id etc.). `host_allowed`
+/// actions re-derive the real host via `room.info` at execution time.
 pub fn seed_actions() -> Vec<ActionDescriptor> {
     vec![
-        ActionDescriptor::new(
-            "room.kick",
-            "room:kick",
-            Executor::OpenUds,
-            Risk::Medium,
-            true,
-            false,
-            true, // host_allowed
-            "room:{room_id}",
-            false,
-        ),
-        ActionDescriptor::new(
-            "room.set_chart",
-            "room:config",
-            Executor::OpenUds,
-            Risk::Medium,
-            true,
-            false,
-            true, // host_allowed
-            "room:{room_id}",
-            false,
-        ),
-        ActionDescriptor::new(
-            "broadcast.all",
-            "broadcast:all",
-            Executor::OpenUds,
-            Risk::High,
-            true,
-            false,
-            false,
-            "server",
-            false,
-        ),
-        ActionDescriptor::new(
-            "pmp.cli.execute",
-            "pmp:cli",
-            Executor::CliRaw,
-            Risk::High,
-            true,
-            false,
-            false,
-            "server",
-            false,
-        ),
-        ActionDescriptor::new(
-            "pmp.update.apply",
-            "server:update",
-            Executor::CliExecute,
-            Risk::Critical,
-            true,
-            true,
-            false,
-            "server",
-            true, // long-running
-        ),
+        // ── Room lifecycle (design §18.3) ─────────────────────────
+        ActionDescriptor::new("room.kick", "room:kick", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.force_move", "room:move", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.start", "room:start", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.cancel_start", "room:start", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.close", "room:manage", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
+        // ── Room config (host_allowed) ────────────────────────────
+        ActionDescriptor::new("room.set_chart", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.lock", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.cycle", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.set_live", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.set_hidden", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.set_persistent", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.set_api_endpoint", "room:config", Executor::OpenUds, Risk::High, true, false, true, "room:{room_id}", false),
+        // Changing host / degraded state is admin-gated (not host_allowed).
+        ActionDescriptor::new("room.set_host", "room:config", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
+        ActionDescriptor::new("room.set_degraded", "room:config", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
+        // ── Room lists (host_allowed) ─────────────────────────────
+        ActionDescriptor::new("room.ban", "room:blacklist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.unban", "room:blacklist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.whitelist_add", "room:whitelist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.whitelist_remove", "room:whitelist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        // ── Player control (design §18.4 Security) ────────────────
+        ActionDescriptor::new("player.kick", "user:kick", Executor::OpenUds, Risk::Medium, true, false, false, "user:{user_id}", false),
+        ActionDescriptor::new("player.ban", "user:ban", Executor::OpenUds, Risk::High, true, false, false, "user:{user_id}", false),
+        ActionDescriptor::new("player.unban", "user:ban", Executor::OpenUds, Risk::Medium, true, false, false, "user:{user_id}", false),
+        ActionDescriptor::new("player.ban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("player.unban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, false, false, "server", false),
+        // ── Broadcast (design §18.9) ──────────────────────────────
+        ActionDescriptor::new("broadcast.all", "broadcast:all", Executor::OpenUds, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("broadcast.room", "broadcast:room", Executor::OpenUds, Risk::Medium, true, false, false, "room:{room_id}", false),
+        ActionDescriptor::new("broadcast.user", "broadcast:user", Executor::OpenUds, Risk::Medium, true, false, false, "server", false),
+        // ── Server ops (design §18.6) ─────────────────────────────
+        ActionDescriptor::new("server.config_reload", "config:reload", Executor::OpenUds, Risk::High, true, false, false, "config:pmp", false),
+        ActionDescriptor::new("server.roomcreation", "server:manage", Executor::OpenUds, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("server.shutdown", "server:shutdown", Executor::OpenUds, Risk::Critical, true, true, false, "server", false),
+        // ── PMP CLI / update (design §9.3) ────────────────────────
+        ActionDescriptor::new("pmp.cli.execute", "pmp:cli", Executor::CliRaw, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("pmp.update.apply", "server:update", Executor::CliExecute, Risk::Critical, true, true, false, "server", true),
     ]
 }
 
@@ -101,6 +89,9 @@ impl ActionRegistry {
         if let Some(room_id) = args.get("room_id").and_then(Value::as_str) {
             key = key.replace("{room_id}", room_id);
         }
+        if let Some(user_id) = args.get("user_id") {
+            key = key.replace("{user_id}", &user_id.to_string());
+        }
         key
     }
 }
@@ -113,9 +104,15 @@ mod tests {
     fn seeds_are_present() {
         let reg = ActionRegistry::new();
         assert!(reg.get("room.kick").is_some());
+        assert!(reg.get("room.lock").is_some());
+        assert!(reg.get("room.set_host").is_some());
+        assert!(reg.get("player.ban").is_some());
+        assert!(reg.get("broadcast.all").is_some());
+        assert!(reg.get("server.config_reload").is_some());
         assert!(reg.get("pmp.cli.execute").is_some());
         assert!(reg.get("pmp.update.apply").is_some());
-        assert_eq!(reg.all().len(), 5);
+        assert!(reg.get("player.ban_ip").is_some());
+        assert!(reg.all().len() >= 25);
     }
 
     #[test]
@@ -126,6 +123,11 @@ mod tests {
         assert_eq!(key, "room:ABC");
         let missing = reg.resolve_queue_key(kick, &serde_json::json!({}));
         assert_eq!(missing, "room:{room_id}");
+        let pban = reg.get("player.ban").unwrap();
+        assert_eq!(
+            reg.resolve_queue_key(pban, &serde_json::json!({ "user_id": 42 })),
+            "user:42"
+        );
     }
 
     #[test]

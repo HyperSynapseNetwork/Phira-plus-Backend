@@ -161,6 +161,24 @@ impl PhiraGateway {
         .await
     }
 
+    /// `GET /record?player=...` — a player's recent records (§15.2).
+    pub async fn record_query_player(
+        &self,
+        player: i64,
+        page: i64,
+        page_num: i64,
+    ) -> Result<Value, PhiraError> {
+        self.get_json(
+            "record",
+            &[
+                ("player", player.to_string()),
+                ("page", page.to_string()),
+                ("pageNum", page_num.to_string()),
+            ],
+        )
+        .await
+    }
+
     pub async fn record_list15(&self, chart_id: i64) -> Result<Value, PhiraError> {
         self.get_json(&format!("record/list15/{chart_id}"), &[]).await
     }
@@ -240,5 +258,77 @@ pub fn phira_gateway_error(e: PhiraError) -> crate::error::ApiError {
             "需要重新验证 Phira 身份",
             serde_json::json!({ "reason": m }),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc as StdArc;
+
+    /// Spin up a tiny axum server that counts upstream hits and returns a
+    /// canned `chart/popular` payload.
+    fn mock_server(counter: StdArc<AtomicUsize>) -> String {
+        let app = axum::Router::new().route(
+            "/chart/popular",
+            axum::routing::get({
+                let c = counter.clone();
+                move || {
+                    let c = c.clone();
+                    async move {
+                        c.fetch_add(1, Ordering::SeqCst);
+                        axum::Json(serde_json::json!({ "results": [ { "id": 1 }, { "id": 2 } ] }))
+                    }
+                }
+            }),
+        );
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let tcp = tokio::net::TcpListener::from_std(listener).unwrap();
+            let _ = axum::serve(tcp, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn gateway_ttl_cache_dedups_upstream() {
+        let counter = StdArc::new(AtomicUsize::new(0));
+        let base = mock_server(counter.clone());
+        let gw = PhiraGateway::new(&base, 1000, 60, 100).unwrap();
+
+        let first = gw.chart_popular(10).await.unwrap();
+        let second = gw.chart_popular(10).await.unwrap();
+        let third = gw.chart_popular(10).await.unwrap();
+        assert_eq!(first, second);
+        assert_eq!(second, third);
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "TTL cache must dedup upstream requests"
+        );
+    }
+
+    #[test]
+    fn rate_limited_error_maps_to_ratelimit() {
+        let api = phira_gateway_error(PhiraError::RateLimited);
+        assert_eq!(api.code, crate::error::ErrorCode::RateLimit);
+    }
+
+    #[test]
+    fn cache_key_is_sorted() {
+        let q = [
+            ("page", "2".to_string()),
+            ("pageNum", "20".to_string()),
+        ];
+        assert_eq!(cache_key("chart", &q), "chart?page=2&pageNum=20");
+    }
+
+    #[test]
+    fn chart_ids_extracted_from_popular_payload() {
+        let v = serde_json::json!({ "results": [ { "id": 5 }, { "id": 9 }, {} ] });
+        let ids = crate::phira::aggregator::extract_chart_ids(&v);
+        assert_eq!(ids, vec![5, 9]);
     }
 }

@@ -19,6 +19,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/charts/{id}", get(chart_detail))
         .route("/charts/{id}/records", get(chart_records))
         .route("/charts/{id}/top", get(chart_top))
+        .route("/records", get(records_by_player))
         .route("/records/query/{chart_id}", get(records_query))
         .route("/records/list15/{chart_id}", get(records_list15))
         .route("/records/pool/{user_id}", get(records_pool))
@@ -94,6 +95,26 @@ async fn chart_top(
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.record_list15(id).await.map_err(phira_gateway_error)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecordByPlayerParams {
+    pub player: i64,
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
+}
+
+async fn records_by_player(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<RecordByPlayerParams>,
+) -> Result<Json<Value>, ApiError> {
+    let result = state
+        .phira_gateway
+        .record_query_player(params.player, params.page.unwrap_or(1), params.page_num.unwrap_or(20).min(30))
+        .await
+        .map_err(phira_gateway_error)?;
     Ok(Json(result))
 }
 

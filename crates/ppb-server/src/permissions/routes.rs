@@ -19,7 +19,8 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/permissions/manifest", get(manifest))
         .route("/groups", get(list).post(create))
-        .route("/groups/{id}", patch(rename).delete(delete_group))
+        .route("/groups/{id}", get(detail).patch(rename).delete(delete_group))
+        .route("/groups/{id}/set-default", post(set_default))
         .route("/groups/{id}/permissions", post(add_permission))
         .route(
             "/groups/{id}/permissions/{permission}",
@@ -73,6 +74,45 @@ async fn create(
     let db = state.require_db()?;
     let group = repo::create_group(db, &body.name, &body.description).await?;
     Ok(Json(serde_json::to_value(&group).unwrap_or(serde_json::Value::Null)))
+}
+
+/// GET /api/v1/admin/groups/{id} — group detail + permissions + members +
+/// effective permission preview (design §18.5).
+async fn detail(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "group:view")
+        .await?;
+    let db = state.require_db()?;
+    let group = repo::get_group(db, group_id).await?;
+    let permissions = repo::list_group_permissions(db, group_id).await?;
+    let effective = repo::effective_group_permissions(db, group_id).await?;
+    let members = repo::list_group_members(db, group_id).await?;
+    Ok(Json(serde_json::json!({
+        "group": group,
+        "permissions": permissions,
+        "effectivePermissions": effective,
+        "members": members,
+    })))
+}
+
+/// POST /api/v1/admin/groups/{id}/set-default — switch the default group.
+async fn set_default(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<Uuid>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "group:edit")
+        .await?;
+    let db = state.require_db()?;
+    repo::set_default_group(db, group_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

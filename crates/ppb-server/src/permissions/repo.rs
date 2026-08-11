@@ -1,8 +1,10 @@
 //! Group management repo (admin operations).
 
+use serde::Serialize;
 use uuid::Uuid;
 
 use super::groups::Group;
+use super::manifest::PermissionDef;
 use super::resolver::PermissionResolver;
 use crate::error::{ApiError, ErrorCode};
 
@@ -102,6 +104,84 @@ pub async fn remove_member(db: &sqlx::PgPool, group_id: Uuid, user_id: Uuid) -> 
         .await
         .map_err(db_err)?;
     Ok(())
+}
+
+/// Fetch a single group (or not-found).
+pub async fn get_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<Group, ApiError> {
+    sqlx::query_as::<_, Group>(
+        "SELECT id, name, description, system_kind, is_default, protected, created_at, updated_at
+         FROM groups WHERE id = $1",
+    )
+    .bind(group_id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)?
+    .ok_or_else(|| ApiError::not_found("group"))
+}
+
+/// Switch the default group to `group_id` (clears others).
+pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), ApiError> {
+    let exists: Option<(Uuid,)> = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM groups WHERE id = $1")
+        .bind(group_id)
+        .fetch_optional(db)
+        .await
+        .map_err(db_err)?;
+    if exists.is_none() {
+        return Err(ApiError::not_found("group"));
+    }
+    sqlx::query("UPDATE groups SET is_default = (id = $1)")
+        .bind(group_id)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
+    Ok(())
+}
+
+/// A group member with the PPB account display fields.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupMember {
+    pub user_id: Uuid,
+    #[serde(rename = "phiraId")]
+    pub phira_id: i64,
+    pub username: String,
+}
+
+/// List a group's members (joined with the users table).
+pub async fn list_group_members(db: &sqlx::PgPool, group_id: Uuid) -> Result<Vec<GroupMember>, ApiError> {
+    sqlx::query_as::<_, GroupMember>(
+        "SELECT u.id AS user_id, u.phira_id, u.username_cache AS username
+         FROM group_members gm JOIN users u ON u.id = gm.user_id
+         WHERE gm.group_id = $1 ORDER BY u.username_cache",
+    )
+    .bind(group_id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)
+}
+
+/// List a group's explicit permissions.
+pub async fn list_group_permissions(db: &sqlx::PgPool, group_id: Uuid) -> Result<Vec<String>, ApiError> {
+    let rows: Vec<(String,)> = sqlx::query_as::<_, (String,)>(
+        "SELECT permission FROM group_permissions WHERE group_id = $1 ORDER BY permission",
+    )
+    .bind(group_id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Effective permission set for a group: `admin_scope` auto-maps all
+/// `root_only=false` permissions; ordinary groups use their explicit set.
+pub async fn effective_group_permissions(db: &sqlx::PgPool, group_id: Uuid) -> Result<Vec<String>, ApiError> {
+    let group = get_group(db, group_id).await?;
+    if group.system_kind.as_deref() == Some("admin_scope") {
+        let mut ids: Vec<String> = PermissionDef::non_root_only_ids().iter().map(|s| s.to_string()).collect();
+        ids.sort();
+        Ok(ids)
+    } else {
+        list_group_permissions(db, group_id).await
+    }
 }
 
 /// Delete a group. Protected groups and the current default group cannot be deleted.
