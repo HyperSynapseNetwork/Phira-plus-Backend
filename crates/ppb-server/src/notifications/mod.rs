@@ -1,5 +1,7 @@
 //! Notification Hub (design §14). Event/inbox separated; push endpoints encrypted.
 
+pub mod push;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -159,6 +161,44 @@ pub async fn mark_read(db: &sqlx::PgPool, notification_id: Uuid, user_id: Uuid) 
     .execute(db)
     .await
     .map_err(db_err)?;
+    Ok(())
+}
+
+/// A stored push endpoint (ciphertext not returned by list).
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct PushEndpoint {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub channel: String,
+    pub platform: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+    #[serde(rename = "lastSeenAt")]
+    pub last_seen_at: Option<DateTime<Utc>>,
+    #[serde(rename = "disabledAt")]
+    pub disabled_at: Option<DateTime<Utc>>,
+}
+
+pub async fn list_push_endpoints(db: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<PushEndpoint>, ApiError> {
+    sqlx::query_as::<_, PushEndpoint>(
+        "SELECT id, user_id, device_id, channel, platform, created_at, last_seen_at, disabled_at
+         FROM push_endpoints WHERE user_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)
+}
+
+pub async fn delete_push_endpoint(db: &sqlx::PgPool, user_id: Uuid, endpoint_id: Uuid) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM push_endpoints WHERE id = $1 AND user_id = $2")
+        .bind(endpoint_id)
+        .bind(user_id)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
     Ok(())
 }
 

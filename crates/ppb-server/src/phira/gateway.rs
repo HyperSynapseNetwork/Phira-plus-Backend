@@ -18,12 +18,19 @@ struct CachedValue {
     expires: Instant,
 }
 
+struct CachedFile {
+    bytes: Vec<u8>,
+    content_type: String,
+    expires: Instant,
+}
+
 /// Typed gateway over Phira public data endpoints.
 #[derive(Clone)]
 pub struct PhiraGateway {
     http: reqwest::Client,
     base_url: String,
     cache: Arc<DashMap<String, CachedValue>>,
+    file_cache: Arc<DashMap<String, CachedFile>>,
     locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
     rate: Arc<RateLimiter>,
     ttl_secs: i64,
@@ -40,6 +47,7 @@ impl PhiraGateway {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             cache: Arc::new(DashMap::new()),
+            file_cache: Arc::new(DashMap::new()),
             locks: Arc::new(DashMap::new()),
             rate: Arc::new(RateLimiter::new()),
             ttl_secs,
@@ -218,9 +226,56 @@ impl PhiraGateway {
         .await
     }
 
-    /// Clear the cache (e.g., after a long outage).
+    /// Fetch a chart file (design §12.7 preview fallback) with a TTL byte cache.
+    /// Used only when the browser cannot download the Phira CDN file directly.
+    pub async fn fetch_chart_file(&self, chart_id: i64) -> Result<(Vec<u8>, String), PhiraError> {
+        let key = format!("chart-file:{chart_id}");
+        if let Some(cf) = self.file_cache.get(&key) {
+            if Instant::now() < cf.expires {
+                return Ok((cf.bytes.clone(), cf.content_type.clone()));
+            }
+        }
+        let chart = self.chart(chart_id).await?;
+        let file_url = chart
+            .get("file")
+            .and_then(Value::as_str)
+            .ok_or_else(|| PhiraError::Api(format!("chart {chart_id} has no file field")))?;
+        let resp = self
+            .http
+            .get(file_url)
+            .send()
+            .await
+            .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
+        let status = resp.status();
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| PhiraError::Unavailable(e.to_string()))?
+            .to_vec();
+        if !status.is_success() {
+            return Err(PhiraError::Api(format!("chart file download failed: {status}")));
+        }
+        self.file_cache.insert(
+            key,
+            CachedFile {
+                bytes: bytes.clone(),
+                content_type: content_type.clone(),
+                expires: Instant::now() + Duration::from_secs(self.ttl_secs.max(1) as u64),
+            },
+        );
+        Ok((bytes, content_type))
+    }
+
+    /// Clear the caches (e.g., after a long outage).
     pub fn clear_cache(&self) {
         self.cache.clear();
+        self.file_cache.clear();
     }
 
     /// Cache stats for /metrics.

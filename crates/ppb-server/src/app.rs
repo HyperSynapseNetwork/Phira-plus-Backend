@@ -32,6 +32,7 @@ use crate::identities::repo as identities_repo;
 use crate::join_intent::JoinIntentStore;
 use crate::middleware::csrf;
 use crate::middleware::rate_limit::RateLimiter;
+use crate::notifications::push::{PushService, SubscriptionWire};
 use crate::permissions::resolver::PermissionResolver;
 use crate::phira::client::{PhiraApi, PhiraClient};
 use crate::phira::credential::CredentialCipher;
@@ -63,6 +64,7 @@ pub struct AppState {
     pub player: PlayerService,
     pub jobs: JobRunner,
     pub join_intents: JoinIntentStore,
+    pub push: Arc<PushService>,
     pub phira_gateway: Arc<PhiraGateway>,
 }
 
@@ -148,6 +150,8 @@ pub async fn build_state(
     let player = PlayerService::new(Arc::clone(&openuds));
     let jobs = JobRunner::new(db.clone(), events.clone(), Arc::clone(&openuds));
     let join_intents = JoinIntentStore::new();
+    let notifications_config = runtime.notifications.clone();
+    let push = Arc::new(PushService::new(&notifications_config, credential_cipher.clone()));
     let phira_gateway = Arc::new(PhiraGateway::new(
         &runtime.phira.base_url,
         runtime.phira.timeout_ms,
@@ -177,6 +181,7 @@ pub async fn build_state(
         player,
         jobs,
         join_intents,
+        push,
         phira_gateway,
     });
 
@@ -337,7 +342,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/me/profile", get(me_profile))
         .route("/me/preferences", get(me_preferences))
         .route("/me/join-intents", get(me_join_intents).post(me_join_intent_create))
-        .route("/me/join-intents/{intent_id}", delete(me_join_intent_cancel));
+        .route("/me/join-intents/{intent_id}", delete(me_join_intent_cancel))
+        .route("/me/push-endpoints", get(me_push_endpoints).post(me_push_endpoint_register))
+        .route("/me/push-endpoints/{endpoint_id}", delete(me_push_endpoint_delete));
 
     let cors = build_cors(&state);
 
@@ -579,6 +586,72 @@ pub async fn me_join_intent_cancel(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+/// GET /api/v1/me/push-endpoints — list the caller's registered push endpoints.
+pub async fn me_push_endpoints(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let items = crate::notifications::list_push_endpoints(db, auth.sub).await?;
+    Ok(Json(json!({ "items": items })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PushEndpointBody {
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub channel: String, // web_push | fcm | wns
+    #[serde(default)]
+    pub platform: String,
+    pub subscription: SubscriptionWire,
+}
+
+/// POST /api/v1/me/push-endpoints — register a push endpoint (subscription
+/// material encrypted at rest with the deployment key).
+pub async fn me_push_endpoint_register(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Json(body): Json<PushEndpointBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    if !matches!(body.channel.as_str(), "web_push" | "fcm" | "wns") {
+        return Err(ApiError::validation("channel must be web_push|fcm|wns"));
+    }
+    let db = state.require_db()?;
+    let plaintext = serde_json::to_vec(&body.subscription)
+        .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+    let ct = state.credential_cipher.encrypt(&plaintext)?;
+    crate::notifications::register_push_endpoint(
+        db,
+        auth.sub,
+        &body.device_id,
+        &body.channel,
+        &ct,
+        &body.platform,
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// DELETE /api/v1/me/push-endpoints/{id} — remove a push endpoint.
+pub async fn me_push_endpoint_delete(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Path(endpoint_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    crate::notifications::delete_push_endpoint(db, auth.sub, endpoint_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 /// GET /healthz — liveness.
 async fn healthz() -> Json<serde_json::Value> {
     Json(json!({ "status": "ok" }))
@@ -613,6 +686,10 @@ impl AppState {
         let player = PlayerService::new(Arc::clone(&openuds));
         let jobs = JobRunner::new(None, EventBus::new(16, 8), Arc::clone(&openuds));
         let join_intents = JoinIntentStore::new();
+        let push = Arc::new(PushService::new(
+            &config.notifications,
+            CredentialCipher::new(&[7u8; 32]).expect("valid key"),
+        ));
         let phira_gateway = Arc::new(
             PhiraGateway::new("https://phira.example.test", 1000, 60, 100)
                 .expect("test gateway builds"),
@@ -643,6 +720,7 @@ impl AppState {
             player,
             jobs,
             join_intents,
+            push,
             phira_gateway,
         }
     }

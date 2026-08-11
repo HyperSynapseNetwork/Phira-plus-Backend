@@ -62,11 +62,29 @@ async fn send(
         db,
         &body.notification_type,
         Some(auth.sub),
-        payload,
+        payload.clone(),
         &recipients,
     )
     .await?;
-    Ok(Json(json!({ "event_id": event.id, "recipients": recipients.len() })))
+    // Fan out push (in-app rows already created above); per-endpoint failures
+    // are non-fatal and summarized.
+    let mut push_summary = crate::notifications::push::PushSummary::default();
+    for uid in &recipients {
+        let r = state
+            .push
+            .notify(db, *uid, &body.title, &body.body, Some(&payload))
+            .await;
+        if let Ok(s) = r {
+            push_summary.delivered += s.delivered;
+            push_summary.not_configured += s.not_configured;
+            push_summary.failed += s.failed;
+        }
+    }
+    Ok(Json(json!({
+        "event_id": event.id,
+        "recipients": recipients.len(),
+        "push": push_summary,
+    })))
 }
 
 /// GET /api/v1/admin/notifications/delivery — recent events + delivered counts.

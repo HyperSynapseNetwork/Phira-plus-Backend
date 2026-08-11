@@ -68,6 +68,10 @@ retention_days = 90
 
 [notifications]
 default_chat_channel = "only_when_companion_background"
+# Web Push VAPID (P-256 PEM + subject). Leave empty → WebPush adapter reports
+# "not configured"; FCM/WNS adapters are stubs pending Owner credentials.
+# vapid_private_key_pem = ""
+# vapid_subject = "mailto:admin@phira.htadiy.com"
 
 [metrics]
 retention_days = 30

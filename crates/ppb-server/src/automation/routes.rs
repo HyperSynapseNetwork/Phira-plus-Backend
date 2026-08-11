@@ -219,6 +219,14 @@ async fn run(
     let mut results: Vec<Value> = Vec::new();
     let mut ok = true;
     for step in &definition.steps {
+        // WAIT-only step (design §10.1): no action, just sleep.
+        if step.action.is_empty() {
+            if let Some(wait) = step.wait_secs {
+                results.push(json!({ "step": "wait", "ok": true, "wait_secs": wait }));
+                tokio::time::sleep(Duration::from_secs(wait.min(3600))).await;
+            }
+            continue;
+        }
         let action = state
             .actions
             .get(&step.action)

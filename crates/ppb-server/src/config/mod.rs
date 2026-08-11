@@ -227,12 +227,18 @@ impl Default for AuditConfig {
 #[serde(default)]
 pub struct NotificationConfig {
     pub default_chat_channel: String,
+    /// Web Push VAPID private key (P-256, PEM) and subject. When absent the
+    /// WebPush adapter returns `not_configured` (Panel marks it 待配).
+    pub vapid_private_key_pem: Option<String>,
+    pub vapid_subject: Option<String>,
 }
 
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
             default_chat_channel: "only_when_companion_background".to_string(),
+            vapid_private_key_pem: None,
+            vapid_subject: None,
         }
     }
 }

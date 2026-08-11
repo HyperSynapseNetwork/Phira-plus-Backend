@@ -17,6 +17,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/charts", get(chart_list))
         .route("/charts/popular", get(chart_popular))
         .route("/charts/{id}", get(chart_detail))
+        .route("/charts/{id}/preview", get(chart_preview))
         .route("/charts/{id}/records", get(chart_records))
         .route("/charts/{id}/top", get(chart_top))
         .route("/records", get(records_by_player))
@@ -79,6 +80,31 @@ async fn chart_detail(
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.chart(id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
+}
+
+/// GET /api/v1/charts/{id}/preview — chart file proxy fallback (design §12.7).
+/// Preferred path is the browser fetching the Phira CDN file directly; this
+/// route is used only when CORS blocks the direct download.
+async fn chart_preview(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<axum::response::Response, ApiError> {
+    let (bytes, content_type) = state
+        .phira_gateway
+        .fetch_chart_file(id)
+        .await
+        .map_err(phira_gateway_error)?;
+    let mut resp = axum::response::Response::new(axum::body::Body::from(bytes));
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_str(&content_type)
+            .unwrap_or(axum::http::HeaderValue::from_static("application/octet-stream")),
+    );
+    resp.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("public, max-age=120"),
+    );
+    Ok(resp)
 }
 
 #[derive(Debug, Deserialize)]
