@@ -279,3 +279,32 @@ Replay tables store **policy only** — never Replay content. `room.*`/online st
 - JWT claims round-trip
 
 Verification: CI `cargo test` + `cargo clippy -D warnings` on x86_64 GitHub runners.
+
+---
+
+## 13. CI verification addendum (2026-08-12)
+
+First full-green Build run: `31529813211` (commit `d2e49a9`) — **success**.
+`auto-patch` ✓, `check` (`cargo check --locked --workspace --all-targets --all-features` +
+`cargo test --locked --workspace --all-features` + `cargo clippy --locked --workspace
+--all-targets --all-features -- -D warnings`) ✓, `build` (linux-musl x86_64) ✓.
+
+Resolved during verification (dependency/API facts worth recording):
+
+- **cookie 0.18**: `Cookie::build` takes **one** arg (name) and `CookieBuilder` has **no**
+  `.value()` method. PPB constructs `Set-Cookie` strings manually (`middleware/cookies.rs`).
+  `cookie::Duration` is private → use `cookie::time::Duration`.
+- **jsonwebtoken 9**: `Validation` has **no** `validate_sub` field (removed).
+- **tower-http 0.6**: `tower_http::ServiceBuilderExt` is **not** exported under the enabled
+  feature set → use explicit `SetRequestIdLayer` / `PropagateRequestIdLayer` from
+  `tower_http::request_id`. `RequestId` (extension) does not deref to `HeaderValue`; PPB reads
+  the `X-Request-Id` header directly.
+- **futures `StreamExt::filter_map`** requires a future-returning closure
+  (`|r| std::future::ready(r.ok())`), not a sync fn.
+- **sqlx `query_as` without turbofish** can infer `Option<tuple>` as the row type when the
+  binding is annotated `Option<tuple>` and a chained `?`/`.ok_or_else()` is used → always use
+  explicit `query_as::<_, (…)>` for tuple rows.
+- **`reqwest 0.12` + `rustls-tls` (aws-lc-rs) builds cleanly for `x86_64-unknown-linux-musl`**
+  on GitHub runners (musl-gcc from `musl-tools`).
+- **AES-256-GCM** ciphertext blob = `nonce(12) || ct(tag appended)` — length assertions must
+  account for the 16-byte GCM tag.
