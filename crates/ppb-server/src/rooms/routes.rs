@@ -456,7 +456,7 @@ async fn admin_room_actions_batch(
                 succeeded += 1;
                 results.push(json!({ "room_id": room_id, "ok": true, "result": v }));
             }
-            Ok(Ok(Err(e))) | Ok(Err(_)) | Err(_) => {
+            Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => {
                 failed += 1;
                 results.push(json!({ "room_id": room_id, "ok": false, "error": "command failed" }));
             }

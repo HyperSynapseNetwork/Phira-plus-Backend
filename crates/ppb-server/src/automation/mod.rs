@@ -1,12 +1,12 @@
 //! Automation / Runbook domain (design §10). Phase A: schema + safety invariants.
-
-pub mod routes;
 //!
 //! V1 rules enforced later in Phase B:
 //! - No arbitrary `/bin/bash` / PowerShell / host commands (no shell executor).
 //! - Each step re-authorizes with the current principal.
 //! - Runs store a `definition_snapshot` for audit.
 //! - No IF/loop/complex expressions / scheduled triggers in V1.
+
+pub mod routes;
 
 use serde::{Deserialize, Serialize};
 

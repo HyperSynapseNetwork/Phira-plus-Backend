@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{Path, State};
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ use crate::error::{ApiError, ErrorCode};
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/runbooks", get(list).post(create))
-        .route("/runbooks/{id}", get(get_one).patch(update).delete(delete))
+        .route("/runbooks/{id}", get(get_one).patch(update).delete(delete_runbook))
         .route("/runbooks/{id}/run", post(run))
         .route("/runbook-runs", get(runs))
 }
@@ -94,7 +94,7 @@ async fn create(
     state.permissions.require(&state.db, &auth, "dashboard:view").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
-    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::internal(e.to_string()))?;
+    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
     let row = sqlx::query_as::<_, RunbookRow>(
         "INSERT INTO runbooks (name, description, definition, created_by, updated_by)
          VALUES ($1, $2, $3, $4, $4)
@@ -142,7 +142,7 @@ async fn update(
     state.permissions.require(&state.db, &auth, "dashboard:view").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
-    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::internal(e.to_string()))?;
+    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
     let row = sqlx::query_as::<_, RunbookRow>(
         "UPDATE runbooks SET name = $1, description = $2, definition = $3, updated_by = $4, updated_at = now()
          WHERE id = $5
@@ -159,7 +159,7 @@ async fn update(
     Ok(Json(row))
 }
 
-async fn delete(
+async fn delete_runbook(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
