@@ -13,10 +13,18 @@ use super::pmp::{pmp_config_descriptor, PmpConfigManager};
 use super::repo as config_repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+use crate::error::{ApiError, ErrorCode};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/config/descriptors", get(descriptors))
+        .route("/config/values", get(values))
+        .route("/config/validate", post(validate))
+        .route("/config/diff", post(diff))
+        .route("/config/save", post(save))
+        .route("/config/snapshots", get(snapshots))
+        .route("/config/raw", get(raw))
+        .route("/config/rollback", post(rollback))
         .route("/config/ppb", get(ppb_config).put(ppb_config_update))
         .route("/config/pmp/descriptor", get(pmp_descriptor))
         .route("/config/pmp", get(pmp_config).put(pmp_config_update))
@@ -90,6 +98,185 @@ async fn pmp_descriptor(
         "version": 1,
         "fields": pmp_config_descriptor(),
     })))
+}
+
+// ── §17 unified config endpoints ───────────────────────────────
+
+/// GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes.
+async fn descriptors(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:view").await?;
+    Ok(Json(serde_json::json!({
+        "version": 1,
+        "pmp": pmp_config_descriptor(),
+        "ppb": [], // JSON-scoped; Panel edits via /config/ppb
+        "ppf": [], // JSON-scoped; Panel edits via /config/ppf
+    })))
+}
+
+/// GET /api/v1/admin/config/values — current PMP config field values (redacted).
+async fn values(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:view").await?;
+    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
+    if !manager.configured() {
+        return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
+    }
+    let yaml = manager.read_yaml()?;
+    let mut values = serde_json::Map::new();
+    for f in pmp_config_descriptor() {
+        let v = manager.field_value(&yaml, f.path);
+        let value = if f.sensitive {
+            if v.is_some() {
+                Value::String("[REDACTED]".to_string())
+            } else {
+                Value::Null
+            }
+        } else {
+            v.map(|y| serde_yaml::from_value::<Value>(y).unwrap_or(Value::Null))
+                .unwrap_or(Value::Null)
+        };
+        values.insert(f.path.to_string(), value);
+    }
+    Ok(Json(serde_json::json!({ "version": 1, "values": values })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConfigContentBody {
+    pub content: String,
+    #[serde(default)]
+    pub note: String,
+}
+
+/// POST /api/v1/admin/config/validate — validate proposed YAML parses.
+async fn validate(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ConfigContentBody>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:reload").await?;
+    serde_yaml::from_str::<serde_yaml::Value>(&body.content)
+        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
+    Ok(Json(serde_json::json!({ "valid": true })))
+}
+
+/// POST /api/v1/admin/config/diff — field-level diff of current vs proposed.
+async fn diff(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ConfigContentBody>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:view").await?;
+    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
+    let current = manager.read_yaml().unwrap_or_default();
+    let _ = serde_yaml::from_str::<serde_yaml::Value>(&body.content)
+        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
+    let mut changes = Vec::new();
+    for f in pmp_config_descriptor() {
+        let a = manager
+            .field_value(&current, f.path)
+            .map(|y| serde_yaml::to_string(&y).unwrap_or_default());
+        let b = manager
+            .field_value(&body.content, f.path)
+            .map(|y| serde_yaml::to_string(&y).unwrap_or_default());
+        if a != b {
+            changes.push(serde_json::json!({
+                "path": f.path,
+                "before": if f.sensitive { "[REDACTED]".to_string() } else { a.unwrap_or_default() },
+                "after": if f.sensitive { "[REDACTED]".to_string() } else { b.unwrap_or_default() },
+            }));
+        }
+    }
+    Ok(Json(serde_json::json!({ "changes": changes, "changed": !changes.is_empty() })))
+}
+
+/// POST /api/v1/admin/config/save — validate → snapshot → atomic write →
+/// reload → health check (design §20.3).
+async fn save(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ConfigContentBody>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:reload").await?;
+    serde_yaml::from_str::<serde_yaml::Value>(&body.content)
+        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
+    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
+    if !manager.configured() {
+        return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
+    }
+    let db = state.require_db()?;
+    let prev = manager.read_yaml().ok();
+    if let Some(prev) = prev {
+        config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?;
+    }
+    manager.write_yaml_atomic(&body.content)?;
+    state
+        .openuds
+        .command("server.config_reload", serde_json::json!({}))
+        .await
+        .map_err(ApiError::from)?;
+    let health = health_check(&state).await;
+    Ok(Json(serde_json::json!({ "ok": true, "note": body.note, "health": health })))
+}
+
+/// GET /api/v1/admin/config/snapshots — list PMP snapshots.
+async fn snapshots(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:view").await?;
+    let db = state.require_db()?;
+    let snaps = config_repo::list_snapshots(db, "pmp", 200).await?;
+    Ok(Json(serde_json::json!({ "snapshots": snaps })))
+}
+
+/// GET /api/v1/admin/config/raw — raw PMP config YAML.
+async fn raw(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:view").await?;
+    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
+    if !manager.configured() {
+        return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
+    }
+    Ok(Json(serde_json::json!({ "content": manager.read_yaml()? })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RollbackBody {
+    #[serde(rename = "snapshotId")]
+    pub snapshot_id: Uuid,
+}
+
+/// POST /api/v1/admin/config/rollback — rollback to a snapshot.
+async fn rollback(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<RollbackBody>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "config:rollback").await?;
+    let db = state.require_db()?;
+    let snapshot = config_repo::get_snapshot(db, body.snapshot_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("snapshot"))?;
+    if snapshot.scope != "pmp" {
+        return Err(ApiError::validation("snapshot scope must be pmp"));
+    }
+    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
+    manager.write_yaml_atomic(&snapshot.content)?;
+    state
+        .openuds
+        .command("server.config_reload", serde_json::json!({}))
+        .await
+        .map_err(ApiError::from)?;
+    config_repo::mark_restored(db, body.snapshot_id).await?;
+    let health = health_check(&state).await;
+    Ok(Json(serde_json::json!({ "ok": true, "restored": body.snapshot_id, "health": health })))
 }
 
 async fn pmp_config(

@@ -27,6 +27,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/actions", get(list_actions))
         .route("/actions/{action_id}/execute", post(execute_action))
         .route("/commands", get(list_commands))
+        .route("/commands/history", get(list_commands))
+        .route("/commands/execute", post(execute_command))
 }
 
 #[derive(Debug, Deserialize)]
@@ -166,6 +168,44 @@ async fn list_commands(
     let db = state.require_db()?;
     let runs = command_repo::list_recent(db, 100).await?;
     Ok(Json(runs))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExecuteCommandBody {
+    pub command: String,
+}
+
+/// POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).
+/// Full audit (command content redacted).
+async fn execute_command(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ExecuteCommandBody>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "pmp:cli").await?;
+    state
+        .rate_limiter
+        .check(&format!("raw-cli:{}", auth.sub), state.config.rate_limit.raw_cli_per_minute)?;
+    let result = crate::pmp::cli::cli_execute(&state.openuds, &body.command)
+        .await
+        .map_err(ApiError::from)?;
+    if let Some(db) = &state.db {
+        crate::audit::service::record_principal(
+            db,
+            &auth,
+            "pmp.cli.execute",
+            "pmp",
+            "console",
+            serde_json::json!({ "command": "[REDACTED input]" }),
+            "success",
+            "",
+            "",
+            "",
+            "",
+        )
+        .await?;
+    }
+    Ok(Json(result))
 }
 
 /// Verify the caller is the room's real host at execution time (design §8.5).

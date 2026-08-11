@@ -21,12 +21,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/groups", get(list).post(create))
         .route("/groups/{id}", get(detail).patch(rename).delete(delete_group))
         .route("/groups/{id}/set-default", post(set_default))
-        .route("/groups/{id}/permissions", post(add_permission))
+        .route("/groups/{id}/permissions", post(add_permission).put(replace_permissions))
         .route(
             "/groups/{id}/permissions/{permission}",
             delete(remove_permission),
         )
-        .route("/groups/{id}/members", post(add_member))
+        .route("/groups/{id}/members", post(add_member).put(replace_members))
         .route("/groups/{id}/members/{user_id}", delete(remove_member))
 }
 
@@ -186,6 +186,49 @@ async fn remove_permission(
 #[derive(Debug, Deserialize)]
 pub struct MemberBody {
     pub user_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReplaceMembersBody {
+    #[serde(rename = "userIds")]
+    pub user_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReplacePermissionsBody {
+    pub permissions: Vec<String>,
+}
+
+/// PUT /api/v1/admin/groups/{id}/members — replace the member set.
+async fn replace_members(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<ReplaceMembersBody>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "group:assign_user")
+        .await?;
+    let db = state.require_db()?;
+    repo::replace_group_members(db, group_id, &body.user_ids).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// PUT /api/v1/admin/groups/{id}/permissions — replace the permission set.
+async fn replace_permissions(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<ReplacePermissionsBody>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "group:edit")
+        .await?;
+    let db = state.require_db()?;
+    repo::replace_group_permissions(db, group_id, &body.permissions).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 async fn add_member(

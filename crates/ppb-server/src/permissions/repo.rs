@@ -97,6 +97,53 @@ pub async fn add_member(db: &sqlx::PgPool, group_id: Uuid, user_id: Uuid) -> Res
     Ok(())
 }
 
+/// Replace a group's full member set (contract §17 Groups `PUT /members`).
+pub async fn replace_group_members(db: &sqlx::PgPool, group_id: Uuid, user_ids: &[Uuid]) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM group_members WHERE group_id = $1")
+        .bind(group_id)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
+    for user_id in user_ids {
+        sqlx::query("INSERT INTO group_members (group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+            .bind(group_id)
+            .bind(user_id)
+            .execute(db)
+            .await
+            .map_err(db_err)?;
+    }
+    Ok(())
+}
+
+/// Replace a group's full permission set (contract §17 Groups `PUT /permissions`).
+/// Rejects `*:*` and unknown permission ids at the API layer.
+pub async fn replace_group_permissions(
+    db: &sqlx::PgPool,
+    group_id: Uuid,
+    permissions: &[String],
+) -> Result<(), ApiError> {
+    for p in permissions {
+        PermissionResolver::validate_group_permission(p)?;
+        if PermissionResolver::new().permission_by_id(p).is_none() {
+            return Err(ApiError::validation(format!("unknown permission id: {p}")));
+        }
+    }
+    sqlx::query("DELETE FROM group_permissions WHERE group_id = $1")
+        .bind(group_id)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
+    for p in permissions {
+        sqlx::query("INSERT INTO group_permissions (group_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+            .bind(group_id)
+            .bind(p)
+            .execute(db)
+            .await
+            .map_err(db_err)?;
+    }
+    Ok(())
+}
+
 pub async fn remove_member(db: &sqlx::PgPool, group_id: Uuid, user_id: Uuid) -> Result<(), ApiError> {
     sqlx::query("DELETE FROM group_members WHERE group_id = $1 AND user_id = $2")
         .bind(group_id)

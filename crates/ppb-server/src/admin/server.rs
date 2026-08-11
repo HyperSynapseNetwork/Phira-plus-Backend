@@ -3,12 +3,15 @@
 use std::sync::Arc;
 
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::app::AppState;
+use crate::auth::reauth::ReauthRisk;
+use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::error::ApiError;
 use crate::pmp::openuds::client::OpenUdsError;
@@ -17,6 +20,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/server/stats", get(server_stats))
         .route("/server/runtime", get(runtime_status))
+        .route("/server/actions", post(server_actions))
         .route("/server/config-reload", post(config_reload))
         .route("/server/roomcreation", post(room_creation))
         .route("/server/shutdown", post(shutdown))
@@ -50,6 +54,48 @@ async fn config_reload(
     state.permissions.require(&state.db, &auth, "config:reload").await?;
     let result = state.openuds.command("server.config_reload", json!({})).await.map_err(map_err)?;
     Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerActionBody {
+    pub action: String,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// POST /api/v1/admin/server/actions — unified server operation dispatch
+/// (contract §17). config_reload / shutdown / roomcreation / connections.
+async fn server_actions(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ServerActionBody>,
+) -> Result<Json<Value>, ApiError> {
+    match body.action.as_str() {
+        "config_reload" => {
+            state.permissions.require(&state.db, &auth, "config:reload").await?;
+            let r = state.openuds.command("server.config_reload", json!({})).await.map_err(map_err)?;
+            Ok(Json(r))
+        }
+        "shutdown" => {
+            state.permissions.require(&state.db, &auth, "server:shutdown").await?;
+            check_reauth_header(&state, &auth, &headers, ReauthRisk::Critical)?;
+            let r = state.openuds.command("server.shutdown", json!({})).await.map_err(map_err)?;
+            Ok(Json(r))
+        }
+        "roomcreation" => {
+            state.permissions.require(&state.db, &auth, "server:manage").await?;
+            let enabled = body.args.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+            let r = state.openuds.command("server.roomcreation", json!({ "enabled": enabled })).await.map_err(map_err)?;
+            Ok(Json(r))
+        }
+        "connections" => {
+            state.permissions.require(&state.db, &auth, "server:view").await?;
+            let r = state.openuds.command("runtime.status", json!({})).await.map_err(map_err)?;
+            Ok(Json(r))
+        }
+        other => Err(ApiError::validation(format!("unknown server action: {other}"))),
+    }
 }
 
 #[derive(Debug, Deserialize)]

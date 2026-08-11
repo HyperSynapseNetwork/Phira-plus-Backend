@@ -1,4 +1,6 @@
 //! Automation / Runbook domain (design §10). Phase A: schema + safety invariants.
+
+pub mod routes;
 //!
 //! V1 rules enforced later in Phase B:
 //! - No arbitrary `/bin/bash` / PowerShell / host commands (no shell executor).

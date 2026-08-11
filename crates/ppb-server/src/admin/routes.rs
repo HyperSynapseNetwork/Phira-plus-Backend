@@ -6,7 +6,7 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::stream::{self, Stream};
 use futures_util::StreamExt;
@@ -25,11 +25,15 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
+        .route("/auth/reauth", post(crate::auth::routes::phira_reauth))
         .merge(crate::audit::routes::routes())
         .merge(crate::config::routes::routes())
         .merge(crate::logs::routes::routes())
         .merge(super::server::routes())
         .merge(super::plugins::routes())
+        .merge(super::notifications::routes())
+        .merge(super::coupons::routes())
+        .merge(crate::automation::routes::routes())
         .merge(crate::jobs::routes::routes())
         .merge(auth_routes::root_routes())
         .merge(permission_routes::routes())

@@ -1,23 +1,38 @@
 //! Admin user routes (design §18.4): PPB account + PMP player unified view.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::oneshot;
+use uuid::Uuid;
 
 use super::model::User;
 use super::repo as user_repo;
+use crate::actions::types::Risk;
 use crate::app::AppState;
+use crate::auth::reauth::ReauthRisk;
+use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+use crate::commands::broker::{redact_args, CommandTask};
+use crate::commands::repo as command_repo;
+use crate::error::{ApiError, ErrorCode};
 
 pub fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/users", get(list_users))
         .route("/users/{user_id}", get(user_detail))
+        .route("/users/{user_id}/multiplayer", get(user_multiplayer))
+        .route("/users/{user_id}/sessions", get(user_sessions))
+        .route("/users/{user_id}/security", get(user_security))
+        .route("/users/{user_id}/audit", get(user_audit))
+        .route("/users/{user_id}/actions", post(user_actions))
         .route("/users/{user_id}/ban", post(ban_user))
         .route("/users/{user_id}/unban", post(unban_user))
         .route("/users/{user_id}/kick", post(kick_user))
@@ -228,6 +243,223 @@ async fn ip_history(
         .await
         .map_err(ApiError::from)?;
     Ok(Json(result))
+}
+
+// ── §17 user subpaths ───────────────────────────────────────────
+
+/// GET /api/v1/admin/users/{id}/multiplayer — PMP player + presence (best-effort).
+async fn user_multiplayer(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "user:view")
+        .await?;
+    let player = state
+        .player
+        .info(user_id as i32)
+        .await
+        .map(|v| serde_json::to_value(&v).unwrap_or(Value::Null))
+        .unwrap_or(Value::Null);
+    let room = player
+        .get("room_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    Ok(Json(json!({
+        "phira_id": user_id,
+        "player": player,
+        "presence": {
+            "online": !room.is_empty(),
+            "room_id": if room.is_empty() { Value::Null } else { Value::String(room) },
+        },
+    })))
+}
+
+/// GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions.
+async fn user_sessions(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "user:view")
+        .await?;
+    let db = state.require_db()?;
+    let user = user_repo::find_by_phira_id(db, user_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user"))?;
+    let rows = sqlx::query_as::<_, (Uuid, String, String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)>(
+        "SELECT id, client_type, device_name, ip, created_at, revoked_at
+         FROM sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100",
+    )
+    .bind(user.id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)?;
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|(id, client_type, device_name, ip, created_at, revoked_at)| {
+            json!({
+                "id": id,
+                "clientType": client_type,
+                "deviceName": device_name,
+                "ip": ip,
+                "createdAt": created_at,
+                "revokedAt": revoked_at,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "items": items })))
+}
+
+/// GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort).
+async fn user_security(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "user:view")
+        .await?;
+    let banlist = state.player.banlist().await.ok();
+    let banned = banlist
+        .as_ref()
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().any(|b| b.get("user_id").and_then(Value::as_i64) == Some(user_id)))
+        .unwrap_or(false);
+    Ok(Json(json!({
+        "phira_id": user_id,
+        "banned": banned,
+        "ip_banned": Value::Null,
+        "reason": Value::Null,
+    })))
+}
+
+/// GET /api/v1/admin/users/{id}/audit — audit events targeting this user.
+async fn user_audit(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    state
+        .permissions
+        .require(&state.db, &auth, "audit:view")
+        .await?;
+    let db = state.require_db()?;
+    let rows = sqlx::query_as::<_, crate::audit::model::AuditEvent>(
+        "SELECT id, occurred_at, principal_type, actor_user_id, actor_session_id, action,
+                resource_type, resource_id, parameters_redacted, result, error_code,
+                request_id, command_id, ip, user_agent
+         FROM audit_events
+         WHERE (actor_user_id = (SELECT id FROM users WHERE phira_id = $1))
+            OR (resource_type = 'user' AND resource_id = $1::text)
+         ORDER BY occurred_at DESC LIMIT 100",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(json!({ "items": rows })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserActionBody {
+    pub action: String,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a
+/// user (e.g. player.kick / player.ban). The phira_id is injected as user_id.
+async fn user_actions(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(user_id): Path<i64>,
+    Json(body): Json<UserActionBody>,
+) -> Result<axum::response::Response, ApiError> {
+    let action = state
+        .actions
+        .get(&body.action)
+        .ok_or_else(|| ApiError::not_found("action"))?;
+    let mut args = body.args;
+    if args.get("user_id").is_none() {
+        if let Value::Object(map) = &mut args {
+            map.insert("user_id".to_string(), json!(user_id));
+        }
+    }
+    if !state
+        .permissions
+        .has_permission(&state.db, &auth, action.permission)
+        .await?
+    {
+        return Err(ApiError::permission_denied());
+    }
+    if action.reauth {
+        let risk = if action.risk >= Risk::Critical {
+            ReauthRisk::Critical
+        } else {
+            ReauthRisk::High
+        };
+        check_reauth_header(&state, &auth, &headers, risk)?;
+    }
+
+    let db = state.require_db()?;
+    let queue_key = state.actions.resolve_queue_key(action, &args);
+    let command_id = Uuid::new_v4();
+    let args_redacted = redact_args(&args);
+    command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
+        .await?;
+    if action.audit {
+        crate::audit::service::record_principal(
+            db,
+            &auth,
+            action.id,
+            "user",
+            &user_id.to_string(),
+            args_redacted.clone(),
+            "success",
+            "",
+            &command_id.to_string(),
+            "",
+            "",
+        )
+        .await?;
+    }
+
+    let (completion, rx) = if action.long_running {
+        (None, None)
+    } else {
+        let (tx, rx) = oneshot::channel();
+        (Some(tx), Some(rx))
+    };
+    state
+        .commands
+        .submit(CommandTask {
+            command_id,
+            action: action.id.to_string(),
+            actor: auth.sub.to_string(),
+            resource_key: queue_key,
+            args,
+            args_redacted,
+            completion,
+        })?;
+    if let Some(rx) = rx {
+        match tokio::time::timeout(Duration::from_secs(30), rx).await {
+            Ok(Ok(Ok(v))) => Ok(Json(v).into_response()),
+            Ok(Ok(Err(e))) => Err(ApiError::new(ErrorCode::PmpUnavailable, e)),
+            Ok(Err(_)) => Err(ApiError::new(ErrorCode::PmpUnavailable, "executor dropped")),
+            Err(_) => Err(ApiError::new(ErrorCode::PmpUnavailable, "command timed out")),
+        }
+    } else {
+        let accepted = json!({ "command_id": command_id, "status": "queued" });
+        Ok((axum::http::StatusCode::ACCEPTED, Json(accepted)).into_response())
+    }
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {

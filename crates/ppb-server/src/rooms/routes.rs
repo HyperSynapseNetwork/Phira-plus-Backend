@@ -38,6 +38,8 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/rooms", get(admin_list_rooms).post(admin_create_room))
         .route("/rooms/{room_id}", get(admin_room_info).delete(admin_close_room))
+        .route("/rooms/{room_id}/actions", post(admin_room_action))
+        .route("/rooms/actions/batch", post(admin_room_actions_batch))
         .route("/rooms/{room_id}/banlist", get(room_banlist))
         .route("/rooms/{room_id}/whitelist", get(room_whitelist))
 }
@@ -283,6 +285,184 @@ async fn room_whitelist(
     state.permissions.require(&state.db, &auth, "room:whitelist").await?;
     let result = state.rooms.whitelist(&room_id).await.map_err(ApiError::from)?;
     Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminRoomActionBody {
+    pub action: String,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// POST /api/v1/admin/rooms/{room_id}/actions — run a registered action scoped
+/// to a room (admin-gated or host-allowed, re-derived host).
+async fn admin_room_action(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(room_id): Path<String>,
+    Json(body): Json<AdminRoomActionBody>,
+) -> Result<axum::response::Response, ApiError> {
+    let action = state
+        .actions
+        .get(&body.action)
+        .ok_or_else(|| ApiError::not_found("action"))?;
+    let mut args = body.args;
+    if args.get("room_id").is_none() {
+        if let Value::Object(map) = &mut args {
+            map.insert("room_id".to_string(), json!(room_id));
+        }
+    }
+
+    let has_permission = state
+        .permissions
+        .has_permission(&state.db, &auth, action.permission)
+        .await?;
+    let is_host = if action.host_allowed {
+        verify_real_host(&state, &auth, &args).await?
+    } else {
+        false
+    };
+    if !has_permission && !is_host {
+        return Err(ApiError::permission_denied());
+    }
+    if action.reauth {
+        let risk = if action.risk >= Risk::Critical {
+            ReauthRisk::Critical
+        } else {
+            ReauthRisk::High
+        };
+        check_reauth_header(&state, &auth, &headers, risk)?;
+    }
+
+    let db = state.require_db()?;
+    let queue_key = state.actions.resolve_queue_key(action, &args);
+    let command_id = Uuid::new_v4();
+    let args_redacted = redact_args(&args);
+    command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
+        .await?;
+    if action.audit {
+        crate::audit::service::record_principal(
+            db,
+            &auth,
+            action.id,
+            "room",
+            &room_id,
+            args_redacted.clone(),
+            "success",
+            "",
+            &command_id.to_string(),
+            &ip_from_headers(&headers),
+            &user_agent_from_headers(&headers),
+        )
+        .await?;
+    }
+
+    let (completion, rx) = if action.long_running {
+        (None, None)
+    } else {
+        let (tx, rx) = oneshot::channel();
+        (Some(tx), Some(rx))
+    };
+    state
+        .commands
+        .submit(CommandTask {
+            command_id,
+            action: action.id.to_string(),
+            actor: auth.sub.to_string(),
+            resource_key: queue_key,
+            args,
+            args_redacted,
+            completion,
+        })?;
+    if let Some(rx) = rx {
+        match tokio::time::timeout(Duration::from_secs(30), rx).await {
+            Ok(Ok(Ok(v))) => Ok(Json(v).into_response()),
+            Ok(Ok(Err(e))) => Err(ApiError::new(ErrorCode::PmpUnavailable, e)),
+            Ok(Err(_)) => Err(ApiError::new(ErrorCode::PmpUnavailable, "executor dropped")),
+            Err(_) => Err(ApiError::new(ErrorCode::PmpUnavailable, "command timed out")),
+        }
+    } else {
+        let accepted = json!({ "command_id": command_id, "status": "queued" });
+        Ok((StatusCode::ACCEPTED, Json(accepted)).into_response())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RoomBatchBody {
+    pub action: String,
+    pub room_ids: Vec<String>,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// POST /api/v1/admin/rooms/actions/batch — batch room action (kick/move/ban)
+/// with per-item results and partial failure.
+async fn admin_room_actions_batch(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<RoomBatchBody>,
+) -> Result<Json<Value>, ApiError> {
+    let action = state
+        .actions
+        .get(&body.action)
+        .ok_or_else(|| ApiError::not_found("action"))?;
+    // Batch is limited to clearly safe room actions (design §18.3).
+    if !matches!(action.id, "room.kick" | "room.force_move" | "room.ban" | "room.unban") {
+        return Err(ApiError::validation("batch only supports kick/move/ban"));
+    }
+    state
+        .permissions
+        .require(&state.db, &auth, action.permission)
+        .await?;
+    if action.reauth {
+        let risk = if action.risk >= Risk::Critical {
+            ReauthRisk::Critical
+        } else {
+            ReauthRisk::High
+        };
+        check_reauth_header(&state, &auth, &headers, risk)?;
+    }
+
+    let mut results: Vec<Value> = Vec::new();
+    let mut succeeded = 0i64;
+    let mut failed = 0i64;
+    for room_id in &body.room_ids {
+        let mut args = body.args.clone();
+        if let Value::Object(map) = &mut args {
+            map.insert("room_id".to_string(), json!(room_id));
+        }
+        let db = state.require_db()?;
+        let queue_key = state.actions.resolve_queue_key(action, &args);
+        let command_id = Uuid::new_v4();
+        let args_redacted = redact_args(&args);
+        command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
+            .await?;
+        let (tx, rx) = oneshot::channel();
+        state
+            .commands
+            .submit(CommandTask {
+                command_id,
+                action: action.id.to_string(),
+                actor: auth.sub.to_string(),
+                resource_key: queue_key,
+                args,
+                args_redacted,
+                completion: Some(tx),
+            })?;
+        match tokio::time::timeout(Duration::from_secs(30), rx).await {
+            Ok(Ok(Ok(v))) => {
+                succeeded += 1;
+                results.push(json!({ "room_id": room_id, "ok": true, "result": v }));
+            }
+            Ok(Ok(Err(e))) | Ok(Err(_)) | Err(_) => {
+                failed += 1;
+                results.push(json!({ "room_id": room_id, "ok": false, "error": "command failed" }));
+            }
+        }
+    }
+    Ok(Json(json!({ "items": results, "succeeded": succeeded, "failed": failed })))
 }
 
 // ── Helpers ────────────────────────────────────────────────────

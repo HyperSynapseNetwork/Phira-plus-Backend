@@ -376,6 +376,10 @@ pub async fn me(
 }
 
 /// GET /api/v1/me/profile — community profile (defaults when unset).
+///
+/// Optional fields (contract supplement): `rks`/`stats` (Phira gateway),
+/// `online_status` (presence), `friends_count` (PPB social). Each is `null`
+/// when the source is unavailable; frontends render a placeholder (`—`).
 pub async fn me_profile(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -396,10 +400,49 @@ pub async fn me_profile(
     })?;
 
     let (bio, background, visibility) = profile.unwrap_or((None, None, None));
+    let user = crate::users::repo::find_by_id(db, auth.sub).await?;
+    let phira_id = user.map(|u| u.phira_id).unwrap_or(0);
+
+    // Best-effort Phira stats (gateway). Missing → null (frontend shows "—").
+    let (rks, stats) = if phira_id > 0 {
+        match state.phira_gateway.user_stats(phira_id).await {
+            Ok(v) => (
+                v.get("rks").cloned().unwrap_or(serde_json::Value::Null),
+                v,
+            ),
+            Err(_) => (serde_json::Value::Null, serde_json::Value::Null),
+        }
+    } else {
+        (serde_json::Value::Null, serde_json::Value::Null)
+    };
+
+    // Best-effort presence from PMP. None → unknown (frontend shows "—").
+    let online_status = if phira_id > 0 {
+        state.player.info(phira_id as i32).await.ok().map(|p| {
+            let in_room = p
+                .get("room_id")
+                .and_then(serde_json::Value::as_str)
+                .map(|s| !s.is_empty())
+                .unwrap_or(false);
+            if in_room { "online" } else { "offline" }
+        })
+    } else {
+        None
+    };
+
+    let friends_count = crate::social::list_friends(db, auth.sub)
+        .await
+        .map(|f| f.len() as i64)
+        .ok();
+
     Ok(Json(json!({
         "bio": bio.unwrap_or_default(),
         "background_url": background.unwrap_or_default(),
         "profile_visibility": visibility.unwrap_or_else(|| "public".to_string()),
+        "rks": rks,
+        "stats": stats,
+        "online_status": online_status,
+        "friends_count": friends_count,
     })))
 }
 

@@ -24,7 +24,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/logs", get(history))
         .route("/logs/stream", get(stream))
         .route("/logs/input", get(input).post(submit_input))
-        .route("/logs/translate", get(translate_endpoint))
+        .route("/logs/translate", get(translate_endpoint).post(translate_post))
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +145,17 @@ pub async fn translate_endpoint(
 #[derive(Debug, Deserialize)]
 pub struct TranslateParams {
     pub code: String,
+}
+
+/// POST /api/v1/admin/logs/translate — body-based error translation (contract §17).
+async fn translate_post(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<TranslateParams>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "server:view").await?;
+    let t = translate(&body.code).or_else(|| translate_pattern(&body.code));
+    Ok(Json(json!({ "code": body.code, "translated": t })))
 }
 
 fn map_err(e: OpenUdsError) -> ApiError {

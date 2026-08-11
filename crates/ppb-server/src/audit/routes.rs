@@ -21,6 +21,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/audit", get(list))
         .route("/audit/{id}", get(detail))
+        .route("/audit/export", get(export))
         .route("/audit/export.csv", get(export_csv))
 }
 
@@ -80,6 +81,45 @@ async fn detail(
     Ok(Json(event))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ExportParams {
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(flatten)]
+    pub filter: AuditFilterParams,
+}
+
+/// GET /api/v1/admin/audit/export?format=csv|json — export (contract §17).
+async fn export(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ExportParams>,
+) -> Result<axum::response::Response, ApiError> {
+    let db = state.require_db()?;
+    let events = repo::list_filtered(
+        db,
+        params.filter.action.as_deref(),
+        params.filter.principal_type.as_deref(),
+        params.filter.actor,
+        params.filter.result.as_deref(),
+        10_000,
+        0,
+    )
+    .await?;
+
+    match params.format.as_deref() {
+        Some("csv") => {
+            state.permissions.require(&state.db, &auth, "audit:export").await?;
+            Ok(csv_response(events))
+        }
+        Some("json") | None => {
+            state.permissions.require(&state.db, &auth, "audit:view").await?;
+            Ok(Json(serde_json::json!({ "items": events })).into_response())
+        }
+        Some(other) => Err(ApiError::validation(format!("format must be csv or json, got {other}"))),
+    }
+}
+
 /// GET /api/v1/admin/audit/export.csv — CSV export (redacted; no secrets).
 async fn export_csv(
     auth: AuthPrincipal,
@@ -98,7 +138,10 @@ async fn export_csv(
         0,
     )
     .await?;
+    Ok(csv_response(events))
+}
 
+fn csv_response(events: Vec<AuditEvent>) -> axum::response::Response {
     let mut csv = String::from(
         "id,occurred_at,principal_type,actor_user_id,action,resource_type,resource_id,result,error_code,request_id,command_id,ip\n",
     );
@@ -129,7 +172,7 @@ async fn export_csv(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_static("attachment; filename=audit.csv"),
     );
-    Ok(resp)
+    resp
 }
 
 fn csv_escape(s: &str) -> String {
