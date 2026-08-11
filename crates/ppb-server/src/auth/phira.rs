@@ -79,6 +79,7 @@ pub fn phira_error_to_api(e: PhiraError) -> ApiError {
             ApiError::new(ErrorCode::PhiraApiUnavailable, m)
         }
         PhiraError::Unavailable(m) => ApiError::new(ErrorCode::PhiraApiUnavailable, m),
+        PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimit, "phira api rate limited"),
     }
 }
 

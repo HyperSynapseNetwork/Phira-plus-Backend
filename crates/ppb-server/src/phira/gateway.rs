@@ -125,12 +125,12 @@ impl PhiraGateway {
     // ── Typed methods (charts) ──────────────────────────────────
 
     pub async fn chart_list(&self, page: i64, page_num: i64, search: Option<&str>) -> Result<Value, PhiraError> {
-        let mut q = vec![
-            ("page".to_string(), page.to_string()),
-            ("pageNum".to_string(), page_num.to_string()),
+        let mut q: Vec<(&str, String)> = vec![
+            ("page", page.to_string()),
+            ("pageNum", page_num.to_string()),
         ];
         if let Some(s) = search {
-            q.push(("search".to_string(), s.to_string()));
+            q.push(("search", s.to_string()));
         }
         self.get_json("chart", &q).await
     }
@@ -145,7 +145,7 @@ impl PhiraGateway {
     }
 
     pub async fn chart_popular(&self, page_num: i64) -> Result<Value, PhiraError> {
-        self.get_json("chart/popular", &[("pageNum".to_string(), page_num.to_string())]).await
+        self.get_json("chart/popular", &[("pageNum", page_num.to_string())]).await
     }
 
     // ── Typed methods (records) ─────────────────────────────────
@@ -154,8 +154,8 @@ impl PhiraGateway {
         self.get_json(
             &format!("record/query/{chart_id}"),
             &[
-                ("page".to_string(), page.to_string()),
-                ("pageNum".to_string(), page_num.to_string()),
+                ("page", page.to_string()),
+                ("pageNum", page_num.to_string()),
             ],
         )
         .await
@@ -192,9 +192,9 @@ impl PhiraGateway {
         self.get_json(
             "user",
             &[
-                ("search".to_string(), search.to_string()),
-                ("page".to_string(), page.to_string()),
-                ("pageNum".to_string(), page_num.to_string()),
+                ("search", search.to_string()),
+                ("page", page.to_string()),
+                ("pageNum", page_num.to_string()),
             ],
         )
         .await
