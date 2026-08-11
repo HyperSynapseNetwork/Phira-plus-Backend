@@ -226,7 +226,8 @@ CREATE TABLE push_endpoints (
     platform          TEXT NOT NULL DEFAULT '',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at      TIMESTAMPTZ,
-    disabled_at       TIMESTAMPTZ
+    disabled_at       TIMESTAMPTZ,
+    UNIQUE (user_id, device_id)
 );
 
 -- ─────────────────────────────────────────────────────────────
