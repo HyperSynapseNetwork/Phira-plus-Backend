@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -61,7 +61,8 @@ async fn ppb_config_update(
 }
 
 async fn effective_config(state: &Arc<AppState>) -> Result<Value, ApiError> {
-    let base = serde_json::to_value(&*state.config).map_err(|e| ApiError::internal(e.to_string()))?;
+    let base = serde_json::to_value(&*state.config)
+        .map_err(|e| ApiError::new(crate::error::ErrorCode::Internal, e.to_string()))?;
     if let Some(db) = &state.db {
         if let Some(over) = config_repo::get_overrides(db).await? {
             let mut merged = base;

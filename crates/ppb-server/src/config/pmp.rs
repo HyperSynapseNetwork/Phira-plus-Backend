@@ -88,7 +88,8 @@ impl PmpConfigManager {
 
     /// Read the current PMP config YAML.
     pub fn read_yaml(&self) -> Result<String, ApiError> {
-        std::fs::read_to_string(self.path()?).map_err(|e| ApiError::internal(e.to_string()))
+        std::fs::read_to_string(self.path()?)
+            .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))
     }
 
     /// Atomic write: write to a temp file in the same directory, then rename.
@@ -96,10 +97,10 @@ impl PmpConfigManager {
         let path = self.path()?;
         let dir = path
             .parent()
-            .ok_or_else(|| ApiError::internal("config path has no parent"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "config path has no parent"))?;
         let tmp = dir.join(format!(".{}.ppb.tmp", path.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()));
-        std::fs::write(&tmp, content).map_err(|e| ApiError::internal(e.to_string()))?;
-        std::fs::rename(&tmp, path).map_err(|e| ApiError::internal(e.to_string()))?;
+        std::fs::write(&tmp, content).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+        std::fs::rename(&tmp, path).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
         Ok(())
     }
 
