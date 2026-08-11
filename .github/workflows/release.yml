@@ -106,10 +106,14 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: ppb-server-linux-x86_64-musl
+      - name: Generate checksum (SHA-256)
+        run: sha256sum ppb-server-linux-x86_64-musl > ppb-server-linux-x86_64-musl.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: ppb-server-linux-x86_64-musl
-          path: ppb-server-linux-x86_64-musl
+          path: |
+            ppb-server-linux-x86_64-musl
+            ppb-server-linux-x86_64-musl.sha256
           if-no-files-found: error
 
   release:
@@ -138,4 +142,5 @@ jobs:
           body: ${{ github.event.inputs.description }}
           files: |
             ppb-server-linux-x86_64-musl
+            ppb-server-linux-x86_64-musl.sha256
           prerelease: false

@@ -1,0 +1,36 @@
+# Phira+ 反向代理模板（Caddy）。自动 HTTPS（Let's Encrypt）。
+#
+# 域名固定（contract §11）：api-phira.htadiy.com / phira.htadiy.com / panel-phira.htadiy.com。
+# WebSocket（/ws/v1/...）由 Caddy 自动处理 Upgrade。
+
+{
+	email admin@example.com   # 替换为运维邮箱
+}
+
+api-phira.htadiy.com {
+	reverse_proxy 127.0.0.1:8080
+	request_body {
+		max_size 20MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+	}
+}
+
+phira.htadiy.com {
+	root * /srv/ppf/dist
+	file_server
+	try_files {path} {path}/ /index.html
+	encode gzip zstd
+}
+
+panel-phira.htadiy.com {
+	root * /srv/panel/dist
+	file_server
+	try_files {path} {path}/ /index.html
+	encode gzip zstd
+	header {
+		X-Robots-Tag "noindex, nofollow"   # Panel 禁止搜索引擎收录（§23.2）
+	}
+}

@@ -1,0 +1,68 @@
+# Phira+ 后端部署模板（PPB 侧）。
+#
+# 三件套 = PPB（API/控制面）+ PPF build/static + Panel build/static。
+# PPF/Panel 各自独立构建发布；此处提供引用它们发布镜像/静态产物的模板。
+# 更新流程：先 stage 校验 → 原子激活，禁止半部署中间态（见 ppctl update）。
+#
+# 用法：
+#   cp deploy/docker-compose.yml docker-compose.yml
+#   PPB_IMAGE=ghcr.io/your-org/ppb-server:0.1.x docker compose up -d
+#
+# 生产请务必：TLS 反代（nginx/caddy 模板在 deploy/nginx、deploy/caddy）、
+# 强 PostgreSQL 口令（经环境变量注入，勿写死）、secret 走 secret store。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PPB_DB_USER:-ppb}
+      POSTGRES_PASSWORD: ${PPB_DB_PASSWORD:?set PPB_DB_PASSWORD}
+      POSTGRES_DB: ${PPB_DB_NAME:-ppb}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ppb:
+    image: ${PPB_IMAGE:?set PPB_IMAGE (e.g. ghcr.io/your-org/ppb-server)}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PPB_DATABASE_URL: postgres://${PPB_DB_USER:-ppb}:${PPB_DB_PASSWORD}@postgres:5432/${PPB_DB_NAME:-ppb}
+      PPB_JWT_SECRET: ${PPB_JWT_SECRET:?set PPB_JWT_SECRET}
+      PPB_PHIRA_CREDENTIAL_KEY: ${PPB_PHIRA_CREDENTIAL_KEY:?set PPB_PHIRA_CREDENTIAL_KEY}
+      PPB_PMP_OPENUDS_TOKEN: ${PPB_PMP_OPENUDS_TOKEN:-}
+      PPB_RUNTIME_CONFIG: /etc/ppb/ppb.toml
+      # Push / GitHub optional:
+      # PPB_GITHUB_CLIENT_ID / PPB_GITHUB_CLIENT_SECRET / PPB_VAPID_*
+    volumes:
+      - ./config:/etc/ppb:ro
+      # PMP OpenUDS socket（宿主机挂载，PMP 以 systemd/docker 同机运行）
+      - ${PMP_OPENUDS_SOCKET_DIR:-/var/run/pmp}:/var/run/pmp:ro
+    ports:
+      - "${PPB_HTTP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # PPF / Panel：引用各自发布镜像（Phase C/D 产出后填充）。
+  # ppf:
+  #   image: ${PPF_IMAGE:-ghcr.io/your-org/ppf}
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ppf-static:/usr/share/nginx/html:ro
+  # panel:
+  #   image: ${PANEL_IMAGE:-ghcr.io/your-org/panel}
+  #   restart: unless-stopped
+
+volumes:
+  pgdata:
+  # ppf-static:

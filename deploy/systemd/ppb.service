@@ -1,0 +1,35 @@
+# PPB systemd unit（Native Linux 部署）。
+#
+# 安装：
+#   sudo cp deploy/systemd/ppb.service /etc/systemd/system/ppb.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ppb
+#
+# 环境变量经 EnvironmentFile 注入（勿把密码写进 unit 文件）。
+
+[Unit]
+Description=Phira+ Backend (ppb-server)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ppb
+Group=ppb
+WorkingDirectory=/opt/ppb
+EnvironmentFile=/etc/ppb/ppb.env
+ExecStart=/usr/local/bin/ppb-server --config /etc/ppb/ppb.toml
+Restart=on-failure
+RestartSec=3
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/run/pmp
+PrivateTmp=true
+# PMP OpenUDS socket 目录
+RuntimeDirectory=pmp
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
