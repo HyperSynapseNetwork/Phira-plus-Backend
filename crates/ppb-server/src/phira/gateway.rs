@@ -268,8 +268,9 @@ mod tests {
     use std::sync::Arc as StdArc;
 
     /// Spin up a tiny axum server that counts upstream hits and returns a
-    /// canned `chart/popular` payload.
-    fn mock_server(counter: StdArc<AtomicUsize>) -> String {
+    /// canned `chart/popular` payload. The listener is bound by tokio before
+    /// we return, so the gateway can connect immediately.
+    async fn mock_server(counter: StdArc<AtomicUsize>) -> String {
         let app = axum::Router::new().route(
             "/chart/popular",
             axum::routing::get({
@@ -283,10 +284,9 @@ mod tests {
                 }
             }),
         );
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
+        let tcp = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = tcp.local_addr().unwrap();
         tokio::spawn(async move {
-            let tcp = tokio::net::TcpListener::from_std(listener).unwrap();
             let _ = axum::serve(tcp, app).await;
         });
         format!("http://{addr}")
@@ -295,7 +295,7 @@ mod tests {
     #[tokio::test]
     async fn gateway_ttl_cache_dedups_upstream() {
         let counter = StdArc::new(AtomicUsize::new(0));
-        let base = mock_server(counter.clone());
+        let base = mock_server(counter.clone()).await;
         let gw = PhiraGateway::new(&base, 1000, 60, 100).unwrap();
 
         let first = gw.chart_popular(10).await.unwrap();
