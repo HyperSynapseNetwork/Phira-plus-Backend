@@ -136,7 +136,7 @@ pub async fn revoke_share_link(db: &sqlx::PgPool, link_id: Uuid) -> Result<(), A
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "not found")
     } else {
         tracing::error!(error = %e, "replay db error");

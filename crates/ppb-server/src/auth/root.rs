@@ -116,7 +116,7 @@ pub fn generate_random_password() -> String {
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "root credentials not found")
     } else {
         tracing::error!(error = %e, "root db error");

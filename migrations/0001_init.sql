@@ -1,8 +1,7 @@
 -- PPB initial schema (Phase A).
 -- Data ownership: PPB owns identity / policy / control / community / preferences / notifications / audit.
 -- PMP owns gameplay facts (rooms/rounds/touches/judges/replay). PPB never stores Replay content.
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- gen_random_uuid() is native since PostgreSQL 13 (no extension required).
 
 -- ─────────────────────────────────────────────────────────────
 -- users

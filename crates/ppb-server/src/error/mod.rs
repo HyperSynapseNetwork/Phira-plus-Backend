@@ -237,7 +237,7 @@ impl IntoResponse for AppError {
             }
             Self::Db(e) => {
                 // RowNotFound -> NOT_FOUND; otherwise redacted internal.
-                if matches!(e, sqlx::Error::RowNotFound) {
+                if matches!(&e, sqlx::Error::RowNotFound) {
                     ApiError::new(ErrorCode::NotFound, "not found").into_response()
                 } else {
                     tracing::error!(error = %e, "database error");

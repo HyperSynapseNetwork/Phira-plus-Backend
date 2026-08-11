@@ -88,7 +88,7 @@ pub async fn delete(db: &sqlx::PgPool, user_id: Uuid, namespace: &str) -> Result
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "preference not found")
     } else {
         tracing::error!(error = %e, "preference db error");

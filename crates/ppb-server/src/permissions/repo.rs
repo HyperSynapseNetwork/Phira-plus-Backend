@@ -137,7 +137,7 @@ pub async fn delete_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), ApiEr
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "not found")
     } else {
         tracing::error!(error = %e, "group db error");

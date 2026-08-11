@@ -160,7 +160,7 @@ pub async fn unblock(db: &sqlx::PgPool, blocker: Uuid, blocked: Uuid) -> Result<
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "not found")
     } else {
         tracing::error!(error = %e, "social db error");

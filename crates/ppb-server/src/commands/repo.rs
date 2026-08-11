@@ -73,7 +73,7 @@ pub async fn list_recent(db: &sqlx::PgPool, limit: i64) -> Result<Vec<CommandRun
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "command run not found")
     } else {
         tracing::error!(error = %e, "command_runs db error");

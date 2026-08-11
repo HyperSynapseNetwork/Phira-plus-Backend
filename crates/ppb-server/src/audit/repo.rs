@@ -55,7 +55,7 @@ pub async fn purge_older_than(db: &sqlx::PgPool, retention_days: i32) -> Result<
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "audit event not found")
     } else {
         tracing::error!(error = %e, "audit db error");

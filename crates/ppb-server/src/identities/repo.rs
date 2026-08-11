@@ -183,7 +183,7 @@ pub async fn credential_state(db: &sqlx::PgPool, user_id: Uuid) -> Result<PhiraC
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
-    if matches!(e, sqlx::Error::RowNotFound) {
+    if matches!(&e, sqlx::Error::RowNotFound) {
         ApiError::new(ErrorCode::NotFound, "not found")
     } else {
         tracing::error!(error = %e, "identity db error");

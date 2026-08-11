@@ -453,9 +453,12 @@ impl From<OpenUdsError> for ApiError {
             ),
             OpenUdsError::Command { message, .. } => ApiError::new(ErrorCode::PmpUnavailable, message),
             OpenUdsError::Unavailable(m)
-            | OpenUdsError::Timeout(_)
             | OpenUdsError::Protocol(m)
             | OpenUdsError::Io(m) => ApiError::new(ErrorCode::PmpUnavailable, m),
+            OpenUdsError::Timeout(ms) => ApiError::new(
+                ErrorCode::PmpUnavailable,
+                format!("openuds request timed out after {ms}ms"),
+            ),
             OpenUdsError::AuthRequired(m) => ApiError::new(ErrorCode::PmpUnavailable, m),
         }
     }
