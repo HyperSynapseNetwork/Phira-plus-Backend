@@ -50,7 +50,7 @@ pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64)
         .http_only(opts.http_only)
         .same_site(opts.same_site);
     if max_age_secs > 0 {
-        builder = builder.max_age(cookie::Duration::seconds(max_age_secs));
+        builder = builder.max_age(cookie::time::Duration::seconds(max_age_secs));
     }
     HeaderValue::from_str(&builder.finish().to_string())
         .expect("cookie serializes to a valid header value")
@@ -64,7 +64,7 @@ pub fn clear_cookie(name: &str, opts: &CookieOpts) -> HeaderValue {
         .secure(opts.secure)
         .http_only(opts.http_only)
         .same_site(opts.same_site)
-        .max_age(cookie::Duration::ZERO);
+        .max_age(cookie::time::Duration::ZERO);
     HeaderValue::from_str(&builder.finish().to_string())
         .expect("cookie serializes to a valid header value")
 }

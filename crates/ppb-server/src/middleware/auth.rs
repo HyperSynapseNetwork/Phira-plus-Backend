@@ -22,7 +22,7 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        let token = extract_bearer_or_cookie(parts.headers(), ACCESS_COOKIE)
+        let token = extract_bearer_or_cookie(&parts.headers, ACCESS_COOKIE)
             .ok_or_else(|| ApiError::new(ErrorCode::Session, "missing credentials"))?;
 
         let claims = decode_access(&token, &state.secrets.jwt_secret)?;

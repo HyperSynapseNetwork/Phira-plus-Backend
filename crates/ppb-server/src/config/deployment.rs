@@ -62,8 +62,6 @@ impl Secrets {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn credential_key_length_validated() {
         // 32 zero bytes base64.

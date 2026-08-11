@@ -4,7 +4,7 @@
 //! Mirrors PMP `openuds/protocol.rs`.
 
 use serde_json::Value;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Max payload size: 16 MiB.
 pub const MAX_PAYLOAD_SIZE: u32 = 16 * 1024 * 1024;

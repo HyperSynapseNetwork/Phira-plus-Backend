@@ -17,8 +17,6 @@ pub async fn cli_execute(openuds: &OpenUdsClient, command: &str) -> Result<Value
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn command_payload_shape() {
         let payload = serde_json::json!({ "command": "update check" });

@@ -13,9 +13,7 @@ use sqlx::postgres::PgPoolOptions;
 use tower::ServiceBuilder;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
-use tower_http::request_id::MakeRequestUuid;
 use tower_http::trace::TraceLayer;
-use tower_http::ServiceBuilderExt;
 use uuid::Uuid;
 
 use crate::actions::executor::PmpActionExecutor;
@@ -169,16 +167,22 @@ fn spawn_pmp_event_forwarder(state: &Arc<AppState>) {
     let heartbeat = state.heartbeat.clone();
     let metrics = Arc::clone(&state.metrics);
     tokio::spawn(async move {
-        while let Ok(frame) = rx.recv().await {
-            if frame.event_type == "server.heartbeat" {
-                let users = frame.data.get("users").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                let rooms = frame.data.get("rooms").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                let sessions = frame.data.get("sessions").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                heartbeat.update(users, rooms, sessions);
-            }
-            if let Some(ppb) = crate::pmp::events::map_pmp_event(&frame) {
-                events.publish(ppb);
-                metrics.events_forwarded.fetch_add(1, Ordering::Relaxed);
+        loop {
+            match rx.recv().await {
+                Ok(frame) => {
+                    if frame.event_type == "server.heartbeat" {
+                        let users = frame.data.get("users").and_then(serde_json::Value::as_i64).unwrap_or(0);
+                        let rooms = frame.data.get("rooms").and_then(serde_json::Value::as_i64).unwrap_or(0);
+                        let sessions = frame.data.get("sessions").and_then(serde_json::Value::as_i64).unwrap_or(0);
+                        heartbeat.update(users, rooms, sessions);
+                    }
+                    if let Some(ppb) = crate::pmp::events::map_pmp_event(&frame) {
+                        events.publish(ppb);
+                        metrics.events_forwarded.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
@@ -239,8 +243,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let cors = build_cors(&state);
 
     let middleware = ServiceBuilder::new()
-        .set_x_request_id(MakeRequestUuid)
-        .propagate_x_request_id()
+        .layer(crate::middleware::request_id::layers())
+        .layer(crate::middleware::request_id::propagate_layer())
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new())
         .layer(from_fn_with_state(state.clone(), csrf::csrf_middleware))
@@ -450,5 +454,5 @@ pub fn test_access_token(
         client_type,
         3600,
     );
-    jwt::encode_access(&claims, &state.secrets.jwt_secret).expect("signs")
+    crate::auth::jwt::encode_access(&claims, &state.secrets.jwt_secret).expect("signs")
 }

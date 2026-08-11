@@ -98,8 +98,6 @@ fn db_err(e: sqlx::Error) -> ApiError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn revision_semantics() {
         // Pure logic: next revision is +1, and only the current revision is accepted.

@@ -2,15 +2,20 @@
 
 use axum::http::request::Parts;
 use axum::http::HeaderName;
-use tower_http::request_id::{MakeRequestUuid, RequestId};
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer};
 use uuid::Uuid;
 
 /// Standard request id header.
 pub const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
-/// Compose the request-id tower layers (set + propagate). Apply via a ServiceBuilder.
-pub fn layers() -> tower_http::request_id::SetRequestIdLayer<MakeRequestUuid> {
+/// The layer that sets the request id (generating a UUID when absent).
+pub fn layers() -> SetRequestIdLayer<MakeRequestUuid> {
     SetRequestIdLayer::new(X_REQUEST_ID, MakeRequestUuid)
+}
+
+/// The layer that copies the request id to the response `X-Request-Id` header.
+pub fn propagate_layer() -> PropagateRequestIdLayer {
+    PropagateRequestIdLayer::new(X_REQUEST_ID)
 }
 
 /// Read the request id from request parts (generates one if absent).
@@ -26,7 +31,6 @@ pub fn read_request_id(parts: &Parts) -> String {
 mod tests {
     use super::*;
     use tower::ServiceExt as _;
-    use tower_http::request_id::PropagateRequestIdLayer;
 
     #[tokio::test]
     async fn sets_and_propagates_request_id() {
@@ -36,7 +40,7 @@ mod tests {
 
         let svc = ServiceBuilder::new()
             .layer(layers())
-            .layer(PropagateRequestIdLayer::new(X_REQUEST_ID))
+            .layer(propagate_layer())
             .service_fn(|req: Request<Body>| async move {
                 let id = read_request_id(req.parts());
                 assert!(!id.is_empty());
