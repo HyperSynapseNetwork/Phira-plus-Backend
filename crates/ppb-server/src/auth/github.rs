@@ -147,6 +147,12 @@ impl GithubService {
             .map_err(|e| ApiError::new(ErrorCode::PhiraApiUnavailable, format!("github token body: {e}")))?;
         let token_body: TokenResponse = serde_json::from_str(&text)
             .map_err(|_| ApiError::new(ErrorCode::Auth, "GitHub OAuth exchange failed"))?;
+        if let Some(err) = token_body.error {
+            return Err(ApiError::new(
+                ErrorCode::Auth,
+                format!("GitHub OAuth error: {err}"),
+            ));
+        }
         let access_token = token_body
             .access_token
             .ok_or_else(|| ApiError::new(ErrorCode::Auth, "GitHub OAuth access_token missing"))?;
