@@ -22,6 +22,9 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/meta", get(meta))
         .route("/site", get(site))
+        .route("/announcements", get(announcements))
+        .route("/downloads", get(downloads))
+        .route("/nodes", get(nodes))
         .route("/events", get(events_sse))
 }
 
@@ -39,6 +42,16 @@ pub async fn meta(
             "replay.persist.v1",
             "room.chat.v1",
             "notifications.actions.v1",
+            "rooms.admin.v1",
+            "users.admin.v1",
+            "groups.admin.v1",
+            "config.manage.v1",
+            "audit.v1",
+            "logs.v1",
+            "jobs.v1",
+            "commands.v1",
+            "charts.v1",
+            "records.v1",
         ],
         "pmp": {
             "connected": openuds_state.connected,
@@ -48,16 +61,63 @@ pub async fn meta(
     })))
 }
 
-/// GET /api/v1/public/site — public site config (no secrets).
+/// GET /api/v1/public/site — public site config (merged with runtime content).
 pub async fn site(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
-    Ok(axum::Json(json!({
+    let mut base = json!({
         "ppf_url": state.config.site.ppf_url,
         "panel_url": state.config.site.panel_url,
         "docs_url": state.config.site.docs_url,
         "api_url": state.config.server.public_url,
-    })))
+    });
+    if let Some(db) = &state.db {
+        if let Some(over) = crate::config::repo::get_public_content(db, "site").await? {
+            if let Some(obj) = over.as_object() {
+                if let Some(b) = base.as_object_mut() {
+                    for (k, v) in obj {
+                        b.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(axum::Json(base))
+}
+
+/// GET /api/v1/public/announcements — public runtime content.
+pub async fn announcements(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    public_content_or_empty(&state, "announcements").await
+}
+
+/// GET /api/v1/public/downloads — public runtime content.
+pub async fn downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    public_content_or_empty(&state, "downloads").await
+}
+
+/// GET /api/v1/public/nodes — public runtime content.
+pub async fn nodes(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    public_content_or_empty(&state, "nodes").await
+}
+
+async fn public_content_or_empty(
+    state: &Arc<AppState>,
+    key: &str,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    let content = if let Some(db) = &state.db {
+        crate::config::repo::get_public_content(db, key)
+            .await?
+            .unwrap_or(serde_json::Value::Object(Default::default()))
+    } else {
+        serde_json::Value::Object(Default::default())
+    };
+    Ok(axum::Json(content))
 }
 
 /// SSE stream for authenticated clients.

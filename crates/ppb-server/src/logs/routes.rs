@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::{Json, Router};
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
@@ -117,9 +117,11 @@ async fn stream(
         .filter_map(|r| std::future::ready(r.ok()))
         .filter_map(|f| std::future::ready((f.stream == "logs").then_some(f)))
         .map(|f| {
-            Event::default()
-                .event("log")
-                .data(serde_json::to_string(&f.frames).unwrap_or_else(|_| "{}".to_string()))
+            Ok::<_, Infallible>(
+                Event::default()
+                    .event("log")
+                    .data(serde_json::to_string(&f.frames).unwrap_or_else(|_| "{}".to_string())),
+            )
         });
 
     Ok(Sse::new(stream).keep_alive(

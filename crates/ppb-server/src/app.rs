@@ -90,6 +90,7 @@ pub async fn build_state(
     runtime: RuntimeConfig,
     secrets: Secrets,
 ) -> Result<Arc<AppState>, anyhow::Error> {
+    let mut runtime = runtime;
     let db = match &secrets.database_url {
         Some(url) => {
             let pool = PgPoolOptions::new()
@@ -101,6 +102,14 @@ pub async fn build_state(
                 .run(&pool)
                 .await
                 .map_err(|e| anyhow::anyhow!("database migrate failed: {e}"))?;
+            // Merge persisted runtime overrides over the boot-time TOML config.
+            if let Some(over) = crate::config::repo::get_overrides(&pool).await
+                .map_err(|e| anyhow::anyhow!("config overrides read failed: {e}"))?
+            {
+                runtime = runtime
+                    .apply_overrides(&over)
+                    .map_err(|e| anyhow::anyhow!("config overrides invalid: {e}"))?;
+            }
             Some(pool)
         }
         None => {

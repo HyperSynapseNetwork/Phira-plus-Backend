@@ -26,6 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
         .merge(crate::audit::routes::routes())
+        .merge(crate::config::routes::routes())
         .merge(crate::logs::routes::routes())
         .merge(super::server::routes())
         .merge(super::plugins::routes())

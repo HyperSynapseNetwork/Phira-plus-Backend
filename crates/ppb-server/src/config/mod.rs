@@ -5,14 +5,17 @@
 //! - **Runtime config**: TOML file (config/ppb.toml or PPB_RUNTIME_CONFIG), serde-deserialized.
 
 pub mod deployment;
+pub mod pmp;
+pub mod repo;
+pub mod routes;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Top-level runtime config, mirroring `config/example.toml`.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RuntimeConfig {
     pub server: ServerConfig,
@@ -29,7 +32,7 @@ pub struct RuntimeConfig {
     pub github: GithubConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
     pub listen_addr: SocketAddr,
@@ -47,7 +50,7 @@ impl Default for ServerConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SiteConfig {
     pub ppf_url: String,
@@ -65,7 +68,7 @@ impl Default for SiteConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CorsConfig {
     pub credentials: bool,
@@ -89,7 +92,7 @@ impl Default for CorsConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionConfig {
     pub access_ttl_secs: i64,
@@ -117,7 +120,7 @@ impl Default for SessionConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PmpConfig {
     pub openuds_path: PathBuf,
@@ -127,6 +130,10 @@ pub struct PmpConfig {
     pub reconnect_max_ms: u64,
     pub request_timeout_ms: u64,
     pub capabilities: Vec<String>,
+    /// Path to PMP `server_config.yml` for Form Descriptor snapshot/rollback.
+    pub config_path: Option<PathBuf>,
+    /// PMP HTTP health URL (e.g. `http://127.0.0.1:12347`) for health checks.
+    pub http_url: Option<String>,
 }
 
 impl Default for PmpConfig {
@@ -145,11 +152,13 @@ impl Default for PmpConfig {
                 "stream.touches".to_string(),
                 "stream.judges".to_string(),
             ],
+            config_path: None,
+            http_url: None,
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PhiraConfig {
     pub base_url: String,
@@ -167,7 +176,7 @@ impl Default for PhiraConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RateLimitConfig {
     pub login_per_minute: u32,
@@ -189,7 +198,7 @@ impl Default for RateLimitConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuditConfig {
     pub retention_days: i32,
@@ -201,7 +210,7 @@ impl Default for AuditConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationConfig {
     pub default_chat_channel: String,
@@ -215,7 +224,7 @@ impl Default for NotificationConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MetricsConfig {
     pub retention_days: i32,
@@ -227,7 +236,7 @@ impl Default for MetricsConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SecurityConfig {
     pub return_to_allowlist: Vec<String>,
@@ -244,7 +253,7 @@ impl Default for SecurityConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GithubConfig {
     pub callback_url: String,
@@ -287,6 +296,34 @@ impl RuntimeConfig {
             anyhow::bail!("session.cookie_samesite must be lax|strict|none");
         }
         Ok(())
+    }
+
+    /// Merge runtime overrides (JSONB, from DB) on top of the boot-time config.
+    ///
+    /// Only keys that already exist in the config are overridden; unknown keys are
+    /// ignored (validated against the schema by re-deserialization).
+    pub fn apply_overrides(&self, overrides: &serde_json::Value) -> Result<Self, anyhow::Error> {
+        let mut cfg = serde_json::to_value(self)?;
+        if let (Some(base), Some(over)) = (cfg.as_object_mut(), overrides.as_object()) {
+            merge_objects(base, over);
+        }
+        let merged: Self = serde_json::from_value(cfg)?;
+        merged.validate()?;
+        Ok(merged)
+    }
+}
+
+fn merge_objects(base: &mut serde_json::Map<String, serde_json::Value>, over: &serde_json::Map<String, serde_json::Value>) {
+    for (k, v) in over {
+        match (base.get_mut(k), v) {
+            (Some(serde_json::Value::Object(b)), serde_json::Value::Object(o)) => {
+                merge_objects(b, o);
+            }
+            (Some(b), o) => {
+                *b = o.clone();
+            }
+            (None, _) => {} // unknown key: ignore
+        }
     }
 }
 
