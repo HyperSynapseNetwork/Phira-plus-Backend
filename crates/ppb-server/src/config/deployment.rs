@@ -70,7 +70,7 @@ mod tests {
             &base64::engine::general_purpose::STANDARD,
             key,
         );
-        assert_eq!(base64::Engine::decode::<Vec<u8>>(
+        assert_eq!(base64::Engine::decode(
             &base64::engine::general_purpose::STANDARD,
             b64,
         )

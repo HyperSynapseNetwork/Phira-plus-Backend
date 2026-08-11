@@ -29,6 +29,12 @@ impl From<std::io::Error> for ProtocolError {
     }
 }
 
+impl From<serde_json::Error> for ProtocolError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::InvalidJson(e)
+    }
+}
+
 /// Encode a JSON value into a length-prefixed frame buffer.
 pub fn encode(value: &Value) -> Result<Vec<u8>, ProtocolError> {
     let payload = serde_json::to_vec(value)?;

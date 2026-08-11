@@ -1,8 +1,7 @@
 //! Request-id plumbing. Uses tower-http `X-Request-Id` layers.
 
-use axum::http::request::Parts;
-use axum::http::HeaderName;
-use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer};
+use axum::http::{HeaderMap, HeaderName};
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use uuid::Uuid;
 
 /// Standard request id header.
@@ -18,12 +17,12 @@ pub fn propagate_layer() -> PropagateRequestIdLayer {
     PropagateRequestIdLayer::new(X_REQUEST_ID)
 }
 
-/// Read the request id from request parts (generates one if absent).
-pub fn read_request_id(parts: &Parts) -> String {
-    parts
-        .extensions
-        .get::<RequestId>()
-        .map(|id| id.as_str().to_string())
+/// Read the request id from request headers (generates one if absent).
+pub fn read_request_id(headers: &HeaderMap) -> String {
+    headers
+        .get(X_REQUEST_ID)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
@@ -42,7 +41,7 @@ mod tests {
             .layer(layers())
             .layer(propagate_layer())
             .service_fn(|req: Request<Body>| async move {
-                let id = read_request_id(req.parts());
+                let id = read_request_id(req.headers());
                 assert!(!id.is_empty());
                 Ok::<_, std::convert::Infallible>(axum::response::Response::new(Body::empty()))
             });

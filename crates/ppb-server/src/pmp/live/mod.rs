@@ -24,6 +24,12 @@ impl JitterMode {
     }
 }
 
+impl Default for JitterMode {
+    fn default() -> Self {
+        Self::LowLatency
+    }
+}
+
 /// Per-room live stream state (sequence tracking).
 #[derive(Debug, Default)]
 struct RoomStreamState {

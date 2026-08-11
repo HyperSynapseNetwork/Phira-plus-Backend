@@ -102,9 +102,10 @@ pub async fn resolve_share_token(
     token: &str,
 ) -> Result<String, ApiError> {
     let hash = hash_token(token);
-    let row: Option<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> = sqlx::query_as(
-        "SELECT replay_round, expires_at, revoked_at FROM replay_share_links WHERE token_hash = $1",
-    )
+    let row: Option<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> =
+        sqlx::query_as::<_, (String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>(
+            "SELECT replay_round, expires_at, revoked_at FROM replay_share_links WHERE token_hash = $1",
+        )
     .bind(&hash)
     .fetch_optional(db)
     .await

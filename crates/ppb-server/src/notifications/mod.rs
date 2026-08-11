@@ -132,7 +132,7 @@ pub async fn list_for_user(
     user_id: Uuid,
     limit: i64,
 ) -> Result<Vec<UserNotificationWithEvent>, ApiError> {
-    let rows: Vec<UserNotificationWithEvent> = sqlx::query_as(
+    let rows: Vec<UserNotificationWithEvent> = sqlx::query_as::<_, UserNotificationWithEvent>(
         "SELECT un.id, un.event_id, un.user_id, un.read_at, un.dismissed_at, un.created_at,
                 ev.type AS event_type, ev.actor_user_id, ev.payload, ev.created_at AS event_created_at
          FROM user_notifications un

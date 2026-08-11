@@ -88,7 +88,7 @@ impl ActionRegistry {
         self.actions.get(id).copied()
     }
 
-    pub fn all(&self) -> Vec<&ActionDescriptor> {
+    pub fn all(&self) -> Vec<&'static ActionDescriptor> {
         self.actions.values().copied().collect()
     }
 

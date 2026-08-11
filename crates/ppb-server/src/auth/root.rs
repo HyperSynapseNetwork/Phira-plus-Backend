@@ -31,7 +31,7 @@ impl RootAuthService {
     /// password, stores its hash, and returns the plaintext so the CLI can
     /// print it exactly once. Returns `None` if credentials already exist.
     pub async fn bootstrap(db: &PgPool) -> Result<Option<String>, ApiError> {
-        let exists: (bool,) = sqlx::query_as(
+        let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
             "SELECT EXISTS(SELECT 1 FROM root_credentials WHERE id = 1)",
         )
         .fetch_one(db)
@@ -59,7 +59,7 @@ impl RootAuthService {
     }
 
     pub async fn verify(db: &PgPool, password: &str) -> Result<RootLoginOutcome, ApiError> {
-        let row: Option<(String, bool)> = sqlx::query_as(
+        let row: Option<(String, bool)> = sqlx::query_as::<_, (String, bool)>(
             "SELECT password_hash, must_change_password FROM root_credentials WHERE id = 1",
         )
         .fetch_optional(db)
@@ -77,7 +77,7 @@ impl RootAuthService {
     }
 
     pub async fn must_change_password(db: &PgPool) -> Result<bool, ApiError> {
-        let row: (bool,) = sqlx::query_as(
+        let row: (bool,) = sqlx::query_as::<_, (bool,)>(
             "SELECT must_change_password FROM root_credentials WHERE id = 1",
         )
         .fetch_one(db)

@@ -59,7 +59,7 @@ pub async fn admin_events_sse(
 
     let replay_stream = stream::iter(replay.into_iter().map(Ok::<_, Infallible>));
     let live_stream = BroadcastStream::new(rx)
-        .filter_map(Result::ok)
+        .filter_map(|r| std::future::ready(r.ok()))
         .map(Ok::<_, Infallible>);
 
     let stream = replay_stream.chain(live_stream).map(|item| {

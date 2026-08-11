@@ -43,7 +43,8 @@ impl CookieOpts {
 
 /// Serialize a Set-Cookie header value.
 pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64) -> HeaderValue {
-    let mut builder = Cookie::build(name.to_string(), value.to_string())
+    let mut builder = Cookie::build(name.to_string())
+        .value(value.to_string())
         .domain(opts.domain.clone())
         .path(opts.path.clone())
         .secure(opts.secure)
@@ -58,7 +59,8 @@ pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64)
 
 /// Serialize a Set-Cookie header value that deletes the cookie immediately.
 pub fn clear_cookie(name: &str, opts: &CookieOpts) -> HeaderValue {
-    let builder = Cookie::build(name.to_string(), String::new())
+    let builder = Cookie::build(name.to_string())
+        .value(String::new())
         .domain(opts.domain.clone())
         .path(opts.path.clone())
         .secure(opts.secure)

@@ -78,8 +78,7 @@ pub fn encode_reauth(claims: &ReauthClaims, secret: &str) -> Result<String, ApiE
 
 /// Decode and validate a reauth context for the given session.
 pub fn decode_reauth(token: &str, secret: &str, expected_sid: Uuid) -> Result<ReauthClaims, ApiError> {
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_sub = false;
+    let validation = Validation::new(Algorithm::HS256);
     let claims = decode::<ReauthClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),

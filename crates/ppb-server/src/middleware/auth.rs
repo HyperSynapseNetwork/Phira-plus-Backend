@@ -29,7 +29,7 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
 
         // Best-effort session liveness check when a DB is configured.
         if let Some(db) = &state.db {
-            let active: (bool,) = sqlx::query_as(
+            let active: (bool,) = sqlx::query_as::<_, (bool,)>(
                 "SELECT EXISTS(
                     SELECT 1 FROM sessions
                     WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()
@@ -52,7 +52,7 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
             sid: claims.sid,
             principal_type: claims.principal_type,
             client_type: claims.client_type,
-            request_id: crate::middleware::request_id::read_request_id(parts),
+            request_id: crate::middleware::request_id::read_request_id(&parts.headers),
         })
     }
 }

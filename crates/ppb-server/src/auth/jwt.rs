@@ -64,9 +64,9 @@ pub fn encode_access(claims: &AccessClaims, secret: &str) -> Result<String, ApiE
 
 /// Verify and decode an access token.
 pub fn decode_access(token: &str, secret: &str) -> Result<AccessClaims, ApiError> {
-    let mut validation = Validation::new(Algorithm::HS256);
-    // `sub` is a UUID string for users or "00000000-..." for root; skip sub validation.
-    validation.validate_sub = false;
+    // `sub` is a UUID string for users or the nil UUID for root; we validate
+    // the token signature/expiry, not the subject value.
+    let validation = Validation::new(Algorithm::HS256);
     decode::<AccessClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),

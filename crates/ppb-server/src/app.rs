@@ -122,7 +122,7 @@ pub async fn build_state(
 
     let events = EventBus::new(1024, 256);
     let github = Arc::new(GithubService::new(runtime.phira.timeout_ms));
-    let metrics = Arc::new(crate::metrics::Metrics::new());
+    let metrics = crate::metrics::Metrics::new(); // returns Arc<Metrics>
 
     let state = Arc::new(AppState {
         config: Arc::new(runtime),

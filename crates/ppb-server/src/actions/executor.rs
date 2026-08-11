@@ -69,9 +69,9 @@ impl PmpActionExecutor {
 #[async_trait]
 impl _ActionExecutorTrait for PmpActionExecutor {
     async fn execute(&self, task: CommandTask) -> Result<Value, String> {
+        let result = self.run(&task).await;
         let command_id = task.command_id;
         let completion = task.completion;
-        let result = self.run(&task).await;
         let (status, summary, error_code) = match &result {
             Ok(v) => ("succeeded", v.to_string(), String::new()),
             Err(e) => ("failed", String::new(), truncate(e, 120)),

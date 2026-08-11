@@ -74,7 +74,7 @@ async fn ensure_group(
 /// Return the current default group id (creating Members if none exists).
 pub async fn default_group_id(db: &sqlx::PgPool) -> Result<Uuid, ApiError> {
     let row: Option<(Uuid,)> =
-        sqlx::query_as("SELECT id FROM groups WHERE is_default = TRUE LIMIT 1")
+        sqlx::query_as::<_, (Uuid,)>("SELECT id FROM groups WHERE is_default = TRUE LIMIT 1")
             .fetch_optional(db)
             .await
             .map_err(db_err)?;
@@ -83,7 +83,7 @@ pub async fn default_group_id(db: &sqlx::PgPool) -> Result<Uuid, ApiError> {
     }
     // No default: try to (re)assign Members.
     bootstrap_groups(db).await.map_err(db_err)?;
-    let row: (Uuid,) = sqlx::query_as("SELECT id FROM groups WHERE name = $1")
+    let row: (Uuid,) = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM groups WHERE name = $1")
         .bind(GROUP_MEMBERS)
         .fetch_one(db)
         .await
@@ -97,7 +97,7 @@ pub async fn ensure_user_in_default_group(
     user_id: Uuid,
 ) -> Result<(), ApiError> {
     let membership: (bool,) =
-        sqlx::query_as("SELECT EXISTS(SELECT 1 FROM group_members WHERE user_id = $1)")
+        sqlx::query_as::<_, (bool,)>("SELECT EXISTS(SELECT 1 FROM group_members WHERE user_id = $1)")
             .bind(user_id)
             .fetch_one(db)
             .await
@@ -127,7 +127,7 @@ pub async fn list_groups(db: &sqlx::PgPool) -> Result<Vec<GroupWithCount>, ApiEr
 
     let mut out = Vec::new();
     for g in groups {
-        let (count,): (i64,) = sqlx::query_as(
+        let (count,): (i64,) = sqlx::query_as::<_, (i64,)>(
             "SELECT COUNT(*) FROM group_members WHERE group_id = $1",
         )
         .bind(g.id)

@@ -121,10 +121,11 @@ pub async fn load_phira_credential(
     db: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Option<(Vec<u8>, DateTime<Utc>, String)>, ApiError> {
-    let row: Option<(Vec<u8>, DateTime<Utc>, String)> = sqlx::query_as(
-        "SELECT refresh_token_ciphertext, refresh_expires_at, state
-         FROM phira_credentials WHERE user_id = $1",
-    )
+    let row: Option<(Vec<u8>, DateTime<Utc>, String)> =
+        sqlx::query_as::<_, (Vec<u8>, DateTime<Utc>, String)>(
+            "SELECT refresh_token_ciphertext, refresh_expires_at, state
+             FROM phira_credentials WHERE user_id = $1",
+        )
     .bind(user_id)
     .fetch_optional(db)
     .await
@@ -156,9 +157,10 @@ pub async fn revoke_phira_credential(db: &sqlx::PgPool, user_id: Uuid) -> Result
 
 /// Summarized credential state for /me (never exposes secrets).
 pub async fn credential_state(db: &sqlx::PgPool, user_id: Uuid) -> Result<PhiraCredentialState, ApiError> {
-    let row: Option<(DateTime<Utc>, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT refresh_expires_at, state, updated_at FROM phira_credentials WHERE user_id = $1",
-    )
+    let row: Option<(DateTime<Utc>, String, DateTime<Utc>)> =
+        sqlx::query_as::<_, (DateTime<Utc>, String, DateTime<Utc>)>(
+            "SELECT refresh_expires_at, state, updated_at FROM phira_credentials WHERE user_id = $1",
+        )
     .bind(user_id)
     .fetch_optional(db)
     .await

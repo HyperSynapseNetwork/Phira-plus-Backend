@@ -31,7 +31,7 @@ pub async fn send_request(
         return Err(ApiError::validation("cannot friend yourself"));
     }
     // Reject if already friends or a request exists.
-    let (friend,): (bool,) = sqlx::query_as(
+    let (friend,): (bool,) = sqlx::query_as::<_, (bool,)>(
         "SELECT EXISTS(
             SELECT 1 FROM friendships WHERE (user_a = $1 AND user_b = $2) OR (user_a = $2 AND user_b = $1)
          )",
@@ -123,7 +123,7 @@ pub async fn remove_friend(db: &sqlx::PgPool, a: Uuid, b: Uuid) -> Result<(), Ap
 }
 
 pub async fn list_friends(db: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>, ApiError> {
-    let rows: Vec<(Uuid,)> = sqlx::query_as(
+    let rows: Vec<(Uuid,)> = sqlx::query_as::<_, (Uuid,)>(
         "SELECT CASE WHEN user_a = $1 THEN user_b ELSE user_a END
          FROM friendships WHERE user_a = $1 OR user_b = $1",
     )
