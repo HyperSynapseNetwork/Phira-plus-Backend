@@ -44,6 +44,7 @@ pub struct ActionDescriptor {
 }
 
 impl ActionDescriptor {
+    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         id: &'static str,
         permission: &'static str,

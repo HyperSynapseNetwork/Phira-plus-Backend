@@ -8,8 +8,9 @@ use std::sync::Arc;
 use dashmap::DashMap;
 
 /// Jitter buffer mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JitterMode {
+    #[default]
     LowLatency,
     Stable,
 }
@@ -21,12 +22,6 @@ impl JitterMode {
             Self::LowLatency => 1000,
             Self::Stable => 2000,
         }
-    }
-}
-
-impl Default for JitterMode {
-    fn default() -> Self {
-        Self::LowLatency
     }
 }
 

@@ -143,12 +143,9 @@ pub async fn build_state(
 
     if let Some(db) = &state.db {
         crate::permissions::routes::run_bootstrap(db).await?;
-        match RootAuthService::bootstrap(db).await? {
-            Some(password) => {
-                // Printed once to the CLI path — never logged via tracing.
-                eprintln!("[ppb] Root first-boot password (print once): {password}");
-            }
-            None => {}
+        if let Some(password) = RootAuthService::bootstrap(db).await? {
+            // Printed once to the CLI path — never logged via tracing.
+            eprintln!("[ppb] Root first-boot password (print once): {password}");
         }
     }
 

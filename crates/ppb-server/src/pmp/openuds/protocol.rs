@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn rejects_zero_length_prefix() {
-        let buf = vec![0u8; 4];
+        let buf = [0u8; 4];
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async {
             let mut cursor = tokio::io::BufReader::new(&buf[..]);

@@ -253,11 +253,8 @@ impl OpenUdsClient {
     }
 
     async fn reader_loop(&self, mut reader: OwnedReadHalf) {
-        loop {
-            match protocol::read_frame_async(&mut reader).await {
-                Ok(value) => self.handle_frame(value).await,
-                Err(_) => break,
-            }
+        while let Ok(value) = protocol::read_frame_async(&mut reader).await {
+            self.handle_frame(value).await;
         }
         self.set_disconnected().await;
     }

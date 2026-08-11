@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn revision_semantics() {
         // Pure logic: next revision is +1, and only the current revision is accepted.
-        assert_eq!(0i64 + 1, 1);
+        assert_eq!(0i64.wrapping_add(1), 1);
         assert!(Some(0) == Some(0));
         assert!(Some(1) != Some(0));
     }

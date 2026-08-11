@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 /// Top-level runtime config, mirroring `config/example.toml`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct RuntimeConfig {
     pub server: ServerConfig,
@@ -27,25 +27,6 @@ pub struct RuntimeConfig {
     pub metrics: MetricsConfig,
     pub security: SecurityConfig,
     pub github: GithubConfig,
-}
-
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            site: SiteConfig::default(),
-            cors: CorsConfig::default(),
-            session: SessionConfig::default(),
-            pmp: PmpConfig::default(),
-            phira: PhiraConfig::default(),
-            rate_limit: RateLimitConfig::default(),
-            audit: AuditConfig::default(),
-            notifications: NotificationConfig::default(),
-            metrics: MetricsConfig::default(),
-            security: SecurityConfig::default(),
-            github: GithubConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

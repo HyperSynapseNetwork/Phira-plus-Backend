@@ -1,8 +1,8 @@
 //! Phira password login flow (design §6.1/§6.2).
 //!
-//! `email/password` → Phira `/login` + `/me` → upsert PPB User + Phira identity
-//! + encrypted refresh token + default group membership. The password is only
-//! used transiently; it is never persisted or logged.
+//! `email/password` → Phira `/login` + `/me` → upsert PPB User + Phira identity,
+//! encrypted refresh token, and default group membership. The password is used
+//! transiently only; it is never persisted or logged.
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;

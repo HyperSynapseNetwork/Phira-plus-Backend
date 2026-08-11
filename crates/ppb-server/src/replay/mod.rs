@@ -96,16 +96,18 @@ pub async fn create_share_link(
     Ok((link, token))
 }
 
+/// Share-link lookup row.
+type ShareLinkRow = (String, Option<DateTime<Utc>>, Option<DateTime<Utc>>);
+
 /// Validate an opaque share token; returns the replay round if valid.
 pub async fn resolve_share_token(
     db: &sqlx::PgPool,
     token: &str,
 ) -> Result<String, ApiError> {
     let hash = hash_token(token);
-    let row: Option<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> =
-        sqlx::query_as::<_, (String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>(
-            "SELECT replay_round, expires_at, revoked_at FROM replay_share_links WHERE token_hash = $1",
-        )
+    let row: Option<ShareLinkRow> = sqlx::query_as::<_, ShareLinkRow>(
+        "SELECT replay_round, expires_at, revoked_at FROM replay_share_links WHERE token_hash = $1",
+    )
     .bind(&hash)
     .fetch_optional(db)
     .await
