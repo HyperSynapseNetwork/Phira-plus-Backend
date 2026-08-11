@@ -1,0 +1,48 @@
+[package]
+name = "ppb-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Phira+ Backend — unified identity/community/control/integration plane"
+default-run = "ppb-server"
+
+[[bin]]
+name = "ppb-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-log = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+rand = { workspace = true }
+bcrypt = { workspace = true }
+aes-gcm = { workspace = true }
+base64 = { workspace = true }
+cookie = { workspace = true }
+url = { workspace = true }
+dashmap = { workspace = true }
+subtle = { workspace = true }
+percent-encoding = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

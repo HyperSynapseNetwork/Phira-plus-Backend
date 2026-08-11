@@ -1,0 +1,107 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auto-patch:
+    runs-on: ubuntu-latest
+    outputs:
+      build_ref: ${{ steps.patch.outputs.build_ref }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Auto patch + sync lockfile
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_VERSION=$(grep '^version = ' crates/ppb-server/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          MAJOR=$(echo "$FULL_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$FULL_VERSION" | cut -d. -f2)
+          CURRENT_C=$(echo "$FULL_VERSION" | cut -d. -f3)
+          PATCH=$((CURRENT_C + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "current=$CURRENT_C computed=$PATCH"
+          cargo generate-lockfile
+          if [[ "$CURRENT_C" != "$PATCH" && "${{ github.ref }}" == "refs/heads/main" && "${{ github.event_name }}" == "push" ]]; then
+            python scripts/sync-workspace-version.py "$NEW_VERSION"
+          fi
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add crates/ppb-server/Cargo.toml Cargo.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync version + lockfile [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
+          echo "build_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: auto-patch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-patch.outputs.build_ref }}
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Workspace version consistency
+        run: python scripts/sync-workspace-version.py --check
+      - name: Check
+        run: cargo check --locked --workspace --all-targets --all-features
+      - name: Tests
+        run: cargo test --locked --workspace --all-features
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+  build:
+    needs: [auto-patch, check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-patch.outputs.build_ref }}
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-linux-musl
+          cache-on-failure: true
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build (linux-musl x86_64)
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: cargo build --locked --release --target x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ppb-server-linux-x86_64-musl
+          path: target/x86_64-unknown-linux-musl/release/ppb-server
+          if-no-files-found: error

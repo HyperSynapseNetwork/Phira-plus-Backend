@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+.env
+config/*.local.toml
+config/*.secret.toml
+*.pem
+*.key
+*.local
+.ppb-data/

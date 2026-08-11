@@ -1,0 +1,74 @@
+# PPB runtime config example.
+# This file contains NO secrets. Secrets come from the deployment environment
+# (see config/example.env) and are never returned by Panel APIs.
+#
+# Path resolution: PPB_RUNTIME_CONFIG env var, or ./config/ppb.toml, or
+# --config on the CLI.
+
+[server]
+listen_addr = "0.0.0.0:8080"
+public_url = "https://api-phira.htadiy.com"
+graceful_shutdown_secs = 15
+
+[site]
+ppf_url = "https://phira.htadiy.com"
+panel_url = "https://panel-phira.htadiy.com"
+docs_url = "https://docs.phira.htadiy.com"
+
+# Credentialed CORS exact-origin allowlist. '*' is forbidden when credentials=true.
+[cors]
+credentials = true
+allowed_origins = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com"]
+# Local development origins (never enabled in production by config validation):
+dev_origins = ["http://localhost:3000", "http://localhost:5173"]
+
+[session]
+access_ttl_secs = 3600
+refresh_ttl_secs = 2592000 # 30d
+cookie_domain = "api-phira.htadiy.com"
+cookie_secure = true
+cookie_samesite = "lax"
+csrf_cookie_name = "ppb_csrf"
+csrf_header_name = "X-CSRF-Token"
+reauth_ttl_secs = 300 # 5 min
+
+[pmp]
+openuds_path = "/var/run/pmp-openuds.sock"
+# token or approve
+auth_mode = "approve"
+client_name = "ppb-server"
+reconnect_base_ms = 500
+reconnect_max_ms = 30000
+request_timeout_ms = 10000
+# Hard capability set for PMP 1.0.38 (verified). Extended per version map in code.
+capabilities = ["persist.touches", "persist.judges", "room.chat_send", "stream.touches", "stream.judges"]
+
+[phira]
+base_url = "https://phira.5wyxi.com"
+timeout_ms = 15000
+# Access token lives in memory only; refresh token encrypted at rest.
+access_token_ttl_secs = 21600 # 6h
+
+[rate_limit]
+login_per_minute = 10
+reauth_per_minute = 10
+github_callback_per_minute = 20
+chat_send_per_minute = 60
+raw_cli_per_minute = 30
+
+[audit]
+retention_days = 90
+
+[notifications]
+default_chat_channel = "only_when_companion_background"
+
+[metrics]
+retention_days = 30
+
+# return_to allowlist (anti open-redirect)
+[security]
+return_to_allowlist = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com"]
+
+[github]
+# client_id lives in deployment env. Callback URL is fixed by contract.
+callback_url = "https://api-phira.htadiy.com/api/v1/auth/github/callback"

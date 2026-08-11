@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      description:
+        description: 版本说明（可选）
+        type: string
+        default: ""
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_VERSION=$(grep '^version = ' crates/ppb-server/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          python scripts/sync-workspace-version.py --check "$FULL_VERSION"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME}" != "v$FULL_VERSION" ]]; then
+            echo "release tag ${GITHUB_REF_NAME} does not match Cargo version v$FULL_VERSION" >&2
+            exit 1
+          fi
+          echo "tag=v$FULL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
+
+  quality-gate:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-quality
+          cache-on-failure: true
+      - name: Workspace version consistency
+        run: python scripts/sync-workspace-version.py --check
+      - name: Check
+        run: cargo check --locked --workspace --all-targets --all-features
+      - name: Tests
+        run: cargo test --locked --workspace --all-features
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+  build:
+    needs: [version, quality-gate]
+    runs-on: ubuntu-latest
+    env:
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux-musl
+          cache-on-failure: true
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build release binary
+        run: cargo build --locked --release --target x86_64-unknown-linux-musl
+      - run: cp target/x86_64-unknown-linux-musl/release/ppb-server ppb-server-linux-x86_64-musl
+      - name: Smoke test
+        run: |
+          chmod +x ppb-server-linux-x86_64-musl
+          ./ppb-server-linux-x86_64-musl --version
+      - name: Verify musl is statically linked
+        run: |
+          if file ppb-server-linux-x86_64-musl | grep -qi static; then
+            echo "musl build confirmed static"
+          else
+            echo "::error::musl build is not statically linked"
+            file ppb-server-linux-x86_64-musl
+            exit 1
+          fi
+      - name: Generate provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ppb-server-linux-x86_64-musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ppb-server-linux-x86_64-musl
+          path: ppb-server-linux-x86_64-musl
+          if-no-files-found: error
+
+  release:
+    needs: [version, quality-gate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ppb-server-*
+          merge-multiple: true
+      - name: Generate SBOM (CycloneDX, best-effort)
+        run: |
+          cargo install cargo-cyclonedx --locked || echo "cargo-cyclonedx install failed"
+          cargo cyclonedx --output-format json 2>/dev/null || echo "SBOM generation skipped"
+          ls -la *.cdx.json 2>/dev/null && echo "SBOM generated" || echo "No SBOM file"
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: v${{ needs.version.outputs.version }}
+          body: ${{ github.event.inputs.description }}
+          files: |
+            ppb-server-linux-x86_64-musl
+          prerelease: false
