@@ -544,7 +544,7 @@ fn enrich_room_is_self(value: &mut Value, my_phira: Option<i64>) {
             }
         }
     } else if let Some(hid) = value.get("host_id").and_then(Value::as_i64) {
-        if let Some(Value::Object(map)) = value.as_object_mut() {
+        if let Some(map) = value.as_object_mut() {
             map.insert("host".to_string(), json!({ "user_id": hid, "is_self": hid == my_phira }));
         }
     }

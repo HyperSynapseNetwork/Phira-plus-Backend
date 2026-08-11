@@ -52,7 +52,7 @@ async fn chart_list(
         .map_err(phira_gateway_error)?;
     // Contract §18: chart list response always contains `total`.
     if result.get("total").is_none() {
-        if let Some(Value::Object(map)) = result.as_object_mut() {
+        if let Some(map) = result.as_object_mut() {
             let total = result
                 .get("results")
                 .and_then(Value::as_array)
