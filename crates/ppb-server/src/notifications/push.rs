@@ -332,7 +332,9 @@ fn db_err(e: sqlx::Error) -> ApiError {
 
 /// Encode a P-256 public key as uncompressed SEC1 bytes (0x04 || X || Y).
 fn encoded_point_bytes(pk: &p256::PublicKey) -> Vec<u8> {
-    p256::elliptic_curve::sec1::EncodedPoint::from(pk).as_bytes().to_vec()
+    p256::elliptic_curve::sec1::EncodedPoint::<p256::NistP256>::from(pk)
+        .as_bytes()
+        .to_vec()
 }
 
 #[cfg(test)]
