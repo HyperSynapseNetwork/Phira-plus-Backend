@@ -142,9 +142,9 @@ mod tests {
         // Minimal zip: info.yml + chart.json.
         let mut buf = Vec::new();
         {
-            use zip::write::FileOptions;
             let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-            let opts = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
             writer.start_file("info.yml", opts).unwrap();
             writer.write_all(b"name: Test Song\ncomposer: Composer\n").unwrap();
             writer.start_file("chart.json", opts).unwrap();
