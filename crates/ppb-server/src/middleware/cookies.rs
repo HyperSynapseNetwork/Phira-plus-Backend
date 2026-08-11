@@ -9,6 +9,14 @@ use axum::http::HeaderMap;
 use axum::http::HeaderValue;
 use cookie::{Cookie, SameSite};
 
+fn same_site_str(v: SameSite) -> &'static str {
+    match v {
+        SameSite::Strict => "Strict",
+        SameSite::Lax => "Lax",
+        SameSite::None => "None",
+    }
+}
+
 /// Options controlling cookie serialization.
 #[derive(Debug, Clone)]
 pub struct CookieOpts {
@@ -41,34 +49,42 @@ impl CookieOpts {
     }
 }
 
-/// Serialize a Set-Cookie header value.
+/// Serialize a Set-Cookie header value (manually constructed to avoid the
+/// cookie crate's builder API drift across versions).
+///
+/// Values are JWT/hex (no spaces or control characters), so a plain
+/// `name=value` form is safe. `SameSite=None` implies Secure (browser rule).
 pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64) -> HeaderValue {
-    let mut builder = Cookie::build(name.to_string())
-        .value(value.to_string())
-        .domain(opts.domain.clone())
-        .path(opts.path.clone())
-        .secure(opts.secure)
-        .http_only(opts.http_only)
-        .same_site(opts.same_site);
-    if max_age_secs > 0 {
-        builder = builder.max_age(cookie::time::Duration::seconds(max_age_secs));
+    let mut s = format!("{name}={value}");
+    s.push_str(&format!("; Path={}", opts.path));
+    s.push_str(&format!("; Domain={}", opts.domain));
+    if opts.secure || opts.same_site == SameSite::None {
+        s.push_str("; Secure");
     }
-    HeaderValue::from_str(&builder.finish().to_string())
-        .expect("cookie serializes to a valid header value")
+    if opts.http_only {
+        s.push_str("; HttpOnly");
+    }
+    s.push_str(&format!("; SameSite={}", same_site_str(opts.same_site)));
+    if max_age_secs > 0 {
+        s.push_str(&format!("; Max-Age={max_age_secs}"));
+    }
+    HeaderValue::from_str(&s).expect("cookie serializes to a valid header value")
 }
 
 /// Serialize a Set-Cookie header value that deletes the cookie immediately.
 pub fn clear_cookie(name: &str, opts: &CookieOpts) -> HeaderValue {
-    let builder = Cookie::build(name.to_string())
-        .value(String::new())
-        .domain(opts.domain.clone())
-        .path(opts.path.clone())
-        .secure(opts.secure)
-        .http_only(opts.http_only)
-        .same_site(opts.same_site)
-        .max_age(cookie::time::Duration::ZERO);
-    HeaderValue::from_str(&builder.finish().to_string())
-        .expect("cookie serializes to a valid header value")
+    let mut s = format!("{name}=");
+    s.push_str(&format!("; Path={}", opts.path));
+    s.push_str(&format!("; Domain={}", opts.domain));
+    if opts.secure || opts.same_site == SameSite::None {
+        s.push_str("; Secure");
+    }
+    if opts.http_only {
+        s.push_str("; HttpOnly");
+    }
+    s.push_str(&format!("; SameSite={}", same_site_str(opts.same_site)));
+    s.push_str("; Max-Age=0");
+    HeaderValue::from_str(&s).expect("cookie serializes to a valid header value")
 }
 
 /// Read a cookie by name from request headers.

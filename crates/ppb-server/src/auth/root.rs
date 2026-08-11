@@ -64,10 +64,10 @@ impl RootAuthService {
         )
         .fetch_optional(db)
         .await
-        .map_err(db_err)?
-        .ok_or_else(|| ApiError::new(ErrorCode::Auth, "root not initialized"))?;
+        .map_err(db_err)?;
 
-        let (hash, must_change_password) = row;
+        let (hash, must_change_password) = row
+            .ok_or_else(|| ApiError::new(ErrorCode::Auth, "root not initialized"))?;
         let ok = bcrypt::verify(password, &hash)
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root verify: {e}")))?;
         if !ok {
