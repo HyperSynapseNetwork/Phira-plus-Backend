@@ -80,9 +80,12 @@ impl JoinIntentStore {
     }
 
     pub fn cancel(&self, user_id: Uuid, intent_id: Uuid) -> Result<(), ApiError> {
-        match self.intents.get(&intent_id) {
-            Some(intent) if intent.user_id == user_id => {
-                self.by_phira.remove(&intent.phira_id);
+        // Extract ownership info first, dropping the DashMap shard guard before
+        // mutating. Holding a `Ref` while `remove`-ing the same shard deadlocks.
+        let entry = self.intents.get(&intent_id).map(|i| (i.user_id, i.phira_id));
+        match entry {
+            Some((owner, phira_id)) if owner == user_id => {
+                self.by_phira.remove(&phira_id);
                 self.intents.remove(&intent_id);
                 Ok(())
             }
