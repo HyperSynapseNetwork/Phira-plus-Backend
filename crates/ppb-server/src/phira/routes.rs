@@ -53,7 +53,7 @@ async fn chart_list(
     // Contract §18: chart list response always contains `total`.
     if result.get("total").is_none() {
         if let Some(map) = result.as_object_mut() {
-            let total = result
+            let total = map
                 .get("results")
                 .and_then(Value::as_array)
                 .map(|a| a.len() as i64)
