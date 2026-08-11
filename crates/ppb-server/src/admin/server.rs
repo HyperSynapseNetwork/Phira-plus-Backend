@@ -120,8 +120,11 @@ async fn room_creation(
 async fn shutdown(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:shutdown").await?;
+    // P-80: every server.shutdown path requires reauth (critical).
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::Critical)?;
     let result = state.openuds.command("server.shutdown", json!({})).await.map_err(map_err)?;
     Ok(Json(result))
 }

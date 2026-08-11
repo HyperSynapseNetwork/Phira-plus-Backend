@@ -21,6 +21,7 @@ pub mod commands;
 pub mod config;
 pub mod error;
 pub mod identities;
+pub mod join_intent;
 pub mod jobs;
 pub mod logs;
 pub mod metrics;

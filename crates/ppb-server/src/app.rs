@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::middleware::from_fn_with_state;
-use axum::routing::get;
+use axum::routing::{delete, get};
 use axum::{Json, Router};
+use serde::Deserialize;
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use tower::ServiceBuilder;
@@ -28,6 +29,7 @@ use crate::config::RuntimeConfig;
 use crate::jobs::runner::JobRunner;
 use crate::error::{ApiError, ErrorCode};
 use crate::identities::repo as identities_repo;
+use crate::join_intent::JoinIntentStore;
 use crate::middleware::csrf;
 use crate::middleware::rate_limit::RateLimiter;
 use crate::permissions::resolver::PermissionResolver;
@@ -60,6 +62,7 @@ pub struct AppState {
     pub rooms: RoomService,
     pub player: PlayerService,
     pub jobs: JobRunner,
+    pub join_intents: JoinIntentStore,
     pub phira_gateway: Arc<PhiraGateway>,
 }
 
@@ -144,6 +147,7 @@ pub async fn build_state(
     let rooms = RoomService::new(Arc::clone(&openuds));
     let player = PlayerService::new(Arc::clone(&openuds));
     let jobs = JobRunner::new(db.clone(), events.clone(), Arc::clone(&openuds));
+    let join_intents = JoinIntentStore::new();
     let phira_gateway = Arc::new(PhiraGateway::new(
         &runtime.phira.base_url,
         runtime.phira.timeout_ms,
@@ -172,6 +176,7 @@ pub async fn build_state(
         rooms,
         player,
         jobs,
+        join_intents,
         phira_gateway,
     });
 
@@ -187,6 +192,7 @@ pub async fn build_state(
     spawn_pmp_event_forwarder(&state);
     spawn_heartbeat_task(&state);
     spawn_audit_purge_task(&state);
+    spawn_join_intent_task(&state);
 
     if aggregator_enabled {
         let aggregator = Arc::new(Aggregator::new(
@@ -223,6 +229,54 @@ fn spawn_pmp_event_forwarder(state: &Arc<AppState>) {
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+/// Watch PMP `user.online` and fulfil JoinIntents via `room.force_move`; also
+/// periodically purge expired intents (design §14.6).
+fn spawn_join_intent_task(state: &Arc<AppState>) {
+    let mut rx = state.openuds.subscribe_events();
+    let intents = state.join_intents.clone();
+    let rooms = state.rooms.clone();
+    tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(frame) => {
+                    if frame.event_type == "user.online" {
+                        let phira_id = frame
+                            .data
+                            .get("user_id")
+                            .and_then(serde_json::Value::as_i64)
+                            .unwrap_or(0);
+                        if phira_id > 0 {
+                            if let Some(intent) = intents.match_online(phira_id) {
+                                tracing::info!(
+                                    phira_id,
+                                    room = %intent.room_id,
+                                    "join intent fulfilled: force_move"
+                                );
+                                let _ = rooms
+                                    .force_move(&intent.room_id, phira_id as i32, false)
+                                    .await;
+                            }
+                        }
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+    let intents = state.join_intents.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            let n = intents.cleanup_expired();
+            if n > 0 {
+                tracing::debug!(cleaned = n, "join intent cleanup");
             }
         }
     });
@@ -280,7 +334,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
-        .route("/me/preferences", get(me_preferences));
+        .route("/me/preferences", get(me_preferences))
+        .route("/me/join-intents", get(me_join_intents).post(me_join_intent_create))
+        .route("/me/join-intents/{intent_id}", delete(me_join_intent_cancel));
 
     let cors = build_cors(&state);
 
@@ -469,6 +525,57 @@ pub async fn me_preferences(
     Ok(Json(json!({ "preferences": rows })))
 }
 
+/// GET /api/v1/me/join-intents — list the caller's active join intents.
+pub async fn me_join_intents(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let items = state.join_intents.list_for_user(auth.sub);
+    Ok(Json(json!({ "items": items })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JoinIntentBody {
+    pub room_id: String,
+    #[serde(rename = "ttlSecs", default)]
+    pub ttl_secs: Option<i64>,
+}
+
+/// POST /api/v1/me/join-intents — create a short-lived join intent (design §14.6).
+pub async fn me_join_intent_create(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Json(body): Json<JoinIntentBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let user = crate::users::repo::find_by_id(db, auth.sub)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user"))?;
+    let intent = state
+        .join_intents
+        .create(auth.sub, user.phira_id, &body.room_id, body.ttl_secs)?;
+    Ok(Json(json!({ "intent": intent })))
+}
+
+/// DELETE /api/v1/me/join-intents/{id} — cancel a join intent.
+pub async fn me_join_intent_cancel(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Path(intent_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    state.join_intents.cancel(auth.sub, intent_id)?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 /// GET /healthz — liveness.
 async fn healthz() -> Json<serde_json::Value> {
     Json(json!({ "status": "ok" }))
@@ -502,6 +609,7 @@ impl AppState {
         let rooms = RoomService::new(Arc::clone(&openuds));
         let player = PlayerService::new(Arc::clone(&openuds));
         let jobs = JobRunner::new(None, EventBus::new(16, 8), Arc::clone(&openuds));
+        let join_intents = JoinIntentStore::new();
         let phira_gateway = Arc::new(
             PhiraGateway::new("https://phira.example.test", 1000, 60, 100)
                 .expect("test gateway builds"),
@@ -531,6 +639,7 @@ impl AppState {
             rooms,
             player,
             jobs,
+            join_intents,
             phira_gateway,
         }
     }
