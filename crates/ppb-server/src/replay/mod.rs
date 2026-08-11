@@ -2,6 +2,11 @@
 //!
 //! PPB stores replay_overrides / replay_acl / replay_share_links. Share links
 //! store only a token hash; the raw token is returned once and never persisted.
+//! Replay data itself is always pulled from PMP `persist.touches/judges`.
+
+pub mod persist;
+pub mod routes;
+pub mod visibility;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -145,6 +150,11 @@ fn db_err(e: sqlx::Error) -> ApiError {
         tracing::error!(error = %e, "replay db error");
         ApiError::internal()
     }
+}
+
+/// Crate-visible error mapper (used by replay routes).
+pub(crate) fn db_err_public(e: sqlx::Error) -> ApiError {
+    db_err(e)
 }
 
 #[cfg(test)]

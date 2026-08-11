@@ -331,6 +331,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/admin", crate::admin::routes::routes())
         .nest("/rooms", crate::rooms::routes::routes())
         .merge(crate::phira::routes::routes())
+        .merge(crate::replay::routes::routes())
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
@@ -350,6 +351,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .nest("/api/v1", api)
+        .route("/ws/v1/rooms/{room_uuid}/live", get(crate::live::routes::live_ws))
+        .route("/ws/v1/replays/{round_uuid}", get(crate::replay::routes::replay_ws))
         .route("/auth/phira/login", get(crate::auth::gateway::phira_login_page))
         .route("/healthz", get(healthz))
         .with_state(state.clone())

@@ -23,6 +23,7 @@ pub mod error;
 pub mod identities;
 pub mod join_intent;
 pub mod jobs;
+pub mod live;
 pub mod logs;
 pub mod metrics;
 pub mod middleware;
