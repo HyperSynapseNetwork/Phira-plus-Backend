@@ -59,14 +59,16 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
 
 /// Return the JWT from `Authorization: Bearer` or the access cookie.
 pub fn extract_bearer_or_cookie(headers: &header::HeaderMap, cookie_name: &str) -> Option<String> {
-    if let Some(authz) = headers.get(header::AUTHORIZATION) {
-        if let Ok(s) = authz.to_str() {
-            if let Some(token) = s.strip_prefix("Bearer ") {
-                return Some(token.to_string());
-            }
-        }
+    let bearer = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .map(str::to_string);
+    if bearer.is_some() {
+        bearer
+    } else {
+        cookies::get_cookie(headers, cookie_name)
     }
-    cookies::get_cookie(headers, cookie_name)
 }
 
 /// Convenience: build a principal for tests (no DB).

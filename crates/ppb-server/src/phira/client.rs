@@ -119,13 +119,19 @@ async fn parse_login_response(
         .await
         .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
 
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
-        if let Some(err) = parsed.get("error").and_then(|v| v.as_str()) {
-            return match status.as_u16() {
-                401 => Err(PhiraError::InvalidCredentials),
-                _ => Err(PhiraError::ReauthRequired(err.to_string())),
-            };
-        }
+    let error = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    if let Some(err) = error {
+        return match status.as_u16() {
+            401 => Err(PhiraError::InvalidCredentials),
+            _ => Err(PhiraError::ReauthRequired(err)),
+        };
     }
     serde_json::from_str::<PhiraLoginResponse>(&text)
         .map_err(|_| PhiraError::Api(format!("unexpected login payload (status {status})")))

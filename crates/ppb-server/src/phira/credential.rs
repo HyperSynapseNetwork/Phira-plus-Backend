@@ -62,10 +62,12 @@ mod tests {
         let cipher = CredentialCipher::new(&[7u8; 32]).unwrap();
         let plaintext = b"phira_refresh_token_secret";
         let blob = cipher.encrypt(plaintext).unwrap();
-        assert_eq!(blob.len(), NONCE_LEN + plaintext.len());
+        // GCM appends a 16-byte authentication tag, so the blob is longer
+        // than NONCE_LEN + plaintext length.
+        assert!(blob.len() > NONCE_LEN + plaintext.len());
         assert_ne!(&blob[NONCE_LEN..], plaintext.as_slice());
         let decrypted = cipher.decrypt(&blob).unwrap();
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted, plaintext.as_slice());
     }
 
     #[test]
