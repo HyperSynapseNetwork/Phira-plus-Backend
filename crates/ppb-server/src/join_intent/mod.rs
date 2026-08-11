@@ -186,8 +186,8 @@ mod tests {
     fn expired_cleaned() {
         let s = store();
         let uid = Uuid::new_v4();
-        s.create(uid, 5, "R", Some(1)).unwrap();
-        // Force-expire by inserting a stale intent directly.
+        // Long-lived intent stays valid; the stale one is the only cleanup target.
+        s.create(uid, 5, "R", Some(MAX_TTL_SECS)).unwrap();
         let stale = JoinIntent {
             id: Uuid::new_v4(),
             user_id: uid,
