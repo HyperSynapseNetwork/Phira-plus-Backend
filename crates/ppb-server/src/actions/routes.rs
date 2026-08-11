@@ -151,11 +151,10 @@ async fn list_commands(
     Ok(Json(runs))
 }
 
-/// Verify the caller is the room's real host at execution time.
+/// Verify the caller is the room's real host at execution time (design §8.5).
 ///
-/// Phase A scaffold: requires `room_id` in args and consults PMP `room.info`.
-/// Until Phase B wires the typed host query, we conservatively return `false`
-/// (deny) for host-only access; admins still pass via the permission gate.
+/// Re-queries PMP `room.info` → `host_id` and compares with the caller's
+/// phira_id. Never trusts a client-supplied host flag.
 async fn verify_real_host(
     state: &Arc<AppState>,
     auth: &AuthPrincipal,
@@ -169,9 +168,6 @@ async fn verify_real_host(
     let user = crate::users::repo::find_by_id(db, auth.sub)
         .await?
         .ok_or_else(|| ApiError::not_found("user"))?;
-
-    // TODO(Phase B): `room.info` → host_id == user.phira_id (plus server policy
-    // flag for Web Host Control). Deny by default until wired.
-    let _ = (room_id, user.phira_id);
-    Ok(false)
+    let host = state.rooms.host_id(room_id).await.map_err(ApiError::from)?;
+    Ok(host == Some(user.phira_id as i32))
 }

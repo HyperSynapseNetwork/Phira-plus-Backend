@@ -30,6 +30,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .merge(auth_routes::root_routes())
         .merge(permission_routes::routes())
         .merge(action_routes::routes())
+        .merge(crate::users::routes::admin_routes())
+        .merge(crate::rooms::routes::admin_routes())
 }
 
 /// GET /api/v1/admin/events — admin control-plane SSE.

@@ -34,6 +34,8 @@ use crate::phira::client::{PhiraApi, PhiraClient};
 use crate::phira::credential::CredentialCipher;
 use crate::pmp::events::{EventBus, PpbEvent, ResourceRef};
 use crate::pmp::openuds::client::{OpenUdsClient, OpenUdsConfig};
+use crate::rooms::service::RoomService;
+use crate::users::service::PlayerService;
 
 /// Shared application state.
 #[derive(Clone)]
@@ -52,6 +54,8 @@ pub struct AppState {
     pub metrics: Arc<crate::metrics::Metrics>,
     pub rate_limiter: RateLimiter,
     pub heartbeat: HeartbeatCache,
+    pub rooms: RoomService,
+    pub player: PlayerService,
 }
 
 impl AppState {
@@ -123,6 +127,8 @@ pub async fn build_state(
     let events = EventBus::new(1024, 256);
     let github = Arc::new(GithubService::new(runtime.phira.timeout_ms));
     let metrics = crate::metrics::Metrics::new(); // returns Arc<Metrics>
+    let rooms = RoomService::new(Arc::clone(&openuds));
+    let player = PlayerService::new(Arc::clone(&openuds));
 
     let state = Arc::new(AppState {
         config: Arc::new(runtime),
@@ -139,6 +145,8 @@ pub async fn build_state(
         metrics,
         rate_limiter: RateLimiter::new(),
         heartbeat: HeartbeatCache::default(),
+        rooms,
+        player,
     });
 
     if let Some(db) = &state.db {
@@ -232,6 +240,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/public", crate::public::routes::routes())
         .nest("/auth", crate::auth::routes::routes())
         .nest("/admin", crate::admin::routes::routes())
+        .nest("/rooms", crate::rooms::routes::routes())
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
@@ -411,6 +420,8 @@ impl AppState {
             Arc::clone(&actions),
             None,
         ));
+        let rooms = RoomService::new(Arc::clone(&openuds));
+        let player = PlayerService::new(Arc::clone(&openuds));
         AppState {
             config: Arc::new(config),
             secrets: Arc::new(Secrets {
@@ -433,6 +444,8 @@ impl AppState {
             metrics: Arc::new(crate::metrics::Metrics::default()),
             rate_limiter: RateLimiter::new(),
             heartbeat: HeartbeatCache::default(),
+            rooms,
+            player,
         }
     }
 }
