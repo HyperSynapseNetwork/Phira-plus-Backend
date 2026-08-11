@@ -11,7 +11,7 @@ use dashmap::DashMap;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::error::{ApiError, ErrorCode};
+use crate::error::ApiError;
 
 /// Default intent TTL (seconds).
 pub const DEFAULT_TTL_SECS: i64 = 300;
