@@ -82,7 +82,8 @@ impl WebPushAdapter {
     }
 
     fn configured(&self) -> bool {
-        self.vapid_private_key_pem.is_some() && self.vapid_subject.is_some()
+        matches!(&self.vapid_private_key_pem, Some(p) if !p.is_empty())
+            && matches!(&self.vapid_subject, Some(s) if !s.is_empty())
     }
 }
 
@@ -99,10 +100,13 @@ impl PushAdapter for WebPushAdapter {
         body: &str,
         data: Option<&Value>,
     ) -> Result<(), PushError> {
-        let (pem, subject) = match (&self.vapid_private_key_pem, &self.vapid_subject) {
-            (Some(p), Some(s)) if !p.is_empty() && !s.is_empty() => (p.clone(), s.clone()),
-            _ => return Err(PushError::NotConfigured("web_push: VAPID keys not configured".into())),
-        };
+        if !self.configured() {
+            return Err(PushError::NotConfigured("web_push: VAPID keys not configured".into()));
+        }
+        let (pem, subject) = (
+            self.vapid_private_key_pem.clone().unwrap(),
+            self.vapid_subject.clone().unwrap(),
+        );
         let payload = json!({ "title": title, "body": body, "data": data }).to_string().into_bytes();
         let encrypted = encrypt_rfc8291(sub, &payload).map_err(PushError::Delivery)?;
         let auth_header = vapid_authorization(&pem, &subject, &sub.endpoint).map_err(PushError::Delivery)?;
