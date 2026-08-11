@@ -41,7 +41,7 @@ async fn chart_list(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ChartListParams>,
 ) -> Result<Json<Value>, ApiError> {
-    let result = state
+    let mut result = state
         .phira_gateway
         .chart_list(
             params.page.unwrap_or(1),
@@ -50,6 +50,17 @@ async fn chart_list(
         )
         .await
         .map_err(phira_gateway_error)?;
+    // Contract §18: chart list response always contains `total`.
+    if result.get("total").is_none() {
+        if let Some(Value::Object(map)) = result.as_object_mut() {
+            let total = result
+                .get("results")
+                .and_then(Value::as_array)
+                .map(|a| a.len() as i64)
+                .unwrap_or(0);
+            map.insert("total".to_string(), serde_json::json!(total));
+        }
+    }
     Ok(Json(result))
 }
 

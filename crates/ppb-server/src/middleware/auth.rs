@@ -57,6 +57,36 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
     }
 }
 
+/// Optional authenticated principal (`None` when credentials are missing or
+/// invalid). Used by public endpoints that enrich responses with `is_self`
+/// (contract §18: `Room.host.is_self`, `players[].is_self`).
+pub struct OptionalAuthPrincipal(pub Option<AuthPrincipal>);
+
+impl FromRequestParts<Arc<AppState>> for OptionalAuthPrincipal {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let token = match extract_bearer_or_cookie(&parts.headers, ACCESS_COOKIE) {
+            Some(t) => t,
+            None => return Ok(OptionalAuthPrincipal(None)),
+        };
+        let claims = match decode_access(&token, &state.secrets.jwt_secret) {
+            Ok(c) => c,
+            Err(_) => return Ok(OptionalAuthPrincipal(None)),
+        };
+        Ok(OptionalAuthPrincipal(Some(AuthPrincipal {
+            sub: claims.sub,
+            sid: claims.sid,
+            principal_type: claims.principal_type,
+            client_type: claims.client_type,
+            request_id: crate::middleware::request_id::read_request_id(&parts.headers),
+        })))
+    }
+}
+
 /// Return the JWT from `Authorization: Bearer` or the access cookie.
 pub fn extract_bearer_or_cookie(headers: &header::HeaderMap, cookie_name: &str) -> Option<String> {
     let bearer = headers

@@ -41,9 +41,12 @@ impl PmpActionExecutor {
 
         match action.executor {
             Executor::OpenUds => {
-                // Seed OpenUDS actions use the action id as the OpenUDS command name.
+                // Contract §18: room.kick/force_move/ban/whitelist target the player
+                // via `args.phira_id`; PMP expects `user_id`. Normalize before send.
+                let mut args = task.args.clone();
+                normalize_openuds_args(&task.action, &mut args);
                 self.openuds
-                    .command(&task.action, task.args.clone())
+                    .command(&task.action, args)
                     .await
                     .map_err(|e| e.to_string())
             }
@@ -91,5 +94,57 @@ fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         format!("{}…", &s[..max])
+    }
+}
+
+/// Player-target commands accept `args.phira_id` (contract §18) and pass it to
+/// PMP as `user_id`. room.set_chart already uses `args.chart_id` (PMP param).
+fn normalize_openuds_args(action: &str, args: &mut Value) {
+    const PLAYER_TARGET: &[&str] = &[
+        "room.kick",
+        "room.force_move",
+        "room.ban",
+        "room.unban",
+        "room.whitelist_add",
+        "room.whitelist_remove",
+    ];
+    if !PLAYER_TARGET.contains(&action) {
+        return;
+    }
+    if let Some(phira_id) = args.get("phira_id").and_then(Value::as_i64) {
+        if args.get("user_id").is_none() {
+            if let Value::Object(map) = args {
+                map.insert("user_id".to_string(), serde_json::json!(phira_id));
+                map.remove("phira_id");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_phira_id_to_user_id_for_player_target() {
+        let mut args = serde_json::json!({ "room_id": "ABC", "phira_id": 42 });
+        normalize_openuds_args("room.kick", &mut args);
+        assert_eq!(args["user_id"], 42);
+        assert!(args.get("phira_id").is_none());
+    }
+
+    #[test]
+    fn keeps_existing_user_id() {
+        let mut args = serde_json::json!({ "room_id": "ABC", "phira_id": 42, "user_id": 7 });
+        normalize_openuds_args("room.ban", &mut args);
+        assert_eq!(args["user_id"], 7);
+        assert!(args.get("phira_id").is_some(), "should not clobber explicit user_id");
+    }
+
+    #[test]
+    fn set_chart_passes_chart_id_through() {
+        let mut args = serde_json::json!({ "room_id": "ABC", "chart_id": 99 });
+        normalize_openuds_args("room.set_chart", &mut args);
+        assert_eq!(args["chart_id"], 99);
     }
 }

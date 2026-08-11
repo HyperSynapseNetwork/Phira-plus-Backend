@@ -29,7 +29,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/rooms/{room_id}", get(room_info))
         .route("/rooms/{room_id}/history", get(room_history))
         .route("/rooms/{room_id}/chat-history", get(room_chat_history))
-        .route("/rooms/{room_id}/chat", post(send_chat))
+        .route("/rooms/{room_id}/chat", get(room_chat_history).post(send_chat))
+        .route("/rooms/{room_id}/actions", post(room_action_body))
         .route("/rooms/{room_id}/actions/{action}", post(room_action))
 }
 
@@ -46,16 +47,24 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 
 // ── Public / host routes ───────────────────────────────────────
 
-async fn list_rooms(State(state): State<Arc<AppState>>) -> Result<Json<Value>, ApiError> {
-    let result = state.rooms.list().await.map_err(ApiError::from)?;
+async fn list_rooms(
+    auth: crate::middleware::auth::OptionalAuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    let mut result = state.rooms.list().await.map_err(ApiError::from)?;
+    let my_phira = caller_phira_id_opt(&state, auth.0).await?;
+    enrich_room_list_is_self(&mut result, my_phira);
     Ok(Json(result))
 }
 
 async fn room_info(
+    auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let result = state.rooms.info(&room_id).await.map_err(ApiError::from)?;
+    let mut result = state.rooms.info(&room_id).await.map_err(ApiError::from)?;
+    let my_phira = caller_phira_id_opt(&state, auth.0).await?;
+    enrich_room_is_self(&mut result, my_phira);
     Ok(Json(result))
 }
 
@@ -110,6 +119,24 @@ pub struct RoomActionBody {
     pub args: Value,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RoomActionBody2 {
+    pub action: String,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// POST /api/v1/rooms/{room_id}/actions — contract §18 body form `{action, args}`.
+async fn room_action_body(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(room_id): Path<String>,
+    Json(body): Json<RoomActionBody2>,
+) -> Result<axum::response::Response, ApiError> {
+    execute_room_action(&state, &auth, &headers, &room_id, &body.action, body.args).await
+}
+
 /// POST /api/v1/rooms/{room_id}/actions/{action} — host-or-permission action.
 async fn room_action(
     auth: AuthPrincipal,
@@ -118,13 +145,27 @@ async fn room_action(
     Path((room_id, action_id)): Path<(String, String)>,
     Json(body): Json<RoomActionBody>,
 ) -> Result<axum::response::Response, ApiError> {
+    execute_room_action(&state, &auth, &headers, &room_id, &action_id, body.args).await
+}
+
+/// Shared room-action execution (contract §18: host resolved from the Session,
+/// real host re-checked at execution time; room.kick target = `args.phira_id`,
+/// room.set_chart target = `args.chart_id`).
+async fn execute_room_action(
+    state: &Arc<AppState>,
+    auth: &AuthPrincipal,
+    headers: &HeaderMap,
+    room_id: &str,
+    action_id: &str,
+    body_args: Value,
+) -> Result<axum::response::Response, ApiError> {
     let action = state
         .actions
-        .get(&action_id)
+        .get(action_id)
         .ok_or_else(|| ApiError::not_found("action"))?;
 
     // Merge room_id into args (host/resource checks need it).
-    let mut args = body.args;
+    let mut args = body_args;
     if args.get("room_id").is_none() {
         if let Value::Object(map) = &mut args {
             map.insert("room_id".to_string(), json!(room_id));
@@ -134,10 +175,10 @@ async fn room_action(
     // Authorization: admin permission OR (host_allowed AND real host).
     let has_permission = state
         .permissions
-        .has_permission(&state.db, &auth, action.permission)
+        .has_permission(&state.db, auth, action.permission)
         .await?;
     let is_host = if action.host_allowed {
-        verify_real_host(&state, &auth, &args).await?
+        verify_real_host(state, auth, &args).await?
     } else {
         false
     };
@@ -151,7 +192,7 @@ async fn room_action(
         } else {
             ReauthRisk::High
         };
-        check_reauth_header(&state, &auth, &headers, risk)?;
+        check_reauth_header(state, auth, headers, risk)?;
     }
 
     let db = state.require_db()?;
@@ -164,7 +205,7 @@ async fn room_action(
     if action.audit {
         crate::audit::service::record_principal(
             db,
-            &auth,
+            auth,
             action.id,
             "action",
             &queue_key,
@@ -172,8 +213,8 @@ async fn room_action(
             "success",
             "",
             &command_id.to_string(),
-            &ip_from_headers(&headers),
-            &user_agent_from_headers(&headers),
+            &ip_from_headers(headers),
+            &user_agent_from_headers(headers),
         )
         .await?;
     }
@@ -473,6 +514,74 @@ async fn caller_phira_id(state: &Arc<AppState>, auth: &AuthPrincipal) -> Result<
         .await?
         .ok_or_else(|| ApiError::not_found("user"))?;
     Ok(user.phira_id as i32)
+}
+
+/// Optional caller phira_id for `is_self` enrichment (None for anonymous/root).
+async fn caller_phira_id_opt(
+    state: &Arc<AppState>,
+    auth: Option<AuthPrincipal>,
+) -> Result<Option<i64>, ApiError> {
+    let Some(auth) = auth else { return Ok(None) };
+    if auth.is_root() {
+        return Ok(None);
+    }
+    let Some(db) = &state.db else { return Ok(None) };
+    let user = crate::users::repo::find_by_id(db, auth.sub).await?;
+    Ok(user.map(|u| u.phira_id))
+}
+
+/// Add `host.is_self` and `players[].is_self` to a room.info payload (contract §18).
+fn enrich_room_is_self(value: &mut Value, my_phira: Option<i64>) {
+    let Some(my_phira) = my_phira else { return };
+    if let Some(host) = value.get_mut("host") {
+        if host.is_object() {
+            let hid = host
+                .get("user_id")
+                .and_then(Value::as_i64)
+                .or_else(|| host.get("id").and_then(Value::as_i64));
+            if let Some(hid) = hid {
+                host["is_self"] = json!(hid == my_phira);
+            }
+        }
+    } else if let Some(hid) = value.get("host_id").and_then(Value::as_i64) {
+        if let Some(Value::Object(map)) = value.as_object_mut() {
+            map.insert("host".to_string(), json!({ "user_id": hid, "is_self": hid == my_phira }));
+        }
+    }
+    if let Some(players) = value.get_mut("players").and_then(Value::as_array_mut) {
+        for p in players {
+            if let Some(pid) = p
+                .get("user_id")
+                .and_then(Value::as_i64)
+                .or_else(|| p.get("id").and_then(Value::as_i64))
+            {
+                p["is_self"] = json!(pid == my_phira);
+            }
+        }
+    }
+}
+
+/// Apply `is_self` enrichment to a room list payload (rooms/results array or bare array).
+fn enrich_room_list_is_self(value: &mut Value, my_phira: Option<i64>) {
+    let Some(my_phira) = my_phira else { return };
+    let key = if value.get("rooms").is_some() {
+        "rooms"
+    } else if value.get("results").is_some() {
+        "results"
+    } else {
+        ""
+    };
+    if !key.is_empty() {
+        if let Some(arr) = value.get_mut(key).and_then(Value::as_array_mut) {
+            for room in arr {
+                enrich_room_is_self(room, Some(my_phira));
+            }
+        }
+    } else if let Some(arr) = value.as_array_mut() {
+        for room in arr {
+            enrich_room_is_self(room, Some(my_phira));
+        }
+    }
 }
 
 /// Re-verify the caller is the room's real host at execution time.
