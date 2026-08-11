@@ -128,7 +128,7 @@ impl PushAdapter for WebPushAdapter {
 fn encrypt_rfc8291(sub: &PushSubscription, payload: &[u8]) -> Result<Vec<u8>, String> {
     let eph = EphemeralSecret::random(&mut OsRng);
     let as_public = PublicKey::from(&eph);
-    let as_public_bytes = as_public.to_encoded_point(false).as_bytes().to_vec();
+    let as_public_bytes = encoded_point_bytes(&as_public);
     let ua_public = PublicKey::from_sec1_bytes(&sub.p256dh).map_err(|e| e.to_string())?;
     let shared = eph.diffie_hellman(&ua_public);
     let shared_secret = shared.raw_secret_bytes();
@@ -165,7 +165,7 @@ fn encrypt_rfc8291(sub: &PushSubscription, payload: &[u8]) -> Result<Vec<u8>, St
 /// Build the `Authorization: vapid t=...,k=...` header.
 fn vapid_authorization(pem: &str, subject: &str, endpoint: &str) -> Result<String, String> {
     let sk = p256::SecretKey::from_sec1_pem(pem).map_err(|e| e.to_string())?;
-    let pk_bytes = sk.public_key().to_encoded_point(false).as_bytes().to_vec();
+    let pk_bytes = encoded_point_bytes(&sk.public_key());
     let public_b64 = B64.encode(&pk_bytes);
 
     let url = Url::parse(endpoint).map_err(|e| e.to_string())?;
@@ -328,6 +328,11 @@ fn db_err(e: sqlx::Error) -> ApiError {
         tracing::error!(error = %e, "push db error");
         ApiError::internal()
     }
+}
+
+/// Encode a P-256 public key as uncompressed SEC1 bytes (0x04 || X || Y).
+fn encoded_point_bytes(pk: &p256::PublicKey) -> Vec<u8> {
+    p256::elliptic_curve::sec1::EncodedPoint::from(pk).as_bytes().to_vec()
 }
 
 #[cfg(test)]
