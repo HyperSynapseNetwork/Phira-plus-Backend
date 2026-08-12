@@ -7,6 +7,11 @@
 use serde::Serialize;
 use utoipa::{OpenApi, ToSchema};
 
+use crate::admin::notifications::SendBody;
+use crate::auth::routes::{PhiraLoginRequest, ReauthRequest};
+use crate::error::{ErrorBody, ErrorEnvelope};
+use crate::rooms::routes::{ChatSendBody, RoomActionBody2};
+
 /// `GET /api/v1/me` session-probe response (S-4).
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -95,13 +100,18 @@ pub struct RoomActionRequest {
     ),
     components(
         schemas(
-            crate::error::ErrorEnvelope,
-            crate::error::ErrorBody,
+            ErrorEnvelope,
+            ErrorBody,
             MeResponse,
             PaginationResponse,
             ReplayManifest,
             ReplayDetail,
             RoomActionRequest,
+            PhiraLoginRequest,
+            ReauthRequest,
+            ChatSendBody,
+            RoomActionBody2,
+            SendBody,
         )
     ),
     tags(
