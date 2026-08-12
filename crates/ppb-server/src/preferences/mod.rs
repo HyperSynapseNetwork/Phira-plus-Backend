@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::{ApiError, ErrorCode};
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct UserPreference {
     pub user_id: Uuid,
     pub namespace: String,

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::error::{ApiError, ErrorCode};
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct ConfigSnapshot {
     pub id: Uuid,
     pub scope: String,

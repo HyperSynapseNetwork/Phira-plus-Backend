@@ -17,9 +17,13 @@ use crate::app::{JoinIntentBody, PushEndpointBody};
 use crate::automation::routes::CreateRunbookBody;
 use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
+use crate::config::repo::ConfigSnapshot;
 use crate::config::routes::{ConfigValuesBody, RollbackBody};
 use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
+use crate::jobs::Job;
+use crate::audit::model::AuditEvent;
+use crate::preferences::UserPreference;
 use crate::logs::routes::{LogInputBody, TranslateParams};
 use crate::notifications::push::SubscriptionWire;
 use crate::notifications::routes::{ActionBody as NotificationActionBody, InputBody};
@@ -35,6 +39,7 @@ use crate::rooms::routes::{
 };
 use crate::users::model::{AdminUserItem, UserDetailResponse, UserListResponse};
 use crate::users::routes::UserActionBody;
+use crate::admin::routes::{PmpStatus, ServerStatusResponse};
 
 /// `GET /api/v1/me` session-probe response (S-4).
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -266,7 +271,11 @@ pub struct RoomActionRequest {
             ConfigValuesBody,
             ConfigFieldDescriptor,
             ConfigFieldGroup,
+            ConfigSnapshot,
             RollbackBody,
+            Job,
+            AuditEvent,
+            UserPreference,
             LogInputBody,
             TranslateParams,
             PluginCallBody,
@@ -298,6 +307,8 @@ pub struct RoomActionRequest {
             JoinIntentBody,
             PushEndpointBody,
             SubscriptionWire,
+            PmpStatus,
+            ServerStatusResponse,
             SendRequestBody,
             NotificationActionBody,
             InputBody,

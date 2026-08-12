@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct Job {
     pub id: Uuid,
     #[sqlx(rename = "type")]

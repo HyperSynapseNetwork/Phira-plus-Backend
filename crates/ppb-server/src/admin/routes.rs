@@ -95,13 +95,30 @@ pub async fn admin_events_sse(
     ))
 }
 
+/// Typed PMP connectivity summary (server status).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct PmpStatus {
+    pub connected: bool,
+    pub version: Option<String>,
+    pub session_id: Option<String>,
+}
+
+/// Typed server status response (§22).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ServerStatusResponse {
+    pub ppb_version: String,
+    pub pmp: PmpStatus,
+    pub db_configured: bool,
+    pub metrics: serde_json::Value,
+}
+
 /// GET /api/v1/admin/server/status — scaffold summary.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/status",
     operation_id = "admin_server_status_get",
     responses(
-        (status = 200, description = "server status", body = serde_json::Value),
+        (status = 200, description = "server status", body = ServerStatusResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -109,21 +126,21 @@ pub async fn admin_events_sse(
 pub async fn server_status(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<ServerStatusResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "server:view")
         .await?;
     let openuds_state = state.openuds.state().await;
-    Ok(Json(json!({
-        "ppb_version": env!("CARGO_PKG_VERSION"),
-        "pmp": {
-            "connected": openuds_state.connected,
-            "version": openuds_state.server_version,
-            "session_id": openuds_state.session_id,
+    Ok(Json(ServerStatusResponse {
+        ppb_version: env!("CARGO_PKG_VERSION").to_string(),
+        pmp: PmpStatus {
+            connected: openuds_state.connected,
+            version: openuds_state.server_version,
+            session_id: openuds_state.session_id,
         },
-        "db_configured": state.db.is_some(),
-        "metrics": state.metrics.snapshot(),
-    })))
+        db_configured: state.db.is_some(),
+        metrics: state.metrics.snapshot(),
+    }))
 }
 

@@ -5,7 +5,7 @@ use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct AuditEvent {
     pub id: Uuid,
     pub occurred_at: DateTime<Utc>,
