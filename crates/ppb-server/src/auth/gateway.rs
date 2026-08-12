@@ -30,7 +30,7 @@ pub struct LoginPageParams {
 }
 
 /// Trusted frontend origin for a client identity. Unknown clients default to PPF.
-fn trusted_origin(site: &SiteConfig, client_type: &str) -> &str {
+fn trusted_origin<'a>(site: &'a SiteConfig, client_type: &str) -> &'a str {
     match client_type {
         "panel" => &site.panel_url,
         _ => &site.ppf_url,
