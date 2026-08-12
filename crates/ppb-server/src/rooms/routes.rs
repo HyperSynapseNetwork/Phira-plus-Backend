@@ -424,7 +424,6 @@ async fn room_whitelist(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct AdminRoomActionBody {
     pub action: String,
@@ -538,7 +537,6 @@ pub async fn admin_room_action(
     }
 }
 
-#[derive(Debug, Deserialize)]
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RoomBatchBody {
     pub action: String,
