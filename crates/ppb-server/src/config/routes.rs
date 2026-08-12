@@ -184,39 +184,52 @@ pub struct ConfigValuesBody {
     pub note: String,
 }
 
-/// Build the PMP `server_config.yml` string from flat dotted-path form values.
-fn values_to_yaml(values: &Value) -> Result<String, ApiError> {
+/// §23 Stop-ship: read the existing YAML, patch ONLY the descriptor fields the
+/// user actually modified, keep old values for `[REDACTED]` sentinels, and
+/// preserve all unknown (non-descriptor) fields. Never rebuild the whole file.
+fn merge_yaml_patch(current_yaml: &str, values: &Value) -> Result<String, ApiError> {
+    let mut root: serde_yaml::Value = serde_yaml::from_str(current_yaml)
+        .map_err(|e| ApiError::validation(format!("existing config is not valid YAML: {e}")))?;
     let obj = values
         .as_object()
         .ok_or_else(|| ApiError::validation("values must be an object"))?;
-    let mut root = serde_yaml::Mapping::new();
-    for (path, value) in obj {
-        let parts: Vec<&str> = path.split('.').collect();
-        insert_yaml(&mut root, &parts, value)?;
+    for f in pmp_config_descriptor() {
+        let Some(v) = obj.get(f.path) else { continue };
+        // Sensitive field sentinel (case-insensitive): keep the old value —
+        // never write the placeholder.
+        if f.sensitive
+            && v.as_str()
+                .map(|s| s.eq_ignore_ascii_case("[REDACTED]"))
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        let parts: Vec<&str> = f.path.split('.').collect();
+        set_yaml_path(&mut root, &parts, v)?;
     }
-    serde_yaml::to_string(&serde_yaml::Value::Mapping(root))
+    serde_yaml::to_string(&root)
         .map_err(|e| ApiError::validation(format!("yaml serialize failed: {e}")))
 }
 
-fn insert_yaml(
-    root: &mut serde_yaml::Mapping,
-    parts: &[&str],
-    value: &Value,
-) -> Result<(), ApiError> {
+fn set_yaml_path(root: &mut serde_yaml::Value, parts: &[&str], value: &Value) -> Result<(), ApiError> {
     if parts.is_empty() {
         return Ok(());
     }
+    let mapping = match root {
+        serde_yaml::Value::Mapping(m) => m,
+        _ => return Err(ApiError::validation("existing config segment is not a mapping")),
+    };
     let key = serde_yaml::Value::String(parts[0].to_string());
     if parts.len() == 1 {
-        root.insert(key, json_to_yaml(value));
+        mapping.insert(key, json_to_yaml(value));
         return Ok(());
     }
-    if !root.contains_key(&key) {
-        root.insert(key.clone(), serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    if !mapping.contains_key(&key) {
+        mapping.insert(key.clone(), serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
     }
-    match root.get_mut(&key) {
-        Some(serde_yaml::Value::Mapping(child)) => insert_yaml(child, &parts[1..], value),
-        _ => Err(ApiError::validation(format!("nested path conflict at {}", parts[0]))),
+    match mapping.get_mut(&key) {
+        Some(child) => set_yaml_path(child, &parts[1..], value),
+        None => Err(ApiError::validation(format!("nested path conflict at {}", parts[0]))),
     }
 }
 
@@ -254,7 +267,11 @@ fn validate_values(values: &Value) -> (bool, Vec<Value>) {
     };
     for f in pmp_config_descriptor() {
         let Some(v) = obj.get(f.path) else { continue };
-        if f.sensitive && v.as_str() == Some("[REDACTED]") {
+        if f.sensitive
+            && v.as_str()
+                .map(|s| s.eq_ignore_ascii_case("[REDACTED]"))
+                .unwrap_or(false)
+        {
             continue; // unchanged redacted placeholder is fine
         }
         let type_ok = match f.r#type {
@@ -311,7 +328,8 @@ pub async fn diff(
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     let current = manager.read_yaml().unwrap_or_default();
-    let proposed = values_to_yaml(&body.values)?;
+    // §23: diff against the actual merge result (redacted kept, unknowns preserved).
+    let proposed = merge_yaml_patch(&current, &body.values)?;
     let mut changes = Vec::new();
     for f in pmp_config_descriptor() {
         let a = manager
@@ -358,15 +376,16 @@ pub async fn save(
     if !manager.configured() {
         return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
     }
-    let yaml = values_to_yaml(&body.values)?;
+    // §23: snapshot the ORIGINAL config, then merge/patch (read → patch only
+    // modified descriptor fields → keep [REDACTED] old values → preserve
+    // unknown fields → validate → atomic write). Never rebuild from values.
+    let prev = manager.read_yaml()?;
+    let yaml = merge_yaml_patch(&prev, &body.values)?;
+    // validate the merged YAML still parses.
+    serde_yaml::from_str::<serde_yaml::Value>(&yaml)
+        .map_err(|e| ApiError::validation(format!("merged YAML invalid: {e}")))?;
     let db = state.require_db()?;
-    let prev = manager.read_yaml().ok();
-    let mut snapshot_id = None;
-    if let Some(prev) = prev {
-        snapshot_id = Some(
-            config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?,
-        );
-    }
+    let snapshot_id = config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?;
     manager.write_yaml_atomic(&yaml)?;
     state
         .openuds
@@ -660,4 +679,54 @@ async fn public_content_update(
     let db = state.require_db()?;
     config_repo::put_public_content(db, &key, body.content.clone(), Some(auth.sub)).await?;
     Ok(Json(json!({ "ok": true, "key": key })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_preserves_unknown_fields_and_redacted() {
+        let current = r#"server_name: "Old Server"
+welcome: "hi"
+custom_unknown_key: "keep-me"
+openuds:
+  enabled: true
+  socket_path: "/run/old.sock"
+  auth_token: "SECRET"
+"#;
+        let values = serde_json::json!({
+            "server_name": "New Server",
+            "openuds.auth_token": "[REDACTED]",
+        });
+        let merged = merge_yaml_patch(current, &values).unwrap();
+        // patched field
+        assert!(merged.contains("server_name: New Server"), "merged: {merged}");
+        // unknown field preserved
+        assert!(merged.contains("custom_unknown_key: keep-me"), "merged: {merged}");
+        // redacted sensitive field keeps old value, never writes placeholder
+        assert!(merged.contains("auth_token: SECRET"), "merged: {merged}");
+        assert!(!merged.contains("REDACTED"), "merged: {merged}");
+        // untouched field preserved
+        assert!(merged.contains("socket_path: /run/old.sock"), "merged: {merged}");
+    }
+
+    #[test]
+    fn merge_redacted_case_insensitive() {
+        let current = "database_url: \"postgres://secret\"\n";
+        for sentinel in ["[REDACTED]", "[redacted]", "[Redacted]"] {
+            let values = serde_json::json!({ "database_url": sentinel });
+            let merged = merge_yaml_patch(current, &values).unwrap();
+            assert!(merged.contains("database_url: postgres://secret"), "merged: {merged}");
+        }
+    }
+
+    #[test]
+    fn merge_patches_nested_descriptor_path() {
+        let current = "openuds:\n  enabled: false\n  socket_path: \"/x\"\n";
+        let values = serde_json::json!({ "openuds.enabled": true });
+        let merged = merge_yaml_patch(current, &values).unwrap();
+        assert!(merged.contains("enabled: true"), "merged: {merged}");
+        assert!(merged.contains("socket_path: /x"), "merged: {merged}");
+    }
 }
