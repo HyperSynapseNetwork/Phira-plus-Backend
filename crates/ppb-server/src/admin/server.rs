@@ -30,13 +30,26 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/server/broadcast/user", post(broadcast_user))
 }
 
+/// Typed PMP server stats (§23 #6: separate typed schema, not a giant status).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ServerStatsResponse {
+    pub users_online: i64,
+    pub active_rooms: i64,
+    pub active_sessions: i64,
+    pub loaded_plugins: i64,
+    pub port: i64,
+    pub http_port: i64,
+    pub uptime_secs: i64,
+    pub server_name: String,
+}
+
 /// GET /api/v1/admin/server/stats — PMP server stats.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/stats",
     operation_id = "admin_server_stats_get",
     responses(
-        (status = 200, description = "server stats", body = serde_json::Value),
+        (status = 200, description = "server stats", body = ServerStatsResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -44,10 +57,19 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub async fn server_stats(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ServerStatsResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
     let result = state.openuds.command("server.stats", json!({})).await.map_err(map_err)?;
-    Ok(Json(result))
+    Ok(Json(serde_json::from_value(result).unwrap_or(ServerStatsResponse {
+        users_online: 0,
+        active_rooms: 0,
+        active_sessions: 0,
+        loaded_plugins: 0,
+        port: 0,
+        http_port: 0,
+        uptime_secs: 0,
+        server_name: String::new(),
+    })))
 }
 
 /// GET /api/v1/admin/server/runtime — runtime status.

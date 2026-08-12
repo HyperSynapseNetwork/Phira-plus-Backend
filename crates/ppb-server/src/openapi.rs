@@ -48,6 +48,7 @@ use crate::users::model::{
 };
 use crate::users::routes::UserActionBody;
 use crate::admin::routes::{PmpStatus, ServerStatusResponse};
+use crate::admin::server::ServerStatsResponse;
 
 /// `GET /api/v1/me` session-probe response (S-4).
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -326,6 +327,7 @@ pub struct RoomActionRequest {
             SubscriptionWire,
             PmpStatus,
             ServerStatusResponse,
+            ServerStatsResponse,
             SendRequestBody,
             NotificationActionBody,
             InputBody,
