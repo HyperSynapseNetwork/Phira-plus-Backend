@@ -403,8 +403,11 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
         .allow_headers(AllowHeaders::list(headers))
 }
 
-/// GET /api/v1/me — current user summary + identity state (contract §20 session
-/// probe). Issues the session-bound CSRF token for state-changing requests.
+/// GET /api/v1/me — unified session probe (contract §20 S-4).
+///
+/// Returns `{principal, user, permissions[], capabilities[], session, ...}`
+/// with permissions resolved at runtime (never baked into the JWT), plus the
+/// session-bound `csrf_token` for state-changing requests.
 pub async fn me(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -413,13 +416,28 @@ pub async fn me(
         &auth.sid,
         &crate::middleware::csrf::csrf_key(&state.secrets.jwt_secret),
     );
+    let session_created_at = session_created_at(&state, auth.sid).await?;
+    let capabilities: Vec<&str> = crate::public::PPB_CAPABILITIES.to_vec();
+    let client_type = auth.client_type.to_string();
+
     if auth.is_root() {
         return Ok(Json(json!({
+            "principal": { "type": "root", "id": null },
             "principal_type": "root",
+            "user": null,
+            "identities": [],
+            "phira_credential": null,
             "permissions": ["*:*"],
+            "capabilities": capabilities,
+            "session": {
+                "sid": auth.sid,
+                "client_type": client_type,
+                "created_at": session_created_at,
+            },
             "csrf_token": csrf_token,
         })));
     }
+
     let db = state.require_db()?;
     let user = crate::users::repo::find_by_id(db, auth.sub)
         .await?
@@ -438,6 +456,7 @@ pub async fn me(
     perm_list.sort();
 
     Ok(Json(json!({
+        "principal": { "type": "user", "id": user.id, "phira_id": user.phira_id },
         "principal_type": "user",
         "user": {
             "id": user.id,
@@ -448,8 +467,33 @@ pub async fn me(
         "identities": identities,
         "phira_credential": credential,
         "permissions": perm_list,
+        "capabilities": capabilities,
+        "session": {
+            "sid": auth.sid,
+            "client_type": client_type,
+            "created_at": session_created_at,
+        },
         "csrf_token": csrf_token,
     })))
+}
+
+/// Best-effort session created_at for the session probe.
+async fn session_created_at(
+    state: &Arc<AppState>,
+    sid: uuid::Uuid,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, ApiError> {
+    let Some(db) = &state.db else { return Ok(None) };
+    let row = sqlx::query_as::<_, (Option<chrono::DateTime<chrono::Utc>>,)>(
+        "SELECT created_at FROM sessions WHERE id = $1",
+    )
+    .bind(sid)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "session query failed");
+        ApiError::internal()
+    })?;
+    Ok(row.and_then(|(c,)| c))
 }
 
 /// GET /api/v1/me/profile — community profile (defaults when unset).
