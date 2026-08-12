@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::middleware::from_fn_with_state;
-use axum::routing::{delete, get};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
@@ -261,14 +261,26 @@ fn spawn_join_intent_task(state: &Arc<AppState>) {
                             .unwrap_or(0);
                         if phira_id > 0 {
                             if let Some(intent) = intents.match_online(phira_id) {
+                                let intent_id = intent.id;
+                                let room_id = intent.room_id.clone();
                                 tracing::info!(
                                     phira_id,
-                                    room = %intent.room_id,
+                                    room = %room_id,
                                     "join intent fulfilled: force_move"
                                 );
-                                let _ = rooms
-                                    .force_move(&intent.room_id, phira_id as i32, false)
-                                    .await;
+                                intents.mark_moving(&intent_id);
+                                let ok = rooms
+                                    .force_move(&room_id, phira_id as i32, false)
+                                    .await
+                                    .is_ok();
+                                intents.mark_terminal(
+                                    &intent_id,
+                                    if ok {
+                                        crate::join_intent::STATUS_COMPLETED
+                                    } else {
+                                        crate::join_intent::STATUS_FAILED
+                                    },
+                                );
                             }
                         }
                     }
@@ -341,12 +353,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/rooms", crate::rooms::routes::routes())
         .merge(crate::phira::routes::routes())
         .merge(crate::replay::routes::routes())
+        .route("/friends/{phira_id}/remove", post(friend_remove))
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
         .route("/me/preferences", get(me_preferences))
         .route("/me/join-intents", get(me_join_intents).post(me_join_intent_create))
-        .route("/me/join-intents/{intent_id}", delete(me_join_intent_cancel))
+        .route("/me/join-intents/{intent_id}", get(me_join_intent_get).delete(me_join_intent_cancel))
         .route("/me/push-endpoints", get(me_push_endpoints).post(me_push_endpoint_register))
         .route("/me/push-endpoints/{endpoint_id}", delete(me_push_endpoint_delete));
 
@@ -637,6 +650,37 @@ pub async fn me_join_intent_cancel(
         return Err(ApiError::permission_denied());
     }
     state.join_intents.cancel(auth.sub, intent_id)?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// GET /api/v1/me/join-intents/{id} — poll an intent's status
+/// (`pending | user_online | moving | completed | failed | expired`, §21).
+pub async fn me_join_intent_get(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Path(intent_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let intent = state.join_intents.get(auth.sub, intent_id)?;
+    Ok(Json(json!({ "intent": intent })))
+}
+
+/// POST /api/v1/friends/{phira_id}/remove — remove a friend by Phira id (§21).
+pub async fn friend_remove(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Path(phira_id): axum::extract::Path<i64>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let friend = crate::users::repo::find_by_phira_id(db, phira_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user"))?;
+    crate::social::remove_friend(db, auth.sub, friend.id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
