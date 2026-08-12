@@ -1,6 +1,7 @@
 //! Notification Hub (design §14). Event/inbox separated; push endpoints encrypted.
 
 pub mod push;
+pub mod routes;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -147,6 +148,82 @@ pub async fn mark_read(db: &sqlx::PgPool, notification_id: Uuid, user_id: Uuid) 
     .await
     .map_err(db_err)?;
     Ok(())
+}
+
+/// Mark an inbox row dismissed (hidden from the inbox).
+pub async fn mark_dismissed(db: &sqlx::PgPool, notification_id: Uuid, user_id: Uuid) -> Result<(), ApiError> {
+    sqlx::query(
+        "UPDATE user_notifications SET dismissed_at = now()
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(notification_id)
+    .bind(user_id)
+    .execute(db)
+    .await
+    .map_err(db_err)?;
+    Ok(())
+}
+
+/// Fetch one inbox row (joined with its event) for a specific user.
+pub async fn get_for_user(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    notification_id: Uuid,
+) -> Result<Option<UserNotificationWithEvent>, ApiError> {
+    sqlx::query_as::<_, UserNotificationWithEvent>(
+        "SELECT un.id, un.event_id, un.user_id, un.read_at, un.dismissed_at, un.created_at,
+                ev.type AS event_type, ev.actor_user_id, ev.payload, ev.created_at AS event_created_at
+         FROM user_notifications un
+         JOIN notification_events ev ON ev.id = un.event_id
+         WHERE un.user_id = $1 AND un.id = $2",
+    )
+    .bind(user_id)
+    .bind(notification_id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)
+}
+
+/// Inbox list (non-dismissed) + total + unread count for the current user.
+pub async fn list_inbox(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<(Vec<UserNotificationWithEvent>, i64, i64), ApiError> {
+    let (total,): (i64,) = sqlx::query_as::<_, (i64,)>(
+        "SELECT count(*) FROM user_notifications un
+         JOIN notification_events ev ON ev.id = un.event_id
+         WHERE un.user_id = $1 AND un.dismissed_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
+    let (unread,): (i64,) = sqlx::query_as::<_, (i64,)>(
+        "SELECT count(*) FROM user_notifications
+         WHERE user_id = $1 AND read_at IS NULL AND dismissed_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
+    let rows: Vec<UserNotificationWithEvent> = sqlx::query_as::<_, UserNotificationWithEvent>(
+        "SELECT un.id, un.event_id, un.user_id, un.read_at, un.dismissed_at, un.created_at,
+                ev.type AS event_type, ev.actor_user_id, ev.payload, ev.created_at AS event_created_at
+         FROM user_notifications un
+         JOIN notification_events ev ON ev.id = un.event_id
+         WHERE un.user_id = $1 AND un.dismissed_at IS NULL
+         ORDER BY un.created_at DESC
+         LIMIT $2 OFFSET $3",
+    )
+    .bind(user_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)?;
+    Ok((rows, total, unread))
 }
 
 /// A stored push endpoint (ciphertext not returned by list).
