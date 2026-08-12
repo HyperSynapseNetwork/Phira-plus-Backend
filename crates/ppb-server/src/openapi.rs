@@ -13,7 +13,7 @@ use crate::admin::plugins::PluginCallBody;
 use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody};
 use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthRequest, RootLoginRequest};
 use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
-use crate::app::{JoinIntentBody, PushEndpointBody};
+use crate::app::{JoinIntentBody, PreferencesListResponse, PushEndpointBody};
 use crate::automation::routes::CreateRunbookBody;
 use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
@@ -311,6 +311,7 @@ pub struct RoomActionRequest {
             RoomBatchBody,
             JoinIntentBody,
             PushEndpointBody,
+            PreferencesListResponse,
             SubscriptionWire,
             PmpStatus,
             ServerStatusResponse,

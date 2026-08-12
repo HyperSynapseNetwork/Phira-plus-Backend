@@ -631,13 +631,19 @@ pub async fn me_identities(
     Ok(Json(json!({ "identities": identities })))
 }
 
+/// Preferences list response (§22).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct PreferencesListResponse {
+    pub preferences: Vec<crate::preferences::UserPreference>,
+}
+
 /// GET /api/v1/me/preferences — all namespaces for the current user.
 #[utoipa::path(
     get,
     path = "/api/v1/me/preferences",
     operation_id = "me_preferences_get",
     responses(
-        (status = 200, description = "user preferences", body = serde_json::Value),
+        (status = 200, description = "user preferences", body = PreferencesListResponse),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "me"
@@ -645,7 +651,7 @@ pub async fn me_identities(
 pub async fn me_preferences(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<PreferencesListResponse>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
@@ -661,7 +667,7 @@ pub async fn me_preferences(
         tracing::error!(error = %e, "preferences query failed");
         ApiError::internal()
     })?;
-    Ok(Json(json!({ "preferences": rows })))
+    Ok(Json(PreferencesListResponse { preferences: rows }))
 }
 
 /// GET /api/v1/me/join-intents — list the caller's active join intents.
