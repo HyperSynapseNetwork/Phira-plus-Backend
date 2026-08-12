@@ -33,6 +33,7 @@ use crate::social::routes::SendRequestBody;
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
 };
+use crate::users::model::{AdminUserItem, UserDetailResponse, UserListResponse};
 use crate::users::routes::UserActionBody;
 
 /// `GET /api/v1/me` session-probe response (S-4).
@@ -288,6 +289,9 @@ pub struct RoomActionRequest {
             GroupListResponse,
             GroupMember,
             UserActionBody,
+            AdminUserItem,
+            UserListResponse,
+            UserDetailResponse,
             CreateRoomBody,
             AdminRoomActionBody,
             RoomBatchBody,

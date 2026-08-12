@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use super::model::User;
+use super::model::{AdminUserItem, User, UserDetailResponse, UserListResponse};
 use super::repo as user_repo;
 use crate::actions::types::Risk;
 use crate::app::AppState;
@@ -55,7 +55,7 @@ pub struct UserListParams {
     path = "/api/v1/admin/users",
     operation_id = "admin_users_get",
     responses(
-        (status = 200, description = "paginated users", body = serde_json::Value),
+        (status = 200, description = "paginated users", body = UserListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -64,7 +64,7 @@ pub async fn list_users(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<UserListParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<UserListResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:view")
@@ -116,21 +116,23 @@ pub async fn list_users(
         .await
         .map_err(db_err)?;
 
-    Ok(Json(json!({
-        "items": rows,
-        "total": total.0,
-        "page": page,
-        "pageNum": page_num,
-    })))
+    let items = rows.iter().map(User::to_admin_item).collect();
+    Ok(Json(UserListResponse {
+        items,
+        total: total.0,
+        page,
+        page_num,
+    }))
 }
 
-/// GET /api/v1/admin/users/{user_id} — PPB account + PMP player info.
+/// GET /api/v1/admin/users/{phira_id} — PPB account + PMP player info (§22
+/// `{account, groups, player}`; path is Phira ID).
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/users/{user_id}",
-    operation_id = "admin_users_user_id_get",
+    path = "/api/v1/admin/users/{phira_id}",
+    operation_id = "admin_users_phira_id_get",
     responses(
-        (status = 200, description = "user detail", body = serde_json::Value),
+        (status = 200, description = "user detail", body = UserDetailResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -139,7 +141,7 @@ pub async fn user_detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<UserDetailResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:view")
@@ -154,15 +156,14 @@ pub async fn user_detail(
         .player
         .info(user_id as i32)
         .await
-        .map(|v| serde_json::to_value(&v).unwrap_or(Value::Null))
-        .unwrap_or(Value::Null);
+        .ok();
 
     let groups = group_ids_for_user(db, user.id).await?;
-    Ok(Json(json!({
-        "account": user,
-        "groups": groups,
-        "player": player,
-    })))
+    Ok(Json(UserDetailResponse {
+        account: user.to_admin_item(),
+        groups,
+        player,
+    }))
 }
 
 async fn group_ids_for_user(db: &sqlx::PgPool, user_id: uuid::Uuid) -> Result<Vec<String>, ApiError> {
