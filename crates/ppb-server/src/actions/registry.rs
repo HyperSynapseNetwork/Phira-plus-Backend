@@ -26,7 +26,10 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("room.set_live", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         ActionDescriptor::new("room.set_hidden", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         ActionDescriptor::new("room.set_persistent", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
-        ActionDescriptor::new("room.set_api_endpoint", "room:config", Executor::OpenUds, Risk::High, true, false, true, "room:{room_id}", false),
+        // `room.set_api_endpoint` is server/room-level configuration; a room
+        // host must not be able to point the room at an arbitrary API endpoint.
+        // Admin-only (not host_allowed).
+        ActionDescriptor::new("room.set_api_endpoint", "room:config", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
         // Changing host / degraded state is admin-gated (not host_allowed).
         ActionDescriptor::new("room.set_host", "room:config", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
         ActionDescriptor::new("room.set_degraded", "room:config", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
@@ -133,6 +136,16 @@ mod tests {
             }
         }
         assert!(found > 0, "expected at least one host_allowed action");
+    }
+
+    #[test]
+    fn set_api_endpoint_is_not_host_allowed() {
+        // Gate 0: a room host must not re-point the room's API endpoint
+        // (server/room-level config) — admin-only action.
+        let reg = ActionRegistry::new();
+        let a = reg.get("room.set_api_endpoint").unwrap();
+        assert!(!a.host_allowed, "room.set_api_endpoint must not be host_allowed");
+        assert!(a.audit, "room.set_api_endpoint must remain audited");
     }
 
     #[test]
