@@ -98,7 +98,11 @@ pub async fn check_pair_access(
             let friends = crate::social::list_friends(db, owner).await?;
             Ok(friends.contains(&auth.sub))
         }
-        VISIBILITY_UNLISTED => Ok(true),
+        // Unlisted replays never appear in lists and are only reachable by
+        // non-owners via a valid share token (resolved before this check in
+        // `resolve_replay_access`). The owner/player themself already returned
+        // above; everyone else is denied here.
+        VISIBILITY_UNLISTED => Ok(false),
         VISIBILITY_PRIVATE => Ok(false),
         VISIBILITY_CUSTOM => {
             let Some(over) = over else { return Ok(false) };

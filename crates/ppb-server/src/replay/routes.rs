@@ -45,12 +45,32 @@ pub struct ReplayListParams {
 }
 
 /// GET /api/v1/replays?player_id=... — a player's distinct rounds (best-effort).
+///
+/// Only `public` (incl. `inherit`→public) replays are listed; unlisted/private/
+/// friends/custom overrides are never exposed in the public listing (contract §20).
 async fn list_replays(
     _auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<ReplayListParams>,
 ) -> Result<Json<Value>, ApiError> {
     // Listing is public; per-pair access is enforced on detail/manifest/WS.
+    let db = state.require_db()?;
+    // Replays with a non-public visibility override must not appear in lists.
+    let non_public: std::collections::HashSet<String> = sqlx::query_as::<_, (String,)>(
+        "SELECT pmp_replay_id FROM replay_overrides
+         WHERE player_phira_id = $1 AND visibility NOT IN ('inherit', 'public')",
+    )
+    .bind(params.player_id)
+    .fetch_all(db)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "replay list visibility query failed");
+        crate::error::ApiError::internal()
+    })?
+    .into_iter()
+    .map(|(r,)| r)
+    .collect();
+
     let openuds = &state.openuds;
     let mut rounds: BTreeSet<String> = BTreeSet::new();
     let mut total_frames = 0i64;
@@ -65,7 +85,9 @@ async fn list_replays(
         }
         for b in &batches {
             if let Some(r) = b.get("round_uuid").and_then(Value::as_str) {
-                rounds.insert(r.to_string());
+                if !non_public.contains(r) {
+                    rounds.insert(r.to_string());
+                }
             }
             if let Some(c) = b.get("count").and_then(Value::as_i64) {
                 total_frames += c;
@@ -111,6 +133,10 @@ pub async fn resolve_share(
 #[derive(Debug, Deserialize)]
 pub struct ReplayDetailParams {
     pub player_id: i64,
+    /// Optional share token for shared (e.g. unlisted) replays. When present it
+    /// pins the `(round_uuid, player_phira_id)` pair; `player_id` is ignored.
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 /// GET /api/v1/replays/{round_uuid}?player_id=... — summary + visibility
@@ -131,7 +157,14 @@ pub async fn detail(
     Query(params): Query<ReplayDetailParams>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    let Some(player) = resolve_replay_access(db, &round_uuid, params.player_id, auth.0.as_ref(), None).await?
+    let Some(player) = resolve_replay_access(
+        db,
+        &round_uuid,
+        params.player_id,
+        auth.0.as_ref(),
+        params.token.as_deref(),
+    )
+    .await?
     else {
         return Err(ApiError::permission_denied());
     };
@@ -170,7 +203,14 @@ pub async fn manifest(
     Query(params): Query<ReplayDetailParams>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    let Some(player) = resolve_replay_access(db, &round_uuid, params.player_id, auth.0.as_ref(), None).await?
+    let Some(player) = resolve_replay_access(
+        db,
+        &round_uuid,
+        params.player_id,
+        auth.0.as_ref(),
+        params.token.as_deref(),
+    )
+    .await?
     else {
         return Err(ApiError::permission_denied());
     };
