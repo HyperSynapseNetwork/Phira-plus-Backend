@@ -12,7 +12,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/actions — Action Manifest. */
-        get: operations["list_actions"];
+        get: operations["admin_actions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -31,7 +31,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/actions/{id}/execute */
-        post: operations["execute_action"];
+        post: operations["admin_actions_action_id_execute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -46,7 +46,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/audit — filtered audit list. */
-        get: operations["list"];
+        get: operations["admin_audit_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -63,7 +63,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/audit/export?format=csv|json — export (contract §17). */
-        get: operations["export"];
+        get: operations["admin_audit_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -80,7 +80,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/audit/export.csv — CSV export (redacted; no secrets). */
-        get: operations["export_csv"];
+        get: operations["admin_audit_export_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -97,7 +97,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/audit/{id} — single audit event. */
-        get: operations["detail"];
+        get: operations["admin_audit_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -116,7 +116,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/auth/root/change-password — change Root password. */
-        post: operations["root_change_password"];
+        post: operations["admin_auth_root_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -133,7 +133,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/auth/root/login — Root local principal login. */
-        post: operations["root_login"];
+        post: operations["admin_auth_root_login_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -148,7 +148,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/auth/root/session — root session probe (P1). */
-        get: operations["root_session"];
+        get: operations["admin_auth_root_session_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -165,7 +165,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/automation/runbook-runs — recent runbook runs. */
-        get: operations["runs"];
+        get: operations["admin_automation_runbook_runs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -182,7 +182,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/automation/runbook-runs/{id} — single run detail. */
-        get: operations["get_run"];
+        get: operations["admin_automation_runbook_runs_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -201,7 +201,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/automation/runbook-runs/{id}/cancel — cancel a queued/running run. */
-        post: operations["cancel_run"];
+        post: operations["admin_automation_runbook_runs_id_cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -216,10 +216,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/automation/runbooks — list runbooks. */
-        get: operations["list"];
+        get: operations["admin_automation_runbooks_get"];
         put?: never;
         /** POST /api/v1/admin/automation/runbooks — create a runbook. */
-        post: operations["create"];
+        post: operations["admin_automation_runbooks_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -234,15 +234,15 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/automation/runbooks/{id} — runbook detail. */
-        get: operations["get_one"];
+        get: operations["admin_automation_runbooks_id_get"];
         put?: never;
         post?: never;
         /** DELETE /api/v1/admin/automation/runbooks/{id} — delete a runbook. */
-        delete: operations["delete_runbook"];
+        delete: operations["admin_automation_runbooks_id_delete"];
         options?: never;
         head?: never;
         /** PATCH /api/v1/admin/automation/runbooks/{id} — update a runbook. */
-        patch: operations["update"];
+        patch: operations["admin_automation_runbooks_id_patch"];
         trace?: never;
     };
     "/api/v1/admin/automation/runbooks/{id}/run": {
@@ -255,7 +255,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/automation/runbooks/{id}/run — snapshot + execute steps sequentially. */
-        post: operations["run"];
+        post: operations["admin_automation_runbooks_id_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -270,7 +270,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/commands — recent command runs. */
-        get: operations["list_commands"];
+        get: operations["admin_commands_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -293,7 +293,7 @@ export interface paths {
          * @description Requires an elevated reauth context and is fully audited with the **final**
          *     result (success / failure / timeout) — never a pre-recorded success.
          */
-        post: operations["execute_command"];
+        post: operations["admin_commands_execute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -308,7 +308,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes. */
-        get: operations["descriptors"];
+        get: operations["admin_config_descriptors_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -327,7 +327,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/config/diff — field-level diff of current vs proposed. */
-        post: operations["diff"];
+        post: operations["admin_config_diff_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -342,7 +342,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/ppb — effective PPB config (merged with overrides). */
-        get: operations["ppb_config"];
+        get: operations["admin_config_ppb_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -359,7 +359,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/ppf — PPF build/SEO config. */
-        get: operations["ppf_config"];
+        get: operations["admin_config_ppf_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -376,7 +376,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/raw — raw PMP config YAML. */
-        get: operations["raw"];
+        get: operations["admin_config_raw_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -395,7 +395,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/config/rollback — rollback to a snapshot. */
-        post: operations["rollback"];
+        post: operations["admin_config_rollback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -415,7 +415,7 @@ export interface paths {
          * POST /api/v1/admin/config/save — validate → snapshot → atomic write →
          * @description reload → health check (design §20.3).
          */
-        post: operations["save"];
+        post: operations["admin_config_save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -430,7 +430,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/snapshots — list PMP snapshots. */
-        get: operations["snapshots"];
+        get: operations["admin_config_snapshots_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -449,7 +449,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/config/validate — validate proposed YAML parses. */
-        post: operations["validate"];
+        post: operations["admin_config_validate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -464,7 +464,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/config/values — current PMP config field values (redacted). */
-        get: operations["values"];
+        get: operations["admin_config_values_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -481,7 +481,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/coupons — list coupons. */
-        get: operations["list"];
+        get: operations["admin_coupons_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -500,7 +500,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/coupons/create — create a coupon (generates a code if blank). */
-        post: operations["create"];
+        post: operations["admin_coupons_create_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -517,7 +517,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/coupons/{id}/revoke — revoke a coupon. */
-        post: operations["revoke"];
+        post: operations["admin_coupons_id_revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -532,10 +532,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/groups — list user groups. */
-        get: operations["list"];
+        get: operations["admin_groups_get"];
         put?: never;
         /** POST /api/v1/admin/groups — create a user group. */
-        post: operations["create"];
+        post: operations["admin_groups_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -553,15 +553,15 @@ export interface paths {
          * GET /api/v1/admin/groups/{id} — group detail + permissions + members +
          * @description effective permission preview (design §18.5).
          */
-        get: operations["detail"];
+        get: operations["admin_groups_id_get"];
         put?: never;
         post?: never;
         /** DELETE /api/v1/admin/groups/{id} — delete a group. */
-        delete: operations["delete_group"];
+        delete: operations["admin_groups_id_delete"];
         options?: never;
         head?: never;
         /** PATCH /api/v1/admin/groups/{id} — rename a group. */
-        patch: operations["rename"];
+        patch: operations["admin_groups_id_patch"];
         trace?: never;
     };
     "/api/v1/admin/groups/{id}/members": {
@@ -573,7 +573,7 @@ export interface paths {
         };
         get?: never;
         /** PUT /api/v1/admin/groups/{id}/members — replace the member set. */
-        put: operations["replace_members"];
+        put: operations["admin_groups_id_members_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -590,7 +590,7 @@ export interface paths {
         };
         get?: never;
         /** PUT /api/v1/admin/groups/{id}/permissions — replace the permission set. */
-        put: operations["replace_permissions"];
+        put: operations["admin_groups_id_permissions_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -606,10 +606,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/jobs — recent jobs. */
-        get: operations["list"];
+        get: operations["admin_jobs_get"];
         put?: never;
         /** POST /api/v1/admin/jobs — start a new job. */
-        post: operations["create"];
+        post: operations["admin_jobs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -624,7 +624,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/jobs/tasks — manual admin tasks (paginated). */
-        get: operations["list_tasks"];
+        get: operations["admin_jobs_tasks_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -643,7 +643,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/jobs/tasks/{task_id}/complete — mark an admin task done. */
-        post: operations["complete_task"];
+        post: operations["admin_jobs_tasks_task_id_complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -658,7 +658,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/jobs/{job_id} — job detail. */
-        get: operations["get_job"];
+        get: operations["admin_jobs_job_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -677,7 +677,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job. */
-        post: operations["cancel"];
+        post: operations["admin_jobs_job_id_cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -694,7 +694,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job. */
-        post: operations["retry_job"];
+        post: operations["admin_jobs_job_id_retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -709,7 +709,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/logs — recent PMP log history. */
-        get: operations["history"];
+        get: operations["admin_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -731,7 +731,7 @@ export interface paths {
          * POST /api/v1/admin/logs/input — submit a PMP console command (full audit).
          * @description Requires an elevated reauth context; audit records the FINAL result.
          */
-        post: operations["submit_input"];
+        post: operations["admin_logs_input_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -746,10 +746,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/logs/translate?code=... — rule-based error translation. */
-        get: operations["translate_endpoint"];
+        get: operations["admin_logs_translate_get"];
         put?: never;
         /** POST /api/v1/admin/logs/translate — body-based error translation (contract §17). */
-        post: operations["translate_post"];
+        post: operations["admin_logs_translate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -764,7 +764,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/notifications/delivery — recent events + delivered counts. */
-        get: operations["delivery"];
+        get: operations["admin_notifications_delivery_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -783,7 +783,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/notifications/send — create an event + fan out inbox rows. */
-        post: operations["send"];
+        post: operations["admin_notifications_send_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -798,7 +798,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/permissions/manifest */
-        get: operations["manifest"];
+        get: operations["admin_permissions_manifest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -815,10 +815,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/plugins — list plugins. */
-        get: operations["list"];
+        get: operations["admin_plugins_get"];
         put?: never;
         /** POST /api/v1/admin/plugins — reload all plugins. */
-        post: operations["reload"];
+        post: operations["admin_plugins_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -835,7 +835,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/plugins/call — call a plugin API. */
-        post: operations["call"];
+        post: operations["admin_plugins_call_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -850,11 +850,11 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/plugins/{name} — plugin info. */
-        get: operations["info"];
+        get: operations["admin_plugins_name_get"];
         put?: never;
         post?: never;
         /** DELETE /api/v1/admin/plugins/{name} — remove a plugin. */
-        delete: operations["remove"];
+        delete: operations["admin_plugins_name_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -870,7 +870,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/plugins/{name}/disable — disable a plugin. */
-        post: operations["disable"];
+        post: operations["admin_plugins_name_disable_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -887,7 +887,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/plugins/{name}/enable — enable a plugin. */
-        post: operations["enable"];
+        post: operations["admin_plugins_name_enable_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -907,7 +907,7 @@ export interface paths {
          * POST /api/v1/admin/plugins/{name}/{action} — unified plugin action dispatch
          * @description (contract §17): enable | disable | reload | remove | call.
          */
-        post: operations["action_dispatch"];
+        post: operations["admin_plugins_name_action_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -922,10 +922,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/rooms — list rooms (admin superset). */
-        get: operations["admin_list_rooms"];
+        get: operations["admin_rooms_get"];
         put?: never;
         /** POST /api/v1/admin/rooms — create a room. */
-        post: operations["admin_create_room"];
+        post: operations["admin_rooms_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -945,7 +945,7 @@ export interface paths {
          * POST /api/v1/admin/rooms/actions/batch — batch room action (kick/move/ban)
          * @description with per-item results and partial failure.
          */
-        post: operations["admin_room_actions_batch"];
+        post: operations["admin_rooms_actions_batch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -960,11 +960,11 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/rooms/{room_id} — room detail (admin). */
-        get: operations["admin_room_info"];
+        get: operations["admin_rooms_room_id_get"];
         put?: never;
         post?: never;
         /** DELETE /api/v1/admin/rooms/{room_id} — close a room. */
-        delete: operations["admin_close_room"];
+        delete: operations["admin_rooms_room_id_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -983,7 +983,7 @@ export interface paths {
          * POST /api/v1/admin/rooms/{room_id}/actions — run a registered action scoped
          * @description to a room (admin-gated or host-allowed, re-derived host).
          */
-        post: operations["admin_room_action"];
+        post: operations["admin_rooms_room_id_actions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1003,7 +1003,7 @@ export interface paths {
          * POST /api/v1/admin/server/actions — unified server operation dispatch
          * @description (contract §17). config_reload / shutdown / roomcreation / connections.
          */
-        post: operations["server_actions"];
+        post: operations["admin_server_actions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1020,7 +1020,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/broadcast/all — server-wide system broadcast. */
-        post: operations["broadcast_all"];
+        post: operations["admin_server_broadcast_all_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1037,7 +1037,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/broadcast/room — room system broadcast. */
-        post: operations["broadcast_room"];
+        post: operations["admin_server_broadcast_room_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1054,7 +1054,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/broadcast/user — user system message. */
-        post: operations["broadcast_user"];
+        post: operations["admin_server_broadcast_user_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1071,7 +1071,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/config-reload — hot reload PMP config. */
-        post: operations["config_reload"];
+        post: operations["admin_server_config_reload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1088,7 +1088,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/roomcreation — toggle room creation gate. */
-        post: operations["room_creation"];
+        post: operations["admin_server_roomcreation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1103,7 +1103,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/server/runtime — runtime status. */
-        get: operations["runtime_status"];
+        get: operations["admin_server_runtime_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1122,7 +1122,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/admin/server/shutdown — shutdown PMP (critical reauth). */
-        post: operations["shutdown"];
+        post: operations["admin_server_shutdown_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1137,7 +1137,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/server/stats — PMP server stats. */
-        get: operations["server_stats"];
+        get: operations["admin_server_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1154,7 +1154,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/server/status — scaffold summary. */
-        get: operations["server_status"];
+        get: operations["admin_server_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1171,7 +1171,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users — search PPB accounts (by phira_id or username). */
-        get: operations["list_users"];
+        get: operations["admin_users_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1188,7 +1188,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users/{user_id} — PPB account + PMP player info. */
-        get: operations["user_detail"];
+        get: operations["admin_users_user_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1211,7 +1211,7 @@ export interface paths {
          * @description POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a
          *     user (e.g. player.kick / player.ban). The phira_id is injected as user_id.
          */
-        post: operations["user_actions"];
+        post: operations["admin_users_user_id_actions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1226,7 +1226,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users/{id}/audit — audit events targeting this user. */
-        get: operations["user_audit"];
+        get: operations["admin_users_user_id_audit_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1243,7 +1243,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users/{id}/multiplayer — PMP player + presence (best-effort). */
-        get: operations["user_multiplayer"];
+        get: operations["admin_users_user_id_multiplayer_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1260,7 +1260,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort). */
-        get: operations["user_security"];
+        get: operations["admin_users_user_id_security_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1277,7 +1277,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions. */
-        get: operations["user_sessions"];
+        get: operations["admin_users_user_id_sessions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1296,7 +1296,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Revoke the session and clear cookies. */
-        post: operations["logout"];
+        post: operations["auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1313,7 +1313,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Phira email/password login (sets access + refresh cookies). */
-        post: operations["phira_login"];
+        post: operations["auth_phira_login_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1330,7 +1330,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Issue a short-lived reauth context (`X-Reauth-Token`) for elevated actions. */
-        post: operations["phira_reauth"];
+        post: operations["auth_phira_reauth_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1347,7 +1347,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Rotate the refresh token and issue a new access token. */
-        post: operations["refresh"];
+        post: operations["auth_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1362,7 +1362,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/charts — chart list (paginated). */
-        get: operations["chart_list"];
+        get: operations["charts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1379,7 +1379,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/charts/popular — popular charts. */
-        get: operations["chart_popular"];
+        get: operations["charts_popular_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1396,7 +1396,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/charts/{id} — chart detail. */
-        get: operations["chart_detail"];
+        get: operations["charts_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1417,7 +1417,7 @@ export interface paths {
          * @description Preferred path is the browser fetching the Phira CDN file directly; this
          *     route is used only when CORS blocks the direct download.
          */
-        get: operations["chart_preview"];
+        get: operations["charts_id_preview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1434,7 +1434,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/charts/{id}/records — chart records. */
-        get: operations["chart_records"];
+        get: operations["charts_id_records_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1451,7 +1451,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/charts/{id}/top — chart top records. */
-        get: operations["chart_top"];
+        get: operations["charts_id_top_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1471,7 +1471,7 @@ export interface paths {
          * GET /api/v1/charts/{id}/viewer — bincode `(ChartInfo, Chart)` varint blob
          * @description (contract §19). Uses the same TTL-cached chart file as `/preview`.
          */
-        get: operations["chart_viewer"];
+        get: operations["charts_id_viewer_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1488,7 +1488,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/friends — the caller's friend list (paginated). */
-        get: operations["list"];
+        get: operations["friends_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1505,10 +1505,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/friends/requests — incoming + outgoing friend requests. */
-        get: operations["list_requests"];
+        get: operations["friends_requests_get"];
         put?: never;
         /** POST /api/v1/friends/requests — send a friend request by Phira id. */
-        post: operations["send_request"];
+        post: operations["friends_requests_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1525,7 +1525,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/friends/requests/{id}/accept — accept a friend request. */
-        post: operations["respond_accept"];
+        post: operations["friends_requests_request_id_accept_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1542,7 +1542,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/friends/requests/{id}/reject — reject a friend request. */
-        post: operations["respond_reject"];
+        post: operations["friends_requests_request_id_reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1559,7 +1559,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/friends/{phira_id}/remove — remove a friend by Phira id (§21). */
-        post: operations["friend_remove"];
+        post: operations["friends_phira_id_remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1579,7 +1579,7 @@ export interface paths {
          *     with permissions resolved at runtime (never baked into the JWT), plus the
          *     session-bound `csrf_token` for state-changing requests.
          */
-        get: operations["me"];
+        get: operations["me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1596,7 +1596,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/me/identities — identity bindings for the current user. */
-        get: operations["me_identities"];
+        get: operations["me_identities_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1613,10 +1613,10 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/me/join-intents — list the caller's active join intents. */
-        get: operations["me_join_intents"];
+        get: operations["me_join_intents_get"];
         put?: never;
         /** POST /api/v1/me/join-intents — create a short-lived join intent (design §14.6). */
-        post: operations["me_join_intent_create"];
+        post: operations["me_join_intents_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1634,11 +1634,11 @@ export interface paths {
          * GET /api/v1/me/join-intents/{id} — poll an intent's status
          * @description (`pending | user_online | moving | completed | failed | expired`, §21).
          */
-        get: operations["me_join_intent_get"];
+        get: operations["me_join_intents_intent_id_get"];
         put?: never;
         post?: never;
         /** DELETE /api/v1/me/join-intents/{id} — cancel a join intent. */
-        delete: operations["me_join_intent_cancel"];
+        delete: operations["me_join_intents_intent_id_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1652,7 +1652,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/me/preferences — all namespaces for the current user. */
-        get: operations["me_preferences"];
+        get: operations["me_preferences_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1669,12 +1669,12 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/me/preferences/{namespace} — one namespaced preference. */
-        get: operations["get_one"];
+        get: operations["me_preferences_namespace_get"];
         /** PUT /api/v1/me/preferences/{namespace} — upsert with optimistic concurrency. */
-        put: operations["update"];
+        put: operations["me_preferences_namespace_put"];
         post?: never;
         /** DELETE /api/v1/me/preferences/{namespace} — delete a namespaced preference. */
-        delete: operations["delete_one"];
+        delete: operations["me_preferences_namespace_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1693,7 +1693,7 @@ export interface paths {
          *     `online_status` (presence), `friends_count` (PPB social). Each is `null`
          *     when the source is unavailable; frontends render a placeholder (`—`).
          */
-        get: operations["me_profile"];
+        get: operations["me_profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1710,13 +1710,13 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/me/push-endpoints — list the caller's registered push endpoints. */
-        get: operations["me_push_endpoints"];
+        get: operations["me_push_endpoints_get"];
         put?: never;
         /**
          * POST /api/v1/me/push-endpoints — register a push endpoint (subscription
          * @description material encrypted at rest with the deployment key).
          */
-        post: operations["me_push_endpoint_register"];
+        post: operations["me_push_endpoints_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1734,7 +1734,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** DELETE /api/v1/me/push-endpoints/{id} — remove a push endpoint. */
-        delete: operations["me_push_endpoint_delete"];
+        delete: operations["me_push_endpoints_endpoint_id_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1748,7 +1748,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/notifications — inbox (paginated + unread). */
-        get: operations["list"];
+        get: operations["notifications_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1767,7 +1767,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd). */
-        post: operations["action"];
+        post: operations["notifications_id_action_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1784,7 +1784,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/notifications/{id}/dismiss — dismiss (hide from inbox). */
-        post: operations["dismiss"];
+        post: operations["notifications_id_dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1801,7 +1801,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/notifications/{id}/input — reply (contract §8: goes to room.chat_send). */
-        post: operations["input"];
+        post: operations["notifications_id_input_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1818,7 +1818,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/notifications/{id}/read — mark read. */
-        post: operations["read"];
+        post: operations["notifications_id_read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1833,7 +1833,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/public/announcements — public runtime content. */
-        get: operations["announcements"];
+        get: operations["public_announcements_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1850,7 +1850,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/public/downloads — public runtime content. */
-        get: operations["downloads"];
+        get: operations["public_downloads_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1867,7 +1867,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/public/meta — capabilities / meta contract. */
-        get: operations["meta"];
+        get: operations["public_meta_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1884,7 +1884,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/public/nodes — public runtime content. */
-        get: operations["nodes"];
+        get: operations["public_nodes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1906,7 +1906,7 @@ export interface paths {
          *     (`site.visit_count`), plus a server-side in-memory counter incremented on
          *     each fetch. No client fingerprint is used; defaults to 0 when unset.
          */
-        get: operations["site"];
+        get: operations["public_site_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1923,7 +1923,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/records — records by player. */
-        get: operations["records_by_player"];
+        get: operations["records_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1940,7 +1940,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/records/list15/{chart_id} — chart top-15 records. */
-        get: operations["records_list15"];
+        get: operations["records_list15_chart_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1957,7 +1957,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/records/pool/{user_id} — user record pool. */
-        get: operations["records_pool"];
+        get: operations["records_pool_user_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1974,7 +1974,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/records/query/{chart_id} — chart records query. */
-        get: operations["records_query"];
+        get: operations["records_query_chart_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1991,7 +1991,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/records/{id} — single record detail. */
-        get: operations["record_detail"];
+        get: operations["records_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2011,7 +2011,7 @@ export interface paths {
          * GET /api/v1/replays/share/{token} — resolve an opaque share token to the
          * @description pinned `(round_uuid, player_phira_id)` (S-3).
          */
-        get: operations["resolve_share"];
+        get: operations["replays_share_token_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2031,7 +2031,7 @@ export interface paths {
          * GET /api/v1/replays/{round_uuid}?player_id=... — summary + visibility
          * @description (access-enforced for the pair).
          */
-        get: operations["detail"];
+        get: operations["replays_round_uuid_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2051,7 +2051,7 @@ export interface paths {
          * GET /api/v1/replays/{round_uuid}/manifest?player_id=... — frame counts /
          * @description players / range (access-enforced for the pair).
          */
-        get: operations["manifest"];
+        get: operations["replays_round_uuid_manifest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2068,7 +2068,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/rooms — list rooms (is_self enrichment when authenticated). */
-        get: operations["list_rooms"];
+        get: operations["rooms_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2085,7 +2085,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/rooms/{room_id} — room detail (is_self enrichment). */
-        get: operations["room_info"];
+        get: operations["rooms_room_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2104,7 +2104,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/rooms/{room_id}/actions — contract §18 body form `{action, args}`. */
-        post: operations["room_action_body"];
+        post: operations["rooms_room_id_actions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2124,7 +2124,7 @@ export interface paths {
          * POST /api/v1/rooms/{room_id}/chat — send a room chat message as the caller.
          * @description Client must not specify a trusted user_id (design §13.3).
          */
-        post: operations["send_chat"];
+        post: operations["rooms_room_id_chat_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2139,7 +2139,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/rooms/{room_id}/history — PMP room.history (rounds + scores). */
-        get: operations["room_history"];
+        get: operations["rooms_room_id_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2156,7 +2156,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/users — search Phira users. */
-        get: operations["users_search"];
+        get: operations["users_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2173,7 +2173,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/users/{phira_id} — Phira user profile. */
-        get: operations["user_detail"];
+        get: operations["users_phira_id_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2192,7 +2192,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** POST /api/v1/users/{phira_id}/block — block a user by Phira id. */
-        post: operations["block"];
+        post: operations["users_phira_id_block_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2207,7 +2207,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /api/v1/users/{phira_id}/stats — Phira user stats (rks). */
-        get: operations["user_stats"];
+        get: operations["users_phira_id_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2453,7 +2453,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_actions: {
+    admin_actions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2482,7 +2482,7 @@ export interface operations {
             };
         };
     };
-    execute_action: {
+    admin_actions_action_id_execute_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2517,7 +2517,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_audit_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2546,7 +2546,7 @@ export interface operations {
             };
         };
     };
-    export: {
+    admin_audit_export_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2575,7 +2575,7 @@ export interface operations {
             };
         };
     };
-    export_csv: {
+    admin_audit_export_csv_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2604,7 +2604,7 @@ export interface operations {
             };
         };
     };
-    detail: {
+    admin_audit_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2635,7 +2635,7 @@ export interface operations {
             };
         };
     };
-    root_change_password: {
+    admin_auth_root_change_password_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2666,7 +2666,7 @@ export interface operations {
             };
         };
     };
-    root_login: {
+    admin_auth_root_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2699,7 +2699,7 @@ export interface operations {
             };
         };
     };
-    root_session: {
+    admin_auth_root_session_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2728,7 +2728,7 @@ export interface operations {
             };
         };
     };
-    runs: {
+    admin_automation_runbook_runs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2757,7 +2757,7 @@ export interface operations {
             };
         };
     };
-    get_run: {
+    admin_automation_runbook_runs_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2788,7 +2788,7 @@ export interface operations {
             };
         };
     };
-    cancel_run: {
+    admin_automation_runbook_runs_id_cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2819,7 +2819,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_automation_runbooks_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2848,7 +2848,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    admin_automation_runbooks_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2881,7 +2881,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    admin_automation_runbooks_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2912,7 +2912,7 @@ export interface operations {
             };
         };
     };
-    delete_runbook: {
+    admin_automation_runbooks_id_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2941,7 +2941,7 @@ export interface operations {
             };
         };
     };
-    update: {
+    admin_automation_runbooks_id_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2976,7 +2976,7 @@ export interface operations {
             };
         };
     };
-    run: {
+    admin_automation_runbooks_id_run_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3011,7 +3011,7 @@ export interface operations {
             };
         };
     };
-    list_commands: {
+    admin_commands_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3040,7 +3040,7 @@ export interface operations {
             };
         };
     };
-    execute_command: {
+    admin_commands_execute_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3073,7 +3073,7 @@ export interface operations {
             };
         };
     };
-    descriptors: {
+    admin_config_descriptors_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3102,7 +3102,7 @@ export interface operations {
             };
         };
     };
-    diff: {
+    admin_config_diff_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3135,7 +3135,7 @@ export interface operations {
             };
         };
     };
-    ppb_config: {
+    admin_config_ppb_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3164,7 +3164,7 @@ export interface operations {
             };
         };
     };
-    ppf_config: {
+    admin_config_ppf_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3193,7 +3193,7 @@ export interface operations {
             };
         };
     };
-    raw: {
+    admin_config_raw_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3222,7 +3222,7 @@ export interface operations {
             };
         };
     };
-    rollback: {
+    admin_config_rollback_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3255,7 +3255,7 @@ export interface operations {
             };
         };
     };
-    save: {
+    admin_config_save_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3288,7 +3288,7 @@ export interface operations {
             };
         };
     };
-    snapshots: {
+    admin_config_snapshots_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3317,7 +3317,7 @@ export interface operations {
             };
         };
     };
-    validate: {
+    admin_config_validate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3350,7 +3350,7 @@ export interface operations {
             };
         };
     };
-    values: {
+    admin_config_values_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3379,7 +3379,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_coupons_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3408,7 +3408,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    admin_coupons_create_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3441,7 +3441,7 @@ export interface operations {
             };
         };
     };
-    revoke: {
+    admin_coupons_id_revoke_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3470,7 +3470,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_groups_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3499,7 +3499,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    admin_groups_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3532,7 +3532,7 @@ export interface operations {
             };
         };
     };
-    detail: {
+    admin_groups_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3563,7 +3563,7 @@ export interface operations {
             };
         };
     };
-    delete_group: {
+    admin_groups_id_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3592,7 +3592,7 @@ export interface operations {
             };
         };
     };
-    rename: {
+    admin_groups_id_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -3625,7 +3625,7 @@ export interface operations {
             };
         };
     };
-    replace_members: {
+    admin_groups_id_members_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3658,7 +3658,7 @@ export interface operations {
             };
         };
     };
-    replace_permissions: {
+    admin_groups_id_permissions_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3691,7 +3691,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_jobs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3720,7 +3720,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    admin_jobs_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3753,7 +3753,7 @@ export interface operations {
             };
         };
     };
-    list_tasks: {
+    admin_jobs_tasks_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3782,7 +3782,7 @@ export interface operations {
             };
         };
     };
-    complete_task: {
+    admin_jobs_tasks_task_id_complete_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3813,7 +3813,7 @@ export interface operations {
             };
         };
     };
-    get_job: {
+    admin_jobs_job_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3844,7 +3844,7 @@ export interface operations {
             };
         };
     };
-    cancel: {
+    admin_jobs_job_id_cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3875,7 +3875,7 @@ export interface operations {
             };
         };
     };
-    retry_job: {
+    admin_jobs_job_id_retry_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3906,7 +3906,7 @@ export interface operations {
             };
         };
     };
-    history: {
+    admin_logs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3935,7 +3935,7 @@ export interface operations {
             };
         };
     };
-    submit_input: {
+    admin_logs_input_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3968,7 +3968,7 @@ export interface operations {
             };
         };
     };
-    translate_endpoint: {
+    admin_logs_translate_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3997,7 +3997,7 @@ export interface operations {
             };
         };
     };
-    translate_post: {
+    admin_logs_translate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4030,7 +4030,7 @@ export interface operations {
             };
         };
     };
-    delivery: {
+    admin_notifications_delivery_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4059,7 +4059,7 @@ export interface operations {
             };
         };
     };
-    send: {
+    admin_notifications_send_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4092,7 +4092,7 @@ export interface operations {
             };
         };
     };
-    manifest: {
+    admin_permissions_manifest_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4121,7 +4121,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    admin_plugins_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4150,7 +4150,7 @@ export interface operations {
             };
         };
     };
-    reload: {
+    admin_plugins_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4179,7 +4179,7 @@ export interface operations {
             };
         };
     };
-    call: {
+    admin_plugins_call_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4212,7 +4212,7 @@ export interface operations {
             };
         };
     };
-    info: {
+    admin_plugins_name_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4243,7 +4243,7 @@ export interface operations {
             };
         };
     };
-    remove: {
+    admin_plugins_name_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -4272,7 +4272,7 @@ export interface operations {
             };
         };
     };
-    disable: {
+    admin_plugins_name_disable_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4303,7 +4303,7 @@ export interface operations {
             };
         };
     };
-    enable: {
+    admin_plugins_name_enable_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4334,7 +4334,7 @@ export interface operations {
             };
         };
     };
-    action_dispatch: {
+    admin_plugins_name_action_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4370,7 +4370,7 @@ export interface operations {
             };
         };
     };
-    admin_list_rooms: {
+    admin_rooms_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4399,7 +4399,7 @@ export interface operations {
             };
         };
     };
-    admin_create_room: {
+    admin_rooms_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4432,7 +4432,7 @@ export interface operations {
             };
         };
     };
-    admin_room_actions_batch: {
+    admin_rooms_actions_batch_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4465,7 +4465,7 @@ export interface operations {
             };
         };
     };
-    admin_room_info: {
+    admin_rooms_room_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4496,7 +4496,7 @@ export interface operations {
             };
         };
     };
-    admin_close_room: {
+    admin_rooms_room_id_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -4527,7 +4527,7 @@ export interface operations {
             };
         };
     };
-    admin_room_action: {
+    admin_rooms_room_id_actions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4562,7 +4562,7 @@ export interface operations {
             };
         };
     };
-    server_actions: {
+    admin_server_actions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4595,7 +4595,7 @@ export interface operations {
             };
         };
     };
-    broadcast_all: {
+    admin_server_broadcast_all_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4628,7 +4628,7 @@ export interface operations {
             };
         };
     };
-    broadcast_room: {
+    admin_server_broadcast_room_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4661,7 +4661,7 @@ export interface operations {
             };
         };
     };
-    broadcast_user: {
+    admin_server_broadcast_user_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4694,7 +4694,7 @@ export interface operations {
             };
         };
     };
-    config_reload: {
+    admin_server_config_reload_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4723,7 +4723,7 @@ export interface operations {
             };
         };
     };
-    room_creation: {
+    admin_server_roomcreation_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4756,7 +4756,7 @@ export interface operations {
             };
         };
     };
-    runtime_status: {
+    admin_server_runtime_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4785,7 +4785,7 @@ export interface operations {
             };
         };
     };
-    shutdown: {
+    admin_server_shutdown_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4814,7 +4814,7 @@ export interface operations {
             };
         };
     };
-    server_stats: {
+    admin_server_stats_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4843,7 +4843,7 @@ export interface operations {
             };
         };
     };
-    server_status: {
+    admin_server_status_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4872,7 +4872,7 @@ export interface operations {
             };
         };
     };
-    list_users: {
+    admin_users_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4901,7 +4901,7 @@ export interface operations {
             };
         };
     };
-    user_detail: {
+    admin_users_user_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4932,7 +4932,7 @@ export interface operations {
             };
         };
     };
-    user_actions: {
+    admin_users_user_id_actions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4967,7 +4967,7 @@ export interface operations {
             };
         };
     };
-    user_audit: {
+    admin_users_user_id_audit_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4998,7 +4998,7 @@ export interface operations {
             };
         };
     };
-    user_multiplayer: {
+    admin_users_user_id_multiplayer_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5029,7 +5029,7 @@ export interface operations {
             };
         };
     };
-    user_security: {
+    admin_users_user_id_security_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5060,7 +5060,7 @@ export interface operations {
             };
         };
     };
-    user_sessions: {
+    admin_users_user_id_sessions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5091,7 +5091,7 @@ export interface operations {
             };
         };
     };
-    logout: {
+    auth_logout_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5118,7 +5118,7 @@ export interface operations {
             };
         };
     };
-    phira_login: {
+    auth_phira_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5151,7 +5151,7 @@ export interface operations {
             };
         };
     };
-    phira_reauth: {
+    auth_phira_reauth_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5184,7 +5184,7 @@ export interface operations {
             };
         };
     };
-    refresh: {
+    auth_refresh_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5213,7 +5213,7 @@ export interface operations {
             };
         };
     };
-    chart_list: {
+    charts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5242,7 +5242,7 @@ export interface operations {
             };
         };
     };
-    chart_popular: {
+    charts_popular_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5271,7 +5271,7 @@ export interface operations {
             };
         };
     };
-    chart_detail: {
+    charts_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5302,7 +5302,7 @@ export interface operations {
             };
         };
     };
-    chart_preview: {
+    charts_id_preview_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5333,7 +5333,7 @@ export interface operations {
             };
         };
     };
-    chart_records: {
+    charts_id_records_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5364,7 +5364,7 @@ export interface operations {
             };
         };
     };
-    chart_top: {
+    charts_id_top_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5395,7 +5395,7 @@ export interface operations {
             };
         };
     };
-    chart_viewer: {
+    charts_id_viewer_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5426,7 +5426,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    friends_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5455,7 +5455,7 @@ export interface operations {
             };
         };
     };
-    list_requests: {
+    friends_requests_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5484,7 +5484,7 @@ export interface operations {
             };
         };
     };
-    send_request: {
+    friends_requests_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5517,7 +5517,7 @@ export interface operations {
             };
         };
     };
-    respond_accept: {
+    friends_requests_request_id_accept_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5546,7 +5546,7 @@ export interface operations {
             };
         };
     };
-    respond_reject: {
+    friends_requests_request_id_reject_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5575,7 +5575,7 @@ export interface operations {
             };
         };
     };
-    friend_remove: {
+    friends_phira_id_remove_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5604,7 +5604,7 @@ export interface operations {
             };
         };
     };
-    me: {
+    me_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5633,7 +5633,7 @@ export interface operations {
             };
         };
     };
-    me_identities: {
+    me_identities_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5662,7 +5662,7 @@ export interface operations {
             };
         };
     };
-    me_join_intents: {
+    me_join_intents_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5691,7 +5691,7 @@ export interface operations {
             };
         };
     };
-    me_join_intent_create: {
+    me_join_intents_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5724,7 +5724,7 @@ export interface operations {
             };
         };
     };
-    me_join_intent_get: {
+    me_join_intents_intent_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5755,7 +5755,7 @@ export interface operations {
             };
         };
     };
-    me_join_intent_cancel: {
+    me_join_intents_intent_id_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -5784,7 +5784,7 @@ export interface operations {
             };
         };
     };
-    me_preferences: {
+    me_preferences_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5813,7 +5813,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    me_preferences_namespace_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5844,7 +5844,7 @@ export interface operations {
             };
         };
     };
-    update: {
+    me_preferences_namespace_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -5879,7 +5879,7 @@ export interface operations {
             };
         };
     };
-    delete_one: {
+    me_preferences_namespace_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -5908,7 +5908,7 @@ export interface operations {
             };
         };
     };
-    me_profile: {
+    me_profile_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5937,7 +5937,7 @@ export interface operations {
             };
         };
     };
-    me_push_endpoints: {
+    me_push_endpoints_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5966,7 +5966,7 @@ export interface operations {
             };
         };
     };
-    me_push_endpoint_register: {
+    me_push_endpoints_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5999,7 +5999,7 @@ export interface operations {
             };
         };
     };
-    me_push_endpoint_delete: {
+    me_push_endpoints_endpoint_id_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -6028,7 +6028,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    notifications_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6057,7 +6057,7 @@ export interface operations {
             };
         };
     };
-    action: {
+    notifications_id_action_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6092,7 +6092,7 @@ export interface operations {
             };
         };
     };
-    dismiss: {
+    notifications_id_dismiss_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6121,7 +6121,7 @@ export interface operations {
             };
         };
     };
-    input: {
+    notifications_id_input_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6156,7 +6156,7 @@ export interface operations {
             };
         };
     };
-    read: {
+    notifications_id_read_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6185,7 +6185,7 @@ export interface operations {
             };
         };
     };
-    announcements: {
+    public_announcements_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6205,7 +6205,7 @@ export interface operations {
             };
         };
     };
-    downloads: {
+    public_downloads_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6225,7 +6225,7 @@ export interface operations {
             };
         };
     };
-    meta: {
+    public_meta_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6245,7 +6245,7 @@ export interface operations {
             };
         };
     };
-    nodes: {
+    public_nodes_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6265,7 +6265,7 @@ export interface operations {
             };
         };
     };
-    site: {
+    public_site_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6285,7 +6285,7 @@ export interface operations {
             };
         };
     };
-    records_by_player: {
+    records_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6314,7 +6314,7 @@ export interface operations {
             };
         };
     };
-    records_list15: {
+    records_list15_chart_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6345,7 +6345,7 @@ export interface operations {
             };
         };
     };
-    records_pool: {
+    records_pool_user_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6376,7 +6376,7 @@ export interface operations {
             };
         };
     };
-    records_query: {
+    records_query_chart_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6407,7 +6407,7 @@ export interface operations {
             };
         };
     };
-    record_detail: {
+    records_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6438,7 +6438,7 @@ export interface operations {
             };
         };
     };
-    resolve_share: {
+    replays_share_token_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6469,7 +6469,7 @@ export interface operations {
             };
         };
     };
-    detail: {
+    replays_round_uuid_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6500,7 +6500,7 @@ export interface operations {
             };
         };
     };
-    manifest: {
+    replays_round_uuid_manifest_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6531,7 +6531,7 @@ export interface operations {
             };
         };
     };
-    list_rooms: {
+    rooms_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6560,7 +6560,7 @@ export interface operations {
             };
         };
     };
-    room_info: {
+    rooms_room_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6591,7 +6591,7 @@ export interface operations {
             };
         };
     };
-    room_action_body: {
+    rooms_room_id_actions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6635,7 +6635,7 @@ export interface operations {
             };
         };
     };
-    send_chat: {
+    rooms_room_id_chat_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6670,7 +6670,7 @@ export interface operations {
             };
         };
     };
-    room_history: {
+    rooms_room_id_history_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6701,7 +6701,7 @@ export interface operations {
             };
         };
     };
-    users_search: {
+    users_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6730,7 +6730,7 @@ export interface operations {
             };
         };
     };
-    user_detail: {
+    users_phira_id_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6761,7 +6761,7 @@ export interface operations {
             };
         };
     };
-    block: {
+    users_phira_id_block_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6790,7 +6790,7 @@ export interface operations {
             };
         };
     };
-    user_stats: {
+    users_phira_id_stats_get: {
         parameters: {
             query?: never;
             header?: never;
