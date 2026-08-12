@@ -135,7 +135,7 @@ pub async fn detail(
     Ok(Json(serde_json::json!({
         "group": group,
         "permissions": permissions,
-        "effectivePermissions": effective,
+        "effective_permissions": effective,
         "members": members,
     })))
 }

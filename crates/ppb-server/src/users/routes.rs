@@ -341,11 +341,11 @@ pub async fn user_sessions(
         .map(|(id, client_type, device_name, ip, created_at, revoked_at)| {
             json!({
                 "id": id,
-                "clientType": client_type,
-                "deviceName": device_name,
+                "client_type": client_type,
+                "device_name": device_name,
                 "ip": ip,
-                "createdAt": created_at,
-                "revokedAt": revoked_at,
+                "created_at": created_at,
+                "revoked_at": revoked_at,
             })
         })
         .collect();

@@ -17,7 +17,8 @@ use crate::actions::routes as action_routes;
 use crate::app::AppState;
 use crate::auth::routes as auth_routes;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 use crate::permissions::routes as permission_routes;
 use crate::pmp::events::{PpbEvent, ReplayResult};
 
@@ -25,6 +26,12 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
+        // Alias: Panel `fetchServerStatus` calls `/admin/server`.
+        .route("/server", get(server_status))
+        // Alias: Panel `fetchPermissionManifest` calls `/admin/permissions`.
+        .route("/permissions", get(crate::permissions::routes::manifest))
+        // Alias: Panel `fetchRunbookRuns` calls `/admin/runbook-runs`.
+        .route("/runbook-runs", get(crate::automation::routes::runs))
         .route("/auth/reauth", post(crate::auth::routes::phira_reauth))
         .merge(crate::audit::routes::routes())
         .merge(crate::config::routes::routes())
@@ -89,6 +96,15 @@ pub async fn admin_events_sse(
 }
 
 /// GET /api/v1/admin/server/status — scaffold summary.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/server/status",
+    responses(
+        (status = 200, description = "server status", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
 pub async fn server_status(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
