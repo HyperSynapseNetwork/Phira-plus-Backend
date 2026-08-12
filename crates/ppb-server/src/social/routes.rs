@@ -37,7 +37,7 @@ pub struct PageParams {
     pub page_num: Option<i64>,
 }
 
-fn paginate<T>(items: Vec<T>, page: i64, page_num: i64) -> (Vec<T>, i64) {
+fn paginate<T: Clone>(items: Vec<T>, page: i64, page_num: i64) -> (Vec<T>, i64) {
     let total = items.len() as i64;
     let page = page.max(1);
     let page_num = page_num.clamp(1, 100);
