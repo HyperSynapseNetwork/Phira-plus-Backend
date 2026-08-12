@@ -2470,6 +2470,12 @@ export interface components {
             user_id: string;
             username: string;
         };
+        /** @description A user's group membership reference (§23 `{id,name}`). */
+        GroupRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         InputBody: {
             text: string;
         };
@@ -2658,6 +2664,18 @@ export interface components {
             pmp: components["schemas"]["PmpStatus"];
             ppb_version: string;
         };
+        /** @description One session row (§23 #5). */
+        SessionItem: {
+            client_type: string;
+            /** Format: date-time */
+            created_at: string;
+            device_name: string;
+            /** Format: uuid */
+            id: string;
+            ip: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
         /** @description Encrypted subscription wire shape (before encryption at rest). */
         SubscriptionWire: {
             auth: string;
@@ -2666,6 +2684,17 @@ export interface components {
         };
         TranslateParams: {
             code: string;
+        };
+        /** @description Typed translation response (§23 `{code, translated}`). */
+        TranslateResponse: {
+            code: string;
+            translated?: components["schemas"]["TranslatedError"] | null;
+        };
+        TranslatedError: {
+            description: string;
+            module: string;
+            severity: string;
+            title: string;
         };
         UpdatePreferencesBody: {
             /** Format: int64 */
@@ -2676,10 +2705,10 @@ export interface components {
             action: string;
             args?: unknown;
         };
-        /** @description User detail response (§22 `{account, groups, player}`). */
+        /** @description User detail response (§22/§23 `{account, groups:[{id,name}], player}`). */
         UserDetailResponse: {
             account: components["schemas"]["AdminUserItem"];
-            groups: string[];
+            groups: components["schemas"]["GroupRef"][];
             /** @description Best-effort PMP player info (dynamic payload; null when PMP offline). */
             player?: unknown;
         };
@@ -2693,6 +2722,23 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        /**
+         * @description User multiplayer subview (§23 #5: presence/current_room/ban_state typed;
+         *     playtime/rounds/replay counts null when PMP doesn't provide them).
+         */
+        UserMultiplayerResponse: {
+            ban_state: boolean;
+            current_room?: string | null;
+            online: boolean;
+            /** Format: int64 */
+            phira_id: number;
+            /** Format: int64 */
+            playtime_secs?: number | null;
+            /** Format: int64 */
+            replay_count?: number | null;
+            /** Format: int64 */
+            rounds_played?: number | null;
+        };
         UserPreference: {
             data: unknown;
             namespace: string;
@@ -2702,6 +2748,23 @@ export interface components {
             updated_at: string;
             /** Format: uuid */
             user_id: string;
+        };
+        /**
+         * @description User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans
+         *     and banned_at null when PMP doesn't expose them).
+         */
+        UserSecurityResponse: {
+            ban_reason?: string | null;
+            ban_state: boolean;
+            banned_at?: unknown;
+            ip_bans?: unknown;
+            ip_history: unknown[];
+            /** Format: int64 */
+            phira_id: number;
+        };
+        /** @description User sessions subview (§23 #5). */
+        UserSessionsResponse: {
+            items: components["schemas"]["SessionItem"][];
         };
     };
     responses: never;
@@ -4244,7 +4307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TranslateResponse"];
                 };
             };
             /** @description permission denied */
@@ -4277,7 +4340,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TranslateResponse"];
                 };
             };
             /** @description permission denied */
@@ -5276,7 +5339,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["UserMultiplayerResponse"];
                 };
             };
             /** @description permission denied */
@@ -5307,7 +5370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["UserSecurityResponse"];
                 };
             };
             /** @description permission denied */
@@ -5338,7 +5401,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["UserSessionsResponse"];
                 };
             };
             /** @description permission denied */

@@ -1789,7 +1789,9 @@
             "description": "translated log message",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
               }
             }
           },
@@ -1826,7 +1828,9 @@
             "description": "translated log message",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
               }
             }
           },
@@ -3005,7 +3009,9 @@
             "description": "player + presence",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserMultiplayerResponse"
+                }
               }
             }
           },
@@ -3045,7 +3051,9 @@
             "description": "user security state",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserSecurityResponse"
+                }
               }
             }
           },
@@ -3085,7 +3093,9 @@
             "description": "user sessions",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserSessionsResponse"
+                }
               }
             }
           },
@@ -5881,6 +5891,23 @@
           }
         }
       },
+      "GroupRef": {
+        "type": "object",
+        "description": "A user's group membership reference (§23 `{id,name}`).",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "InputBody": {
         "type": "object",
         "required": [
@@ -6477,6 +6504,41 @@
           }
         }
       },
+      "SessionItem": {
+        "type": "object",
+        "description": "One session row (§23 #5).",
+        "required": [
+          "id",
+          "client_type",
+          "device_name",
+          "ip",
+          "created_at"
+        ],
+        "properties": {
+          "client_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
       "SubscriptionWire": {
         "type": "object",
         "description": "Encrypted subscription wire shape (before encryption at rest).",
@@ -6504,6 +6566,49 @@
         ],
         "properties": {
           "code": {
+            "type": "string"
+          }
+        }
+      },
+      "TranslateResponse": {
+        "type": "object",
+        "description": "Typed translation response (§23 `{code, translated}`).",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "translated": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranslatedError"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "TranslatedError": {
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "module",
+          "severity"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "title": {
             "type": "string"
           }
         }
@@ -6536,7 +6641,7 @@
       },
       "UserDetailResponse": {
         "type": "object",
-        "description": "User detail response (§22 `{account, groups, player}`).",
+        "description": "User detail response (§22/§23 `{account, groups:[{id,name}], player}`).",
         "required": [
           "account",
           "groups"
@@ -6548,7 +6653,7 @@
           "groups": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GroupRef"
             }
           },
           "player": {
@@ -6587,6 +6692,46 @@
           }
         }
       },
+      "UserMultiplayerResponse": {
+        "type": "object",
+        "description": "User multiplayer subview (§23 #5: presence/current_room/ban_state typed;\nplaytime/rounds/replay counts null when PMP doesn't provide them).",
+        "required": [
+          "phira_id",
+          "online",
+          "ban_state"
+        ],
+        "properties": {
+          "ban_state": {
+            "type": "boolean"
+          },
+          "current_room": {
+            "type": "string",
+            "nullable": true
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "playtime_secs": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "replay_count": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rounds_played": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
       "UserPreference": {
         "type": "object",
         "required": [
@@ -6612,6 +6757,53 @@
           "user_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "UserSecurityResponse": {
+        "type": "object",
+        "description": "User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans\nand banned_at null when PMP doesn't expose them).",
+        "required": [
+          "phira_id",
+          "ban_state",
+          "ip_history"
+        ],
+        "properties": {
+          "ban_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "ban_state": {
+            "type": "boolean"
+          },
+          "banned_at": {
+            "nullable": true
+          },
+          "ip_bans": {
+            "nullable": true
+          },
+          "ip_history": {
+            "type": "array",
+            "items": {}
+          },
+          "phira_id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "UserSessionsResponse": {
+        "type": "object",
+        "description": "User sessions subview (§23 #5).",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionItem"
+            }
           }
         }
       }
