@@ -16,7 +16,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
-use super::translator::{translate, translate_pattern};
+use super::translator::{translate, translate_pattern, TranslatedError};
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
@@ -175,13 +175,20 @@ async fn stream(
     ))
 }
 
+/// Typed translation response (§23 `{code, translated}`).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct TranslateResponse {
+    pub code: String,
+    pub translated: Option<TranslatedError>,
+}
+
 /// GET /api/v1/admin/logs/translate?code=... — rule-based error translation.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/logs/translate",
     operation_id = "admin_logs_translate_get",
     responses(
-        (status = 200, description = "translated log message", body = serde_json::Value),
+        (status = 200, description = "translated log message", body = TranslateResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -190,10 +197,10 @@ pub async fn translate_endpoint(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<TranslateParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
-    let t = translate(&params.code).or_else(|| translate_pattern(&params.code));
-    Ok(Json(json!({ "code": params.code, "translated": t })))
+    let translated = translate(&params.code).or_else(|| translate_pattern(&params.code));
+    Ok(Json(TranslateResponse { code: params.code, translated }))
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -208,7 +215,7 @@ pub struct TranslateParams {
     operation_id = "admin_logs_translate_post",
     request_body = TranslateParams,
     responses(
-        (status = 200, description = "translated log message", body = serde_json::Value),
+        (status = 200, description = "translated log message", body = TranslateResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -217,10 +224,10 @@ pub async fn translate_post(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<TranslateParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
-    let t = translate(&body.code).or_else(|| translate_pattern(&body.code));
-    Ok(Json(json!({ "code": body.code, "translated": t })))
+    let translated = translate(&body.code).or_else(|| translate_pattern(&body.code));
+    Ok(Json(TranslateResponse { code: body.code, translated }))
 }
 
 fn map_err(e: OpenUdsError) -> ApiError {

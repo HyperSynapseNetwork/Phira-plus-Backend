@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct TranslatedError {
     pub title: String,
     pub description: String,
