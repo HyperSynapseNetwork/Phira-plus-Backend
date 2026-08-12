@@ -21,6 +21,8 @@ pub struct ReplayOverride {
     pub id: Uuid,
     #[serde(rename = "pmpReplayId")]
     pub pmp_replay_id: String,
+    #[serde(rename = "playerPhiraId")]
+    pub player_phira_id: i64,
     #[serde(rename = "ownerUserId")]
     pub owner_user_id: Option<Uuid>,
     pub visibility: String,
@@ -33,6 +35,8 @@ pub struct ReplayShareLink {
     pub id: Uuid,
     #[serde(rename = "replayRound")]
     pub replay_round: String,
+    #[serde(rename = "playerPhiraId")]
+    pub player_phira_id: i64,
     #[serde(rename = "tokenHash")]
     pub token_hash: String,
     #[serde(rename = "createdBy")]
@@ -61,17 +65,19 @@ pub fn hash_token(token: &str) -> String {
 pub async fn set_visibility(
     db: &sqlx::PgPool,
     pmp_replay_id: &str,
+    player_phira_id: i64,
     owner_user_id: Uuid,
     visibility: &str,
 ) -> Result<ReplayOverride, ApiError> {
     sqlx::query_as::<_, ReplayOverride>(
-        "INSERT INTO replay_overrides (pmp_replay_id, owner_user_id, visibility)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (pmp_replay_id) DO UPDATE
+        "INSERT INTO replay_overrides (pmp_replay_id, player_phira_id, owner_user_id, visibility)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (pmp_replay_id, player_phira_id) DO UPDATE
             SET visibility = EXCLUDED.visibility, updated_at = now()
-         RETURNING id, pmp_replay_id, owner_user_id, visibility, updated_at",
+         RETURNING id, pmp_replay_id, player_phira_id, owner_user_id, visibility, updated_at",
     )
     .bind(pmp_replay_id)
+    .bind(player_phira_id)
     .bind(owner_user_id)
     .bind(visibility)
     .fetch_one(db)
@@ -82,16 +88,18 @@ pub async fn set_visibility(
 pub async fn create_share_link(
     db: &sqlx::PgPool,
     replay_round: &str,
+    player_phira_id: i64,
     created_by: Uuid,
     expires_at: Option<DateTime<Utc>>,
 ) -> Result<(ReplayShareLink, String), ApiError> {
     let (token, hash) = new_share_token();
     let link = sqlx::query_as::<_, ReplayShareLink>(
-        "INSERT INTO replay_share_links (replay_round, token_hash, created_by, expires_at)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, replay_round, token_hash, created_by, expires_at, revoked_at",
+        "INSERT INTO replay_share_links (replay_round, player_phira_id, token_hash, created_by, expires_at)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, replay_round, player_phira_id, token_hash, created_by, expires_at, revoked_at",
     )
     .bind(replay_round)
+    .bind(player_phira_id)
     .bind(&hash)
     .bind(created_by)
     .bind(expires_at)
@@ -101,17 +109,19 @@ pub async fn create_share_link(
     Ok((link, token))
 }
 
-/// Share-link lookup row.
-type ShareLinkRow = (String, Option<DateTime<Utc>>, Option<DateTime<Utc>>);
+/// Share-link lookup row: (round, player_phira_id, expires_at, revoked_at).
+type ShareLinkRow = (String, i64, Option<DateTime<Utc>>, Option<DateTime<Utc>>);
 
-/// Validate an opaque share token; returns the replay round if valid.
+/// Validate an opaque share token; returns the pinned Replay identity
+/// `(round_uuid, player_phira_id)` if valid (S-3).
 pub async fn resolve_share_token(
     db: &sqlx::PgPool,
     token: &str,
-) -> Result<String, ApiError> {
+) -> Result<(String, i64), ApiError> {
     let hash = hash_token(token);
     let row: Option<ShareLinkRow> = sqlx::query_as::<_, ShareLinkRow>(
-        "SELECT replay_round, expires_at, revoked_at FROM replay_share_links WHERE token_hash = $1",
+        "SELECT replay_round, player_phira_id, expires_at, revoked_at
+         FROM replay_share_links WHERE token_hash = $1",
     )
     .bind(&hash)
     .fetch_optional(db)
@@ -119,7 +129,7 @@ pub async fn resolve_share_token(
     .map_err(db_err)?;
 
     match row {
-        Some((round, expires_at, revoked_at)) => {
+        Some((round, player, expires_at, revoked_at)) => {
             if revoked_at.is_some() {
                 return Err(ApiError::new(ErrorCode::NotFound, "share link revoked"));
             }
@@ -128,7 +138,7 @@ pub async fn resolve_share_token(
                     return Err(ApiError::new(ErrorCode::NotFound, "share link expired"));
                 }
             }
-            Ok(round)
+            Ok((round, player))
         }
         None => Err(ApiError::new(ErrorCode::NotFound, "invalid share token")),
     }

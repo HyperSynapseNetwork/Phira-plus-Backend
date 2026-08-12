@@ -1,8 +1,8 @@
-//! Replay REST + WebSocket routes (design §12, contract §4/§10/§13).
+//! Replay REST + WebSocket routes (design §12, contract §20 S-3).
 //!
-//! `GET /api/v1/replays/{round_uuid}` and `/manifest` (REST), plus
-//! `WSS /ws/v1/replays/{round_uuid}` (paged viewer stream via persist.touches/
-//! judges). Visibility is enforced on every path; there is NO raw download.
+//! A Replay's identity is `(round_uuid, player_phira_id)`. Every path validates
+//! access to the pair and pins the player server-side; the viewer WS can never
+//! be redirected to another player's touches/judges. There is NO raw download.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::persist;
-use super::visibility::check_replay_access;
+use super::visibility::resolve_replay_access;
 use super::{create_share_link, revoke_share_link, set_visibility, ReplayOverride};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
@@ -38,17 +38,16 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 #[derive(Debug, Deserialize)]
 pub struct ReplayListParams {
-    #[serde(rename = "playerId")]
     pub player_id: i32,
 }
 
-/// GET /api/v1/replays?playerId=... — a player's distinct rounds (best-effort).
+/// GET /api/v1/replays?player_id=... — a player's distinct rounds (best-effort).
 async fn list_replays(
     _auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<ReplayListParams>,
 ) -> Result<Json<Value>, ApiError> {
-    // Listing is public; per-round access is enforced on detail/manifest/WS.
+    // Listing is public; per-pair access is enforced on detail/manifest/WS.
     let openuds = &state.openuds;
     let mut rounds: BTreeSet<String> = BTreeSet::new();
     let mut total_frames = 0i64;
@@ -80,69 +79,81 @@ async fn list_replays(
         since = last;
     }
     Ok(Json(json!({
-        "playerId": params.player_id,
+        "player_id": params.player_id,
         "replays": rounds.into_iter().collect::<Vec<String>>(),
-        "totalFrames": total_frames,
+        "total_frames": total_frames,
     })))
 }
 
-/// GET /api/v1/replays/share/{token} — resolve an opaque share token to a round.
+/// GET /api/v1/replays/share/{token} — resolve an opaque share token to the
+/// pinned `(round_uuid, player_phira_id)` (S-3).
 async fn resolve_share(
     State(state): State<Arc<AppState>>,
     Path(token): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    let round = super::resolve_share_token(db, &token).await?;
-    Ok(Json(json!({ "round_uuid": round })))
+    let (round, player) = super::resolve_share_token(db, &token).await?;
+    Ok(Json(json!({ "round_uuid": round, "player_phira_id": player })))
 }
 
-/// GET /api/v1/replays/{round_uuid} — summary + visibility (access-enforced).
+#[derive(Debug, Deserialize)]
+pub struct ReplayDetailParams {
+    pub player_id: i64,
+}
+
+/// GET /api/v1/replays/{round_uuid}?player_id=... — summary + visibility
+/// (access-enforced for the pair).
 async fn detail(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
+    Query(params): Query<ReplayDetailParams>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    let allowed = check_replay_access(db, &round_uuid, auth.0.as_ref(), None).await?;
-    if !allowed {
+    let Some(player) = resolve_replay_access(db, &round_uuid, params.player_id, auth.0.as_ref(), None).await?
+    else {
         return Err(ApiError::permission_denied());
-    }
-    let visibility = super::visibility::effective_visibility(db, &round_uuid).await?;
+    };
+    let visibility = super::visibility::effective_visibility(db, &round_uuid, player).await?;
     let openuds = &state.openuds;
-    let touches = persist::fetch_batches(openuds, "touches", 0, 1, Some(&round_uuid), None)
+    let touches = persist::fetch_batches(openuds, "touches", 0, 1, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
-    let judges = persist::fetch_batches(openuds, "judges", 0, 1, Some(&round_uuid), None)
+    let judges = persist::fetch_batches(openuds, "judges", 0, 1, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
     Ok(Json(json!({
-        "roundUuid": round_uuid,
+        "round_uuid": round_uuid,
+        "player_phira_id": player,
         "visibility": visibility,
         "touches": persist::summarize_batches(&persist::batches_of(&touches)),
         "judges": persist::summarize_batches(&persist::batches_of(&judges)),
     })))
 }
 
-/// GET /api/v1/replays/{round_uuid}/manifest — frame counts / players / range.
+/// GET /api/v1/replays/{round_uuid}/manifest?player_id=... — frame counts /
+/// players / range (access-enforced for the pair).
 async fn manifest(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
+    Query(params): Query<ReplayDetailParams>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    let allowed = check_replay_access(db, &round_uuid, auth.0.as_ref(), None).await?;
-    if !allowed {
+    let Some(player) = resolve_replay_access(db, &round_uuid, params.player_id, auth.0.as_ref(), None).await?
+    else {
         return Err(ApiError::permission_denied());
-    }
+    };
     let openuds = &state.openuds;
-    let touches = persist::fetch_batches(openuds, "touches", 0, persist::MAX_PAGE, Some(&round_uuid), None)
+    let touches = persist::fetch_batches(openuds, "touches", 0, persist::MAX_PAGE, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
-    let judges = persist::fetch_batches(openuds, "judges", 0, persist::MAX_PAGE, Some(&round_uuid), None)
+    let judges = persist::fetch_batches(openuds, "judges", 0, persist::MAX_PAGE, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
     Ok(Json(json!({
-        "roundUuid": round_uuid,
+        "round_uuid": round_uuid,
+        "player_phira_id": player,
         "touches": persist::summarize_batches(&persist::batches_of(&touches)),
         "judges": persist::summarize_batches(&persist::batches_of(&judges)),
     })))
@@ -155,59 +166,73 @@ pub struct VisibilityBody {
     pub visibility: String,
 }
 
-/// POST /api/v1/replays/{round_uuid}/visibility — set visibility (owner).
+/// POST /api/v1/replays/{round_uuid}/visibility?player_id=... — set visibility
+/// for the pair (owner).
 async fn set_replay_visibility(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
+    Query(params): Query<ReplayDetailParams>,
     Json(body): Json<VisibilityBody>,
 ) -> Result<Json<Value>, ApiError> {
     if !VISIBILITIES.contains(&body.visibility.as_str()) {
         return Err(ApiError::validation("visibility must be one of inherit|public|friends|private|unlisted|custom"));
     }
     let db = state.require_db()?;
-    ensure_owner(db, &round_uuid, auth.sub).await?;
-    let over = set_visibility(db, &round_uuid, auth.sub, &body.visibility).await?;
+    ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
+    let over = set_visibility(db, &round_uuid, params.player_id, auth.sub, &body.visibility).await?;
     Ok(Json(json!({ "override": over })))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ShareBody {
-    #[serde(rename = "expiresAt")]
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-/// POST /api/v1/replays/{round_uuid}/share — create a share link (owner).
+/// POST /api/v1/replays/{round_uuid}/share?player_id=... — create a share link
+/// for the pair (owner).
 async fn create_share(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
+    Query(params): Query<ReplayDetailParams>,
     Json(body): Json<ShareBody>,
 ) -> Result<Json<Value>, ApiError> {
     let db = state.require_db()?;
-    ensure_owner(db, &round_uuid, auth.sub).await?;
-    let (link, token) = create_share_link(db, &round_uuid, auth.sub, body.expires_at).await?;
+    ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
+    let (link, token) = create_share_link(db, &round_uuid, params.player_id, auth.sub, body.expires_at).await?;
     Ok(Json(json!({ "link": link, "token": token })))
 }
 
-/// DELETE /api/v1/replays/{round_uuid}/share/{link_id} — revoke a share link.
+/// DELETE /api/v1/replays/{round_uuid}/share/{link_id}?player_id=... — revoke a
+/// share link for the pair (owner).
 async fn revoke_share(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path((round_uuid, link_id)): Path<(String, Uuid)>,
+    Query(params): Query<ReplayDetailParams>,
 ) -> Result<StatusCode, ApiError> {
     let db = state.require_db()?;
-    ensure_owner(db, &round_uuid, auth.sub).await?;
+    ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
     revoke_share_link(db, link_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn ensure_owner(db: &sqlx::PgPool, round_uuid: &str, user_id: Uuid) -> Result<(), ApiError> {
+/// The caller may manage a `(round, player)` Replay if they own its override,
+/// or (when no override exists yet) if they ARE the player — allowing the
+/// player to create the first visibility/share.
+async fn ensure_owner(
+    db: &sqlx::PgPool,
+    round_uuid: &str,
+    player_phira_id: i64,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
     let row = sqlx::query_as::<_, ReplayOverride>(
-        "SELECT id, pmp_replay_id, owner_user_id, visibility, updated_at
-         FROM replay_overrides WHERE pmp_replay_id = $1",
+        "SELECT id, pmp_replay_id, player_phira_id, owner_user_id, visibility, updated_at
+         FROM replay_overrides WHERE pmp_replay_id = $1 AND player_phira_id = $2",
     )
     .bind(round_uuid)
+    .bind(player_phira_id)
     .fetch_optional(db)
     .await
     .map_err(super::db_err_public)?;
@@ -218,7 +243,15 @@ async fn ensure_owner(db: &sqlx::PgPool, round_uuid: &str, user_id: Uuid) -> Res
             }
             Ok(())
         }
-        None => Err(ApiError::not_found("replay override")),
+        None => {
+            // No override yet: the caller must be the player themselves.
+            let user = crate::users::repo::find_by_id(db, user_id).await?;
+            if user.map(|u| u.phira_id) == Some(player_phira_id) {
+                Ok(())
+            } else {
+                Err(ApiError::permission_denied())
+            }
+        }
     }
 }
 
@@ -228,9 +261,14 @@ async fn ensure_owner(db: &sqlx::PgPool, round_uuid: &str, user_id: Uuid) -> Res
 pub struct ReplayWsParams {
     #[serde(default)]
     pub token: Option<String>,
+    /// Target player when no share token; server pins the resolved player.
+    #[serde(default)]
+    pub player_id: Option<i64>,
 }
 
-/// WSS /ws/v1/replays/{round_uuid} — paged viewer stream.
+/// WSS /ws/v1/replays/{round_uuid}?token=...&player_id=... — paged viewer stream.
+/// After auth the `(round_uuid, player_phira_id)` pair is pinned; the client's
+/// per-fetch `player_id` cannot override it (S-3).
 pub async fn replay_ws(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
@@ -239,19 +277,46 @@ pub async fn replay_ws(
     ws: WebSocketUpgrade,
 ) -> Result<axum::response::Response, ApiError> {
     let db = state.require_db()?;
-    let allowed = check_replay_access(db, &round_uuid, auth.0.as_ref(), params.token.as_deref()).await?;
-    if !allowed {
+    // Determine the requested player (token pins it; otherwise the query
+    // player_id, or the requester's own phira_id when authenticated).
+    let requested_player = if params.token.is_some() {
+        params.player_id.unwrap_or(0)
+    } else {
+        match (params.player_id, &auth.0) {
+            (Some(p), _) => p,
+            (None, Some(principal)) => {
+                let user = crate::users::repo::find_by_id(db, principal.sub).await?;
+                user.map(|u| u.phira_id).unwrap_or(0)
+            }
+            (None, None) => {
+                return Err(ApiError::validation("player_id required"));
+            }
+        }
+    };
+    let Some(pinned) = resolve_replay_access(
+        db,
+        &round_uuid,
+        requested_player,
+        auth.0.as_ref(),
+        params.token.as_deref(),
+    )
+    .await?
+    else {
         return Err(ApiError::permission_denied());
-    }
-    Ok(ws.on_upgrade(move |socket| replay_ws_task(socket, state, round_uuid)))
+    };
+    Ok(ws.on_upgrade(move |socket| replay_ws_task(socket, state, round_uuid, pinned as i32)))
 }
 
-async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: String) {
+async fn replay_ws_task(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    round_uuid: String,
+    pinned_player: i32,
+) {
     use futures_util::{SinkExt, StreamExt};
     let (mut sink, mut stream) = socket.split();
     let openuds = state.openuds.clone();
     let mut since = 0i64;
-    let mut player: Option<i32> = None;
     while let Some(msg) = stream.next().await {
         let text = match msg {
             Ok(Message::Text(t)) => t,
@@ -279,10 +344,8 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
             continue;
         }
         since = parsed.get("since").and_then(Value::as_i64).unwrap_or(since);
-        if let Some(pid) = parsed.get("player_id").and_then(Value::as_i64) {
-            player = Some(pid as i32);
-        }
-        match persist::fetch_batches(&openuds, &stream, since, persist::MAX_PAGE, Some(&round_uuid), player).await {
+        // Pinned player is fixed; client player_id is ignored.
+        match persist::fetch_batches(&openuds, &stream, since, persist::MAX_PAGE, Some(&round_uuid), Some(pinned_player)).await {
             Ok(v) => {
                 let batches = persist::batches_of(&v);
                 let last_seq = batches
@@ -297,7 +360,7 @@ async fn replay_ws_task(socket: WebSocket, state: Arc<AppState>, round_uuid: Str
                             "type": "batches",
                             "stream": stream,
                             "batches": batches,
-                            "lastSequence": last_seq,
+                            "last_sequence": last_seq,
                             "done": done,
                         })
                         .to_string(),

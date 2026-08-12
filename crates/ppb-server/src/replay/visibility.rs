@@ -1,8 +1,9 @@
-//! Replay visibility enforcement (design §12.3, contract §10/§13).
+//! Replay visibility enforcement (design §12.3, contract §20 S-3).
 //!
-//! Default visibility is Public. `replay_overrides` set per-round visibility:
-//! inherit | public | friends | private | unlisted | custom. Custom uses
-//! `replay_acl` allow/deny. Share links are explicit grants (token-hash only).
+//! A Replay's identity is the pair `(round_uuid, player_phira_id)`. Visibility
+//! overrides, ACLs, and share links all bind to the pair. `resolve_replay_access`
+//! returns the server-pinned player so the viewer WS can never be redirected to
+//! another player's touches/judges.
 
 use crate::auth::types::AuthPrincipal;
 use crate::error::{ApiError, ErrorCode};
@@ -16,15 +17,18 @@ pub const VISIBILITY_UNLISTED: &str = "unlisted";
 pub const VISIBILITY_CUSTOM: &str = "custom";
 pub const VISIBILITY_INHERIT: &str = "inherit";
 
-/// Fetch the effective visibility for a round (defaults to public).
+/// Fetch the effective visibility for a `(round, player)` replay (default public).
 pub async fn effective_visibility(
     db: &sqlx::PgPool,
     round_uuid: &str,
+    player_phira_id: i64,
 ) -> Result<String, ApiError> {
     let row: Option<(String,)> = sqlx::query_as::<_, (String,)>(
-        "SELECT visibility FROM replay_overrides WHERE pmp_replay_id = $1",
+        "SELECT visibility FROM replay_overrides
+         WHERE pmp_replay_id = $1 AND player_phira_id = $2",
     )
     .bind(round_uuid)
+    .bind(player_phira_id)
     .fetch_optional(db)
     .await
     .map_err(db_err)?;
@@ -34,21 +38,41 @@ pub async fn effective_visibility(
     }
 }
 
-/// True if `requester` may access `round_uuid`. `share_token` (opaque link)
-/// is an explicit grant and bypasses visibility. Unauthenticated callers may
-/// only access public rounds (or via a valid share token).
-pub async fn check_replay_access(
+async fn get_override(
     db: &sqlx::PgPool,
     round_uuid: &str,
-    requester: Option<&AuthPrincipal>,
-    share_token: Option<&str>,
-) -> Result<bool, ApiError> {
-    if let Some(token) = share_token {
-        // Throws NotFound when invalid/expired/revoked.
-        resolve_share_token(db, token).await?;
-        return Ok(true);
+    player_phira_id: i64,
+) -> Result<Option<ReplayOverride>, ApiError> {
+    sqlx::query_as::<_, ReplayOverride>(
+        "SELECT id, pmp_replay_id, player_phira_id, owner_user_id, visibility, updated_at
+         FROM replay_overrides WHERE pmp_replay_id = $1 AND player_phira_id = $2",
+    )
+    .bind(round_uuid)
+    .bind(player_phira_id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)
+}
+
+async fn requester_phira_id(
+    db: &sqlx::PgPool,
+    auth: &AuthPrincipal,
+) -> Result<Option<i64>, ApiError> {
+    if auth.is_root() {
+        return Ok(None);
     }
-    let visibility = effective_visibility(db, round_uuid).await?;
+    let user = crate::users::repo::find_by_id(db, auth.sub).await?;
+    Ok(user.map(|u| u.phira_id))
+}
+
+/// Check whether `requester` may access `(round_uuid, player_phira_id)`.
+pub async fn check_pair_access(
+    db: &sqlx::PgPool,
+    round_uuid: &str,
+    player_phira_id: i64,
+    requester: Option<&AuthPrincipal>,
+) -> Result<bool, ApiError> {
+    let visibility = effective_visibility(db, round_uuid, player_phira_id).await?;
     if visibility == VISIBILITY_PUBLIC {
         return Ok(true);
     }
@@ -58,35 +82,27 @@ pub async fn check_replay_access(
     if auth.is_root() {
         return Ok(true);
     }
-
-    let override_row = sqlx::query_as::<_, ReplayOverride>(
-        "SELECT id, pmp_replay_id, owner_user_id, visibility, updated_at
-         FROM replay_overrides WHERE pmp_replay_id = $1",
-    )
-    .bind(round_uuid)
-    .fetch_optional(db)
-    .await
-    .map_err(db_err)?;
-
-    let Some(over) = override_row else {
-        // No override row but non-public visibility (shouldn't happen): deny.
-        return Ok(false);
-    };
-    let owner = over.owner_user_id.unwrap_or_default();
-    if auth.sub == owner {
-        return Ok(true); // owner always
+    // Owner of the override, or the player themselves (own replay).
+    let over = get_override(db, round_uuid, player_phira_id).await?;
+    if let Some(o) = &over {
+        if o.owner_user_id == Some(auth.sub) {
+            return Ok(true);
+        }
     }
-
+    if requester_phira_id(db, auth).await? == Some(player_phira_id) {
+        return Ok(true);
+    }
+    let owner = over.as_ref().and_then(|o| o.owner_user_id).unwrap_or_default();
     match visibility.as_str() {
         VISIBILITY_FRIENDS => {
             let friends = crate::social::list_friends(db, owner).await?;
             Ok(friends.contains(&auth.sub))
         }
-        VISIBILITY_UNLISTED => Ok(true), // known uuid is the grant
+        VISIBILITY_UNLISTED => Ok(true),
         VISIBILITY_PRIVATE => Ok(false),
         VISIBILITY_CUSTOM => {
-            // allow/deny ACL; deny wins.
-            let acl = sqlx::query_as::<_, (String,)>( // result: (effect,)
+            let Some(over) = over else { return Ok(false) };
+            let acl = sqlx::query_as::<_, (String,)>(
                 "SELECT effect FROM replay_acl WHERE replay_id = $1 AND user_id = $2",
             )
             .bind(over.id)
@@ -96,11 +112,38 @@ pub async fn check_replay_access(
             .map_err(db_err)?;
             match acl {
                 Some((effect,)) if effect == "allow" => Ok(true),
-                Some((effect,)) if effect == "deny" => Ok(false),
                 _ => Ok(false),
             }
         }
         _ => Ok(false),
+    }
+}
+
+/// Resolve the pinned player for a Replay request (S-3).
+///
+/// - A valid share token pins its own `(round_uuid, player_phira_id)`; it cannot
+///   be used to access a different round or player.
+/// - Without a token, the requested `player_phira_id` is validated against the
+///   requester's access; the returned player is what the caller must use.
+/// - `Ok(None)` means access denied.
+pub async fn resolve_replay_access(
+    db: &sqlx::PgPool,
+    round_uuid: &str,
+    requested_player: i64,
+    requester: Option<&AuthPrincipal>,
+    share_token: Option<&str>,
+) -> Result<Option<i64>, ApiError> {
+    if let Some(token) = share_token {
+        let (round, player) = resolve_share_token(db, token).await?;
+        if round != round_uuid {
+            return Ok(None); // token is bound to a single Replay
+        }
+        return Ok(Some(player));
+    }
+    if check_pair_access(db, round_uuid, requested_player, requester).await? {
+        Ok(Some(requested_player))
+    } else {
+        Ok(None)
     }
 }
 
