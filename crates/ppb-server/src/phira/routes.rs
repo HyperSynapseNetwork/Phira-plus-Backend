@@ -32,6 +32,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/users/{phira_id}/stats", get(user_stats))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChartListParams {
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
+    pub search: Option<String>,
+}
+
 /// GET /api/v1/charts — chart list (paginated).
 #[utoipa::path(
     get,
@@ -43,16 +51,6 @@ pub fn routes() -> Router<Arc<AppState>> {
     tag = "phira"
 )]
 pub async fn chart_list(
-
-#[derive(Debug, Deserialize)]
-pub struct ChartListParams {
-    pub page: Option<i64>,
-    #[serde(rename = "pageNum")]
-    pub page_num: Option<i64>,
-    pub search: Option<String>,
-}
-
-async fn chart_list(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ChartListParams>,
 ) -> Result<Json<Value>, ApiError> {

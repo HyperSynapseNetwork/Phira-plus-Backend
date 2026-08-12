@@ -26,18 +26,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/audit/export.csv", get(export_csv))
 }
 
-/// GET /api/v1/admin/audit — filtered audit list.
-#[utoipa::path(
-    get,
-    path = "/api/v1/admin/audit",
-    responses(
-        (status = 200, description = "audit events (paginated)", body = serde_json::Value),
-        (status = 403, description = "permission denied", body = ErrorEnvelope),
-    ),
-    tag = "admin"
-)]
-pub async fn list(
-
 #[derive(Debug, Deserialize)]
 pub struct AuditFilterParams {
     pub action: Option<String>,
@@ -49,7 +37,17 @@ pub struct AuditFilterParams {
     pub page_num: Option<i64>,
 }
 
-async fn list(
+/// GET /api/v1/admin/audit — filtered audit list.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit",
+    responses(
+        (status = 200, description = "audit events (paginated)", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<AuditFilterParams>,
