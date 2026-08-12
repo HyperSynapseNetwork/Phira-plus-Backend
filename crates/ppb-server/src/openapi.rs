@@ -16,7 +16,8 @@ use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
 use crate::app::{JoinIntentBody, PushEndpointBody};
 use crate::automation::routes::CreateRunbookBody;
 use crate::automation::{RunbookDefinition, RunbookStep};
-use crate::config::routes::{ConfigContentBody, RollbackBody};
+use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
+use crate::config::routes::{ConfigValuesBody, RollbackBody};
 use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
 use crate::logs::routes::{LogInputBody, TranslateParams};
@@ -259,7 +260,9 @@ pub struct RoomActionRequest {
             SendBody,
             CreateCouponBody,
             CreateJobBody,
-            ConfigContentBody,
+            ConfigValuesBody,
+            ConfigFieldDescriptor,
+            ConfigFieldGroup,
             RollbackBody,
             LogInputBody,
             TranslateParams,

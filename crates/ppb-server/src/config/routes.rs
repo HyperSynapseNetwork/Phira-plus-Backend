@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::pmp::{pmp_config_descriptor, PmpConfigManager};
+use super::pmp::{pmp_config_descriptor, pmp_config_groups, PmpConfigManager};
 use super::repo as config_repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
@@ -113,7 +113,8 @@ async fn pmp_descriptor(
 
 // ── §17 unified config endpoints ───────────────────────────────
 
-/// GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes.
+/// GET /api/v1/admin/config/descriptors — Form Descriptors (§22 model A:
+/// `{ version, groups: [{ key, label, fields }] }`).
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/descriptors",
@@ -131,9 +132,7 @@ pub async fn descriptors(
     state.permissions.require(&state.db, &auth, "config:view").await?;
     Ok(Json(serde_json::json!({
         "version": 1,
-        "pmp": pmp_config_descriptor(),
-        "ppb": [], // JSON-scoped; Panel edits via /config/ppb
-        "ppf": [], // JSON-scoped; Panel edits via /config/ppf
+        "groups": pmp_config_groups(),
     })))
 }
 
@@ -176,19 +175,106 @@ pub async fn values(
     Ok(Json(serde_json::json!({ "version": 1, "values": values })))
 }
 
+/// Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB
+/// validates/generates YAML/saves.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ConfigContentBody {
-    pub content: String,
+pub struct ConfigValuesBody {
+    pub values: Value,
     #[serde(default)]
     pub note: String,
 }
 
-/// POST /api/v1/admin/config/validate — validate proposed YAML parses.
+/// Build the PMP `server_config.yml` string from flat dotted-path form values.
+fn values_to_yaml(values: &Value) -> Result<String, ApiError> {
+    let obj = values
+        .as_object()
+        .ok_or_else(|| ApiError::validation("values must be an object"))?;
+    let mut root = serde_yaml::Mapping::new();
+    for (path, value) in obj {
+        let parts: Vec<&str> = path.split('.').collect();
+        insert_yaml(&mut root, &parts, value)?;
+    }
+    serde_yaml::to_string(&serde_yaml::Value::Mapping(root))
+        .map_err(|e| ApiError::validation(format!("yaml serialize failed: {e}")))
+}
+
+fn insert_yaml(
+    root: &mut serde_yaml::Mapping,
+    parts: &[&str],
+    value: &Value,
+) -> Result<(), ApiError> {
+    if parts.is_empty() {
+        return Ok(());
+    }
+    let key = serde_yaml::Value::String(parts[0].to_string());
+    if parts.len() == 1 {
+        root.insert(key, json_to_yaml(value));
+        return Ok(());
+    }
+    if !root.contains_key(&key) {
+        root.insert(key.clone(), serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    }
+    match root.get_mut(&key) {
+        Some(serde_yaml::Value::Mapping(child)) => insert_yaml(child, &parts[1..], value),
+        _ => Err(ApiError::validation(format!("nested path conflict at {}", parts[0]))),
+    }
+}
+
+fn json_to_yaml(v: &Value) -> serde_yaml::Value {
+    match v {
+        Value::Null => serde_yaml::Value::Null,
+        Value::Bool(b) => serde_yaml::Value::Bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                serde_yaml::Value::Number(serde_yaml::Number::from(i))
+            } else if let Some(f) = n.as_f64() {
+                serde_yaml::Value::Number(serde_yaml::Number::from(f))
+            } else {
+                serde_yaml::Value::Null
+            }
+        }
+        Value::String(s) => serde_yaml::Value::String(s.clone()),
+        Value::Array(a) => serde_yaml::Value::Sequence(a.iter().map(json_to_yaml).collect()),
+        Value::Object(o) => serde_yaml::Value::Mapping(
+            o.iter()
+                .map(|(k, v)| (serde_yaml::Value::String(k.clone()), json_to_yaml(v)))
+                .collect(),
+        ),
+    }
+}
+
+/// Validate form values against the descriptor; returns `{ ok, errors }`.
+fn validate_values(values: &Value) -> (bool, Vec<Value>) {
+    let mut errors = Vec::new();
+    let obj = match values.as_object() {
+        Some(o) => o,
+        None => {
+            return (false, vec![json!({ "path": "", "message": "values must be an object" })]);
+        }
+    };
+    for f in pmp_config_descriptor() {
+        let Some(v) = obj.get(f.path) else { continue };
+        if f.sensitive && v.as_str() == Some("[REDACTED]") {
+            continue; // unchanged redacted placeholder is fine
+        }
+        let type_ok = match f.r#type {
+            "boolean" => v.is_boolean(),
+            "number" => v.is_number(),
+            _ => true, // strings / lists / anything
+        };
+        if !type_ok {
+            errors.push(json!({ "path": f.path, "message": format!("expected {}", f.r#type) }));
+        }
+    }
+    (errors.is_empty(), errors)
+}
+
+/// POST /api/v1/admin/config/validate — validate form values (§22 `{ ok, errors }`).
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/validate",
     operation_id = "admin_config_validate_post",
-    request_body = ConfigContentBody,
+    request_body = ConfigValuesBody,
     responses(
         (status = 200, description = "validation result", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -198,20 +284,19 @@ pub struct ConfigContentBody {
 pub async fn validate(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigContentBody>,
+    Json(body): Json<ConfigValuesBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:reload").await?;
-    serde_yaml::from_str::<serde_yaml::Value>(&body.content)
-        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
-    Ok(Json(serde_json::json!({ "valid": true })))
+    let (ok, errors) = validate_values(&body.values);
+    Ok(Json(json!({ "ok": ok, "errors": errors })))
 }
 
-/// POST /api/v1/admin/config/diff — field-level diff of current vs proposed.
+/// POST /api/v1/admin/config/diff — field-level diff (§22 `{ changes: [{path, old, new}] }`).
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/diff",
     operation_id = "admin_config_diff_post",
-    request_body = ConfigContentBody,
+    request_body = ConfigValuesBody,
     responses(
         (status = 200, description = "field-level diff", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -221,41 +306,40 @@ pub async fn validate(
 pub async fn diff(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigContentBody>,
+    Json(body): Json<ConfigValuesBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     let current = manager.read_yaml().unwrap_or_default();
-    let _ = serde_yaml::from_str::<serde_yaml::Value>(&body.content)
-        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
+    let proposed = values_to_yaml(&body.values)?;
     let mut changes = Vec::new();
     for f in pmp_config_descriptor() {
         let a = manager
             .field_value(&current, f.path)
-            .map(|y| serde_yaml::to_string(&y).unwrap_or_default());
+            .map(|y| serde_yaml::from_value::<Value>(y).unwrap_or(Value::Null));
         let b = manager
-            .field_value(&body.content, f.path)
-            .map(|y| serde_yaml::to_string(&y).unwrap_or_default());
+            .field_value(&proposed, f.path)
+            .map(|y| serde_yaml::from_value::<Value>(y).unwrap_or(Value::Null));
         if a != b {
-            changes.push(serde_json::json!({
+            changes.push(json!({
                 "path": f.path,
-                "before": if f.sensitive { "[REDACTED]".to_string() } else { a.unwrap_or_default() },
-                "after": if f.sensitive { "[REDACTED]".to_string() } else { b.unwrap_or_default() },
+                "old": if f.sensitive { Value::String("[REDACTED]".into()) } else { a.unwrap_or(Value::Null) },
+                "new": if f.sensitive { Value::String("[REDACTED]".into()) } else { b.unwrap_or(Value::Null) },
             }));
         }
     }
-    Ok(Json(serde_json::json!({ "changes": changes, "changed": !changes.is_empty() })))
+    Ok(Json(json!({ "changes": changes })))
 }
 
-/// POST /api/v1/admin/config/save — validate → snapshot → atomic write →
-/// reload → health check (design §20.3).
+/// POST /api/v1/admin/config/save — validate → snapshot → generate YAML →
+/// write → reload (§22 `{ ok, snapshot_id }`).
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/save",
     operation_id = "admin_config_save_post",
-    request_body = ConfigContentBody,
+    request_body = ConfigValuesBody,
     responses(
-        (status = 200, description = "saved + health", body = serde_json::Value),
+        (status = 200, description = "saved + snapshot id", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -263,31 +347,36 @@ pub async fn diff(
 pub async fn save(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigContentBody>,
+    Json(body): Json<ConfigValuesBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:reload").await?;
-    serde_yaml::from_str::<serde_yaml::Value>(&body.content)
-        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
+    let (ok, errors) = validate_values(&body.values);
+    if !ok {
+        return Err(ApiError::validation(format!("invalid config values: {errors:?}")));
+    }
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     if !manager.configured() {
         return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
     }
+    let yaml = values_to_yaml(&body.values)?;
     let db = state.require_db()?;
     let prev = manager.read_yaml().ok();
+    let mut snapshot_id = None;
     if let Some(prev) = prev {
-        config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?;
+        snapshot_id = Some(
+            config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?,
+        );
     }
-    manager.write_yaml_atomic(&body.content)?;
+    manager.write_yaml_atomic(&yaml)?;
     state
         .openuds
         .command("server.config_reload", serde_json::json!({}))
         .await
         .map_err(ApiError::from)?;
-    let health = health_check(&state).await;
-    Ok(Json(serde_json::json!({ "ok": true, "note": body.note, "health": health })))
+    Ok(Json(json!({ "ok": true, "snapshot_id": snapshot_id })))
 }
 
-/// GET /api/v1/admin/config/snapshots — list PMP snapshots.
+/// GET /api/v1/admin/config/snapshots — list PMP snapshots (§22 `{ items }`).
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/snapshots",
@@ -305,7 +394,7 @@ pub async fn snapshots(
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let db = state.require_db()?;
     let snaps = config_repo::list_snapshots(db, "pmp", 200).await?;
-    Ok(Json(serde_json::json!({ "snapshots": snaps })))
+    Ok(Json(serde_json::json!({ "items": snaps })))
 }
 
 /// GET /api/v1/admin/config/raw — raw PMP config YAML.
