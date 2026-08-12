@@ -127,8 +127,8 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 | `PPB_PMP_OPENUDS_TOKEN` | OpenUDS token 认证令牌 `[secret]` |
 | `PPB_GITHUB_CLIENT_ID` / `PPB_GITHUB_CLIENT_SECRET` | GitHub OAuth `[secret]` |
 | `PPB_RUNTIME_CONFIG` | 运行时 TOML 路径 |
-| `PPB_VAPID_PUBLIC_KEY` / `PPB_VAPID_PRIVATE_KEY` | Web Push VAPID `[secret]`（Phase D；配置侧对应 `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT`） |
+| `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT` | Web Push VAPID `[secret]`（env 优先；对应 `ppb.toml [notifications]` 的 `vapid_private_key_pem` / `vapid_subject`，config/mod.rs 为准） |
 | `PPB_FCM_SERVICE_ACCOUNT_JSON` / `PPB_WNS_PACKAGE_SID` / `PPB_WNS_CLIENT_SECRET` | Android / Windows 推送 `[secret]`（Phase D，待 Owner 凭据） |
 
 > [!NOTE]
-> `example.env` 与 `CONFIG_REFERENCE.md` 在 VAPID 变量名上存在历史命名差异（`PPB_VAPID_PRIVATE_KEY` vs `PPB_VAPID_PRIVATE_KEY_PEM`）。以 `config/mod.rs` 的 `NotificationConfig` 为准：配置侧键为 `vapid_private_key_pem` / `vapid_subject`。
+> VAPID 变量名统一：配置侧（`config/mod.rs` `NotificationConfig`）键为 `vapid_private_key_pem` / `vapid_subject`（TOML `[notifications]`）；对应环境变量为 `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT`（env 覆盖 TOML）。`PPB_VAPID_PUBLIC_KEY` / `PPB_VAPID_PRIVATE_KEY` 已废弃。

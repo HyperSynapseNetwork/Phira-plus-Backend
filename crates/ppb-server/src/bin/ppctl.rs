@@ -21,7 +21,7 @@ fn main() -> ExitCode {
             Err(e) => { eprintln!("ppctl init: {e}"); ExitCode::FAILURE }
         },
         "doctor" => run_doctor(rest),
-        "config" if rest.first().map(String::as_str) == Some("check") => run_config_check(),
+        "config" if rest.first().map(String::as_str) == Some("check") => run_config_check(rest),
         "root" if rest.first().map(String::as_str) == Some("reset-password") => run_root_reset(),
         "update" => run_update(rest),
         _ => {
@@ -181,7 +181,7 @@ fn run_doctor(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let checks = rt.block_on(doctor_checks());
+    let checks = rt.block_on(doctor_checks(args));
     let mut failed = 0;
     for c in &checks {
         let mark = if c.ok { "OK " } else { "FAIL" };
@@ -231,9 +231,9 @@ fn redact(s: &str) -> String {
     out
 }
 
-async fn doctor_checks() -> Vec<Check> {
+async fn doctor_checks(args: &[String]) -> Vec<Check> {
     let mut checks = Vec::new();
-    let cfg = resolve_config_for_doctor();
+    let cfg = resolve_config_for_doctor(args);
 
     // 1. config schema
     checks.push(match &cfg {
@@ -333,7 +333,12 @@ async fn doctor_checks() -> Vec<Check> {
     checks
 }
 
-fn resolve_config_for_doctor() -> Result<(RuntimeConfig, String), String> {
+fn resolve_config_for_doctor(args: &[String]) -> Result<(RuntimeConfig, String), String> {
+    if let Some(path) = flag_value(args, "--config") {
+        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let cfg = RuntimeConfig::from_toml_str(&text).map_err(|e| e.to_string())?;
+        return Ok((cfg, path.to_string()));
+    }
     if let Ok(path) = env::var("PPB_RUNTIME_CONFIG") {
         let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let cfg = RuntimeConfig::from_toml_str(&text).map_err(|e| e.to_string())?;
@@ -349,14 +354,17 @@ fn resolve_config_for_doctor() -> Result<(RuntimeConfig, String), String> {
 
 // ── config check ───────────────────────────────────────────────
 
-fn run_config_check() -> ExitCode {
-    let path = env::var("PPB_RUNTIME_CONFIG").ok().or_else(|| {
-        if Path::new("config/ppb.toml").exists() {
-            Some("config/ppb.toml".to_string())
-        } else {
-            None
-        }
-    });
+fn run_config_check(args: &[String]) -> ExitCode {
+    let path = flag_value(args, "--config")
+        .map(str::to_string)
+        .or_else(|| env::var("PPB_RUNTIME_CONFIG").ok())
+        .or_else(|| {
+            if Path::new("config/ppb.toml").exists() {
+                Some("config/ppb.toml".to_string())
+            } else {
+                None
+            }
+        });
     match path {
         Some(p) => {
             let text = match std::fs::read_to_string(&p) {
@@ -447,7 +455,7 @@ fn run_update(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
         eprintln!("ppctl update: staged config valid: {p}");
-    } else if run_config_check() != ExitCode::SUCCESS {
+    } else if run_config_check(&[]) != ExitCode::SUCCESS {
         return ExitCode::FAILURE;
     }
     eprintln!(

@@ -27,7 +27,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     ppb_server::telemetry::init();
 
-    let runtime = resolve_runtime_config()?;
+    // `--config <path>` takes precedence; otherwise env / ./config/ppb.toml / defaults.
+    let runtime = match config_flag(&args) {
+        Some(path) => ppb_server::config::RuntimeConfig::from_toml_file(std::path::Path::new(&path))
+            .map_err(|e| std::io::Error::other(e.to_string()))?,
+        None => resolve_runtime_config()?,
+    };
     let secrets = Secrets::from_env()?;
     let state = build_state(runtime, secrets).await?;
     let router = build_router(state.clone());
@@ -44,6 +49,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Extract `--config <path>` from the CLI args (path may be `=`-joined too).
+fn config_flag(args: &[String]) -> Option<String> {
+    let pos = args.iter().position(|a| a == "--config")?;
+    if let Some(p) = args.get(pos + 1) {
+        return Some(p.clone());
+    }
+    args.iter()
+        .find(|a| a.starts_with("--config="))
+        .map(|a| a.trim_start_matches("--config=").to_string())
 }
 
 /// `ppb-server root init` — generate/print the first-boot Root password (CLI path).

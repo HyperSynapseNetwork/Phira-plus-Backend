@@ -40,7 +40,8 @@ services:
       PPB_PMP_OPENUDS_TOKEN: ${PPB_PMP_OPENUDS_TOKEN:-}
       PPB_RUNTIME_CONFIG: /etc/ppb/ppb.toml
       # Push / GitHub optional:
-      # PPB_GITHUB_CLIENT_ID / PPB_GITHUB_CLIENT_SECRET / PPB_VAPID_*
+      # PPB_GITHUB_CLIENT_ID / PPB_GITHUB_CLIENT_SECRET
+      # Web Push VAPID: env PPB_VAPID_PRIVATE_KEY_PEM / PPB_VAPID_SUBJECT (wins over ppb.toml)
     volumes:
       - ./config:/etc/ppb:ro
       # PMP OpenUDS socket（宿主机挂载，PMP 以 systemd/docker 同机运行）

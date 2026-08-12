@@ -295,16 +295,35 @@ impl RuntimeConfig {
     /// Load runtime config from a TOML file path.
     pub fn from_toml_file(path: &std::path::Path) -> Result<Self, anyhow::Error> {
         let text = std::fs::read_to_string(path)?;
-        let config: Self = toml::from_str(&text)?;
+        let mut config: Self = toml::from_str(&text)?;
+        config.apply_env_overrides();
         config.validate()?;
         Ok(config)
     }
 
     /// Load from TOML string (used by tests).
     pub fn from_toml_str(text: &str) -> Result<Self, anyhow::Error> {
-        let config: Self = toml::from_str(text)?;
+        let mut config: Self = toml::from_str(text)?;
+        config.apply_env_overrides();
         config.validate()?;
         Ok(config)
+    }
+
+    /// Environment overrides for secret-adjacent runtime fields. VAPID keys may
+    /// come from env (`PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT`) instead
+    /// of the TOML `[notifications]` keys; env wins when set. (P-86 naming: the
+    /// config keys `vapid_private_key_pem` / `vapid_subject` are canonical.)
+    fn apply_env_overrides(&mut self) {
+        if let Ok(pem) = std::env::var("PPB_VAPID_PRIVATE_KEY_PEM") {
+            if !pem.trim().is_empty() {
+                self.notifications.vapid_private_key_pem = Some(pem);
+            }
+        }
+        if let Ok(subject) = std::env::var("PPB_VAPID_SUBJECT") {
+            if !subject.trim().is_empty() {
+                self.notifications.vapid_subject = Some(subject);
+            }
+        }
     }
 
     /// Basic sanity validation.
@@ -356,14 +375,19 @@ fn merge_objects(base: &mut serde_json::Map<String, serde_json::Value>, over: &s
 /// 2. ./config/ppb.toml
 /// 3. baked defaults
 pub fn resolve_runtime_config() -> Result<RuntimeConfig, anyhow::Error> {
-    if let Ok(path) = std::env::var("PPB_RUNTIME_CONFIG") {
-        return RuntimeConfig::from_toml_file(std::path::Path::new(&path));
-    }
-    let default_path = std::path::Path::new("config/ppb.toml");
-    if default_path.exists() {
-        return RuntimeConfig::from_toml_file(default_path);
-    }
-    Ok(RuntimeConfig::default())
+    let config = if let Ok(path) = std::env::var("PPB_RUNTIME_CONFIG") {
+        RuntimeConfig::from_toml_file(std::path::Path::new(&path))?
+    } else {
+        let default_path = std::path::Path::new("config/ppb.toml");
+        if default_path.exists() {
+            RuntimeConfig::from_toml_file(default_path)?
+        } else {
+            let mut defaults = RuntimeConfig::default();
+            defaults.apply_env_overrides();
+            return Ok(defaults);
+        }
+    };
+    Ok(config)
 }
 
 #[cfg(test)]
