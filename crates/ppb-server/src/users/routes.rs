@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use super::model::{AdminUserItem, User, UserDetailResponse, UserListResponse};
+use super::model::{User, UserDetailResponse, UserListResponse};
 use super::repo as user_repo;
 use crate::actions::types::Risk;
 use crate::app::AppState;

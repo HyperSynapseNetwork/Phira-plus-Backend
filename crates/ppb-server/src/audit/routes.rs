@@ -8,7 +8,6 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
-use serde_json::Value;
 use uuid::Uuid;
 
 use super::model::AuditEvent;
