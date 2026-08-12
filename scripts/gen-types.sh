@@ -17,7 +17,11 @@ echo "[2/3] generating TS types (openapi-typescript)..."
 echo "--- component schema keys ---"
 jq -r '.components.schemas | keys[]' /tmp/ppb-openapi.json 2>/dev/null | head -40 || true
 echo "--- sample \$ref values ---"
-grep -oE '"\\$ref":"[^"]*"' /tmp/ppb-openapi.json 2>/dev/null | sort -u | head -20 || true
+grep -oE '"\\$ref": *"[^"]*"' /tmp/ppb-openapi.json 2>/dev/null | sort -u | head -20 || true
+echo "--- /me 200 schema ---"
+jq -c '.paths["/api/v1/me"].get.responses["200"].content["application/json"].schema' /tmp/ppb-openapi.json 2>/dev/null || true
+echo "--- ErrorEnvelope component ---"
+jq -c '.components.schemas.ErrorEnvelope' /tmp/ppb-openapi.json 2>/dev/null || true
 npx --yes openapi-typescript@latest /tmp/ppb-openapi.json -o contracts/types.ts
 
 echo "[3/3] done: contracts/types.ts"
