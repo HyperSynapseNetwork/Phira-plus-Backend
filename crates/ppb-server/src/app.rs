@@ -37,6 +37,7 @@ use crate::middleware::csrf;
 use crate::middleware::rate_limit::RateLimiter;
 use crate::notifications::push::{PushService, SubscriptionWire};
 use crate::permissions::resolver::PermissionResolver;
+use crate::preferences::UserPreference;
 use crate::phira::client::{PhiraApi, PhiraClient};
 use crate::phira::credential::CredentialCipher;
 use crate::phira::aggregator::Aggregator;
@@ -634,7 +635,7 @@ pub async fn me_identities(
 /// Preferences list response (§22).
 #[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct PreferencesListResponse {
-    pub preferences: Vec<crate::preferences::UserPreference>,
+    pub preferences: Vec<UserPreference>,
 }
 
 /// GET /api/v1/me/preferences — all namespaces for the current user.
