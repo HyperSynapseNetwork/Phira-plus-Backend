@@ -20,7 +20,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::commands::broker::{redact_args, CommandTask};
+use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 use crate::error::{ApiError, ErrorCode};
 
@@ -414,22 +414,23 @@ async fn user_actions(
     let args_redacted = redact_args(&args);
     command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
         .await?;
-    if action.audit {
-        crate::audit::service::record_principal(
-            db,
-            &auth,
-            action.id,
-            "user",
-            &user_id.to_string(),
-            args_redacted.clone(),
-            "success",
-            "",
-            &command_id.to_string(),
-            "",
-            "",
-        )
-        .await?;
-    }
+    // Gate 0 A5: audited actions are recorded by the executor with the FINAL
+    // result once the command completes — no pre-recorded success.
+    let audit = if action.audit {
+        Some(CommandAudit {
+            principal_type: auth.principal_type.to_string(),
+            actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+            actor_session_id: auth.sid,
+            action: action.id.to_string(),
+            resource_type: "user".to_string(),
+            resource_id: user_id.to_string(),
+            request_id: auth.request_id.clone(),
+            ip: ip_from_headers(&headers),
+            user_agent: user_agent_from_headers(&headers),
+        })
+    } else {
+        None
+    };
 
     let (completion, rx) = if action.long_running {
         (None, None)
@@ -447,6 +448,7 @@ async fn user_actions(
             args,
             args_redacted,
             completion,
+            audit,
         })?;
     if let Some(rx) = rx {
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
@@ -459,6 +461,24 @@ async fn user_actions(
         let accepted = json!({ "command_id": command_id, "status": "queued" });
         Ok((axum::http::StatusCode::ACCEPTED, Json(accepted)).into_response())
     }
+}
+
+fn ip_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn user_agent_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {

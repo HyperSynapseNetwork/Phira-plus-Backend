@@ -13,6 +13,22 @@ use uuid::Uuid;
 
 use crate::error::{ApiError, ErrorCode};
 
+/// Audit metadata carried on an audited command so the executor can record the
+/// **final** result after execution completes (contract §6 / Gate 0 A5: no
+/// pre-recorded `success`; failures and timeouts are recorded too).
+#[derive(Debug, Clone)]
+pub struct CommandAudit {
+    pub principal_type: String,
+    pub actor_user_id: Option<Uuid>,
+    pub actor_session_id: Uuid,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub request_id: String,
+    pub ip: String,
+    pub user_agent: String,
+}
+
 /// A queued command task.
 #[derive(Debug)]
 pub struct CommandTask {
@@ -24,6 +40,9 @@ pub struct CommandTask {
     pub args_redacted: Value,
     /// Completion signal for callers awaiting synchronous execution.
     pub completion: Option<oneshot::Sender<Result<Value, String>>>,
+    /// Audit metadata (when the action is audited); the executor records the
+    /// terminal outcome (succeeded/failed) once execution finishes.
+    pub audit: Option<CommandAudit>,
 }
 
 /// Executor abstraction so the broker is decoupled from OpenUDS/DB specifics.

@@ -23,7 +23,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::commands::broker::{redact_args, CommandTask};
+use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 use crate::error::{ApiError, ErrorCode};
 
@@ -83,7 +83,7 @@ async fn create(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateRunbookBody>,
 ) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:edit").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
     let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
@@ -106,7 +106,7 @@ async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<RunbookRow>>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:view").await?;
     let db = state.require_db()?;
     let rows = sqlx::query_as::<_, RunbookRow>(RUNBOOK_SELECT)
         .fetch_all(db)
@@ -120,7 +120,7 @@ async fn get_one(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<RunbookRow>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:view").await?;
     let db = state.require_db()?;
     Ok(Json(fetch_runbook(db, id).await?))
 }
@@ -131,7 +131,7 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<CreateRunbookBody>,
 ) -> Result<Json<RunbookRow>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:edit").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
     let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
@@ -156,7 +156,7 @@ async fn delete_runbook(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:edit").await?;
     let db = state.require_db()?;
     sqlx::query("DELETE FROM runbooks WHERE id = $1")
         .bind(id)
@@ -180,7 +180,7 @@ async fn run(
     Path(id): Path<Uuid>,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:execute").await?;
     let db = state.require_db()?;
     let runbook = fetch_runbook(db, id).await?;
     let definition: RunbookDefinition =
@@ -244,6 +244,22 @@ async fn run(
         let args_redacted = redact_args(&args);
         command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
             .await?;
+        // Gate 0 A5: each step is recorded by the executor with its FINAL result.
+        let audit = if action.audit {
+            Some(CommandAudit {
+                principal_type: auth.principal_type.to_string(),
+                actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+                actor_session_id: auth.sid,
+                action: action.id.to_string(),
+                resource_type: "runbook".to_string(),
+                resource_id: id.to_string(),
+                request_id: auth.request_id.clone(),
+                ip: ip_from_headers(&headers),
+                user_agent: user_agent_from_headers(&headers),
+            })
+        } else {
+            None
+        };
         let (tx, rx) = oneshot::channel();
         state
             .commands
@@ -255,6 +271,7 @@ async fn run(
                 args,
                 args_redacted,
                 completion: Some(tx),
+                audit,
             })?;
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
             Ok(Ok(Ok(v))) => results.push(json!({ "step": step.action, "ok": true, "result": v })),
@@ -284,7 +301,7 @@ async fn runs(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<RunbookRunRow>>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    state.permissions.require(&state.db, &auth, "automation:view").await?;
     let db = state.require_db()?;
     let rows = sqlx::query_as::<_, RunbookRunRow>(
         "SELECT id, runbook_id, definition_snapshot, arguments_redacted, actor, status, started_at, finished_at
@@ -294,6 +311,24 @@ async fn runs(
     .await
     .map_err(db_err)?;
     Ok(Json(rows))
+}
+
+fn ip_from_headers(headers: &axum::http::HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn user_agent_from_headers(headers: &axum::http::HeaderMap) -> String {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {

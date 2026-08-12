@@ -18,7 +18,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::commands::broker::{redact_args, CommandTask};
+use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
@@ -254,22 +254,23 @@ async fn execute_room_action(
     command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
         .await?;
 
-    if action.audit {
-        crate::audit::service::record_principal(
-            db,
-            auth,
-            action.id,
-            "action",
-            &queue_key,
-            args_redacted.clone(),
-            "success",
-            "",
-            &command_id.to_string(),
-            &ip_from_headers(headers),
-            &user_agent_from_headers(headers),
-        )
-        .await?;
-    }
+    // Gate 0 A5: audited actions are recorded by the executor with the FINAL
+    // result once the command completes — no pre-recorded success.
+    let audit = if action.audit {
+        Some(CommandAudit {
+            principal_type: auth.principal_type.to_string(),
+            actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+            actor_session_id: auth.sid,
+            action: action.id.to_string(),
+            resource_type: "action".to_string(),
+            resource_id: queue_key.clone(),
+            request_id: auth.request_id.clone(),
+            ip: ip_from_headers(headers),
+            user_agent: user_agent_from_headers(headers),
+        })
+    } else {
+        None
+    };
 
     let (completion, rx) = if action.long_running {
         (None, None)
@@ -288,6 +289,7 @@ async fn execute_room_action(
             args,
             args_redacted,
             completion,
+            audit,
         })?;
 
     if let Some(rx) = rx {
@@ -434,22 +436,23 @@ async fn admin_room_action(
     let args_redacted = redact_args(&args);
     command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
         .await?;
-    if action.audit {
-        crate::audit::service::record_principal(
-            db,
-            &auth,
-            action.id,
-            "room",
-            &room_id,
-            args_redacted.clone(),
-            "success",
-            "",
-            &command_id.to_string(),
-            &ip_from_headers(&headers),
-            &user_agent_from_headers(&headers),
-        )
-        .await?;
-    }
+    // Gate 0 A5: audited actions are recorded by the executor with the FINAL
+    // result once the command completes — no pre-recorded success.
+    let audit = if action.audit {
+        Some(CommandAudit {
+            principal_type: auth.principal_type.to_string(),
+            actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+            actor_session_id: auth.sid,
+            action: action.id.to_string(),
+            resource_type: "room".to_string(),
+            resource_id: room_id.clone(),
+            request_id: auth.request_id.clone(),
+            ip: ip_from_headers(&headers),
+            user_agent: user_agent_from_headers(&headers),
+        })
+    } else {
+        None
+    };
 
     let (completion, rx) = if action.long_running {
         (None, None)
@@ -467,6 +470,7 @@ async fn admin_room_action(
             args,
             args_redacted,
             completion,
+            audit,
         })?;
     if let Some(rx) = rx {
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
@@ -532,6 +536,23 @@ async fn admin_room_actions_batch(
         let args_redacted = redact_args(&args);
         command_repo::insert_queued(db, command_id, action.id, &auth.sub.to_string(), &queue_key, args_redacted.clone())
             .await?;
+        // Gate 0 A5: each audited batch item is recorded by the executor with
+        // its FINAL result — no pre-recorded success.
+        let audit = if action.audit {
+            Some(CommandAudit {
+                principal_type: auth.principal_type.to_string(),
+                actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+                actor_session_id: auth.sid,
+                action: action.id.to_string(),
+                resource_type: "room".to_string(),
+                resource_id: room_id.clone(),
+                request_id: auth.request_id.clone(),
+                ip: ip_from_headers(&headers),
+                user_agent: user_agent_from_headers(&headers),
+            })
+        } else {
+            None
+        };
         let (tx, rx) = oneshot::channel();
         state
             .commands
@@ -543,6 +564,7 @@ async fn admin_room_actions_batch(
                 args,
                 args_redacted,
                 completion: Some(tx),
+                audit,
             })?;
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
             Ok(Ok(Ok(v))) => {

@@ -18,7 +18,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::commands::broker::{redact_args, CommandTask};
+use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 use crate::error::{ApiError, ErrorCode};
 
@@ -104,22 +104,24 @@ async fn execute_action(
     )
     .await?;
 
-    if action.audit {
-        crate::audit::service::record_principal(
-            db,
-            &auth,
-            action.id,
-            "action",
-            &queue_key,
-            args_redacted.clone(),
-            "success",
-            "",
-            &command_id.to_string(),
-            &ip_from_headers(&headers),
-            &user_agent_from_headers(&headers),
-        )
-        .await?;
-    }
+    // Gate 0 A5: audited actions are recorded by the executor with the FINAL
+    // result once the command completes (success/failure/timeout). We only
+    // attach the audit metadata here — no pre-recorded `success`.
+    let audit = if action.audit {
+        Some(CommandAudit {
+            principal_type: auth.principal_type.to_string(),
+            actor_user_id: if auth.is_root() { None } else { Some(auth.sub) },
+            actor_session_id: auth.sid,
+            action: action.id.to_string(),
+            resource_type: "action".to_string(),
+            resource_id: queue_key.clone(),
+            request_id: auth.request_id.clone(),
+            ip: ip_from_headers(&headers),
+            user_agent: user_agent_from_headers(&headers),
+        })
+    } else {
+        None
+    };
 
     let (completion, rx) = if action.long_running {
         (None, None)
@@ -136,6 +138,7 @@ async fn execute_action(
         args: body.args,
         args_redacted,
         completion,
+        audit,
     };
     state.commands.submit(task)?;
 
@@ -176,36 +179,58 @@ pub struct ExecuteCommandBody {
 }
 
 /// POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).
-/// Full audit (command content redacted).
+/// Requires an elevated reauth context and is fully audited with the **final**
+/// result (success / failure / timeout) — never a pre-recorded success.
 async fn execute_command(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<ExecuteCommandBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     state
         .rate_limiter
         .check(&format!("raw-cli:{}", auth.sub), state.config.rate_limit.raw_cli_per_minute)?;
-    let result = crate::pmp::cli::cli_execute(&state.openuds, &body.command)
-        .await
-        .map_err(ApiError::from)?;
+    // Gate 0 A3: raw console requires an elevated reauth context.
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
+
+    let (result, result_status, error_code) = match tokio::time::timeout(
+        Duration::from_secs(30),
+        crate::pmp::cli::cli_execute(&state.openuds, &body.command),
+    )
+    .await
+    {
+        Ok(Ok(v)) => (Ok(v), "succeeded", String::new()),
+        Ok(Err(e)) => (
+            Err(ApiError::from(e)),
+            "failed",
+            "cli_execute_error".to_string(),
+        ),
+        Err(_) => (
+            Err(ApiError::new(ErrorCode::PmpUnavailable, "command timed out")),
+            "timeout",
+            "timeout".to_string(),
+        ),
+    };
+
+    // Full audit with the terminal outcome (success / failure / timeout).
     if let Some(db) = &state.db {
-        crate::audit::service::record_principal(
+        let _ = crate::audit::service::record_principal(
             db,
             &auth,
             "pmp.cli.execute",
             "pmp",
             "console",
             serde_json::json!({ "command": "[REDACTED input]" }),
-            "success",
+            result_status,
+            &error_code,
             "",
-            "",
-            "",
-            "",
+            &ip_from_headers(&headers),
+            &user_agent_from_headers(&headers),
         )
-        .await?;
+        .await;
     }
-    Ok(Json(result))
+    Ok(Json(result?))
 }
 
 /// Verify the caller is the room's real host at execution time (design §8.5).

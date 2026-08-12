@@ -81,6 +81,27 @@ impl _ActionExecutorTrait for PmpActionExecutor {
         };
         if let Some(db) = &self.db {
             let _ = command_repo::mark_finished(db, command_id, status, &summary, &error_code).await;
+            // Gate 0 A5: audited actions record the FINAL result after
+            // execution completes — never a pre-recorded success.
+            if let Some(audit) = &task.audit {
+                let _ = crate::audit::service::record_completed_command(
+                    db,
+                    &audit.principal_type,
+                    audit.actor_user_id,
+                    audit.actor_session_id,
+                    &audit.action,
+                    &audit.resource_type,
+                    &audit.resource_id,
+                    task.args_redacted.clone(),
+                    status,
+                    &error_code,
+                    &command_id.to_string(),
+                    &audit.request_id,
+                    &audit.ip,
+                    &audit.user_agent,
+                )
+                .await;
+            }
         }
         if let Some(tx) = completion {
             let _ = tx.send(result.clone());
