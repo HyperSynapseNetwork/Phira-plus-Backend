@@ -93,6 +93,10 @@ pub fn permission_manifest() -> &'static [PermissionDef] {
         perm!("group:edit", "group", "编辑用户组", "改名/描述/权限", false, Risk::Medium),
         perm!("group:delete", "group", "删除用户组", "删除用户组", false, Risk::High),
         perm!("group:assign_user", "group", "分配成员", "增删用户组成员", false, Risk::Medium),
+        // automation
+        perm!("automation:view", "automation", "查看自动化", "查看 Runbook 与运行记录", false, Risk::Low),
+        perm!("automation:edit", "automation", "编辑自动化", "创建/修改/删除 Runbook", false, Risk::Medium),
+        perm!("automation:execute", "automation", "执行自动化", "运行 Runbook（逐步骤重鉴权）", false, Risk::High),
         // dashboard
         perm!("dashboard:view", "dashboard", "查看仪表盘", "查看管理仪表盘", false, Risk::Low),
         // preference
