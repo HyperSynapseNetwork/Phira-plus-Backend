@@ -63,6 +63,52 @@ impl JobRunner {
         Ok(())
     }
 
+    /// Re-queue a failed/cancelled job and re-run it (Panel retry). Job args are
+    /// not persisted, so retries use the job type's default command.
+    pub async fn retry(&self, job_id: Uuid) -> Result<(), ApiError> {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| ApiError::new(crate::error::ErrorCode::Internal, "database not configured"))?;
+        let job: Option<Job> = sqlx::query_as::<_, Job>(
+            "SELECT id, type, state, progress, stage, created_at, started_at, finished_at, error
+             FROM jobs WHERE id = $1",
+        )
+        .bind(job_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "job retry lookup failed");
+            ApiError::internal()
+        })?;
+        let Some(job) = job else {
+            return Err(ApiError::new(crate::error::ErrorCode::NotFound, "job not found"));
+        };
+        if job.state == "succeeded" {
+            return Err(ApiError::new(crate::error::ErrorCode::Conflict, "job already succeeded"));
+        }
+        sqlx::query(
+            "UPDATE jobs SET state = 'queued', stage = '', progress = NULL, error = '',
+             started_at = NULL, finished_at = NULL WHERE id = $1",
+        )
+        .bind(job_id)
+        .execute(db)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "job retry reset failed");
+            ApiError::internal()
+        })?;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.cancels.insert(job_id, cancel.clone());
+        let runner = self.clone();
+        let jt = job.r#type.clone();
+        tokio::spawn(async move {
+            runner.run(job_id, &jt, Value::Null, cancel).await;
+        });
+        Ok(())
+    }
+
     async fn run(&self, job_id: Uuid, job_type: &str, args: Value, cancel: Arc<AtomicBool>) {
         if let Some(db) = &self.db {
             let _ = update_state(db, job_id, "running", "starting", Some(0.0), "").await;
