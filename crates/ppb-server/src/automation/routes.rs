@@ -34,6 +34,65 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/runbooks/{id}", get(get_one).patch(update).delete(delete_runbook))
         .route("/runbooks/{id}/run", post(run))
         .route("/runbook-runs", get(runs))
+        .route("/runbook-runs/{id}", get(get_run))
+        .route("/runbook-runs/{id}/cancel", post(cancel_run))
+}
+
+/// GET /api/v1/admin/automation/runbook-runs/{id} — single run detail.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/automation/runbook-runs/{id}",
+    responses(
+        (status = 200, description = "runbook run detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn get_run(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<RunbookRunRow>, ApiError> {
+    state.permissions.require(&state.db, &auth, "automation:view").await?;
+    let db = state.require_db()?;
+    let row = sqlx::query_as::<_, RunbookRunRow>(
+        "SELECT id, runbook_id, definition_snapshot, arguments_redacted, actor, status, started_at, finished_at
+         FROM runbook_runs WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)?
+    .ok_or_else(|| ApiError::not_found("runbook run"))?;
+    Ok(Json(row))
+}
+
+/// POST /api/v1/admin/automation/runbook-runs/{id}/cancel — cancel a queued/running run.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/automation/runbook-runs/{id}/cancel",
+    responses(
+        (status = 200, description = "cancelled", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn cancel_run(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, ApiError> {
+    state.permissions.require(&state.db, &auth, "automation:execute").await?;
+    let db = state.require_db()?;
+    sqlx::query(
+        "UPDATE runbook_runs SET status = 'cancelled', finished_at = now()
+         WHERE id = $1 AND status IN ('queued', 'running')",
+    )
+    .bind(id)
+    .execute(db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(json!({ "cancelled": id })))
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
