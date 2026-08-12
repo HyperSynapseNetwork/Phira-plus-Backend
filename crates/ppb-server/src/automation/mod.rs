@@ -11,7 +11,7 @@ pub mod routes;
 use serde::{Deserialize, Serialize};
 
 /// A runbook definition (stored as JSONB; snapshot on every run).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RunbookDefinition {
     pub name: String,
     #[serde(default)]
@@ -21,7 +21,7 @@ pub struct RunbookDefinition {
     pub steps: Vec<RunbookStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RunbookStep {
     /// Empty for a WAIT-only step (design §10.1 `wait: <secs>`).
     #[serde(default)]

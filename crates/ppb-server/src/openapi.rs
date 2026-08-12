@@ -15,6 +15,7 @@ use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthReques
 use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
 use crate::app::{JoinIntentBody, PushEndpointBody};
 use crate::automation::routes::CreateRunbookBody;
+use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::routes::{ConfigContentBody, RollbackBody};
 use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
@@ -244,6 +245,8 @@ pub struct RoomActionRequest {
             ExecuteActionBody,
             ExecuteCommandBody,
             CreateRunbookBody,
+            RunbookDefinition,
+            RunbookStep,
             RootLoginRequest,
             ChangePasswordRequest,
             CreateGroupBody,
