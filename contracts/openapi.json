@@ -2883,7 +2883,7 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}/actions": {
+    "/api/v1/admin/users/{phira_id}/actions": {
       "post": {
         "tags": [
           "admin"
@@ -2893,7 +2893,7 @@
         "operationId": "admin_users_user_id_actions_post",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -2934,7 +2934,7 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}/audit": {
+    "/api/v1/admin/users/{phira_id}/audit": {
       "get": {
         "tags": [
           "admin"
@@ -2943,7 +2943,7 @@
         "operationId": "admin_users_user_id_audit_get",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -2974,7 +2974,7 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}/multiplayer": {
+    "/api/v1/admin/users/{phira_id}/multiplayer": {
       "get": {
         "tags": [
           "admin"
@@ -2983,7 +2983,7 @@
         "operationId": "admin_users_user_id_multiplayer_get",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -3014,7 +3014,7 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}/security": {
+    "/api/v1/admin/users/{phira_id}/security": {
       "get": {
         "tags": [
           "admin"
@@ -3023,7 +3023,7 @@
         "operationId": "admin_users_user_id_security_get",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -3054,7 +3054,7 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}/sessions": {
+    "/api/v1/admin/users/{phira_id}/sessions": {
       "get": {
         "tags": [
           "admin"
@@ -3063,7 +3063,7 @@
         "operationId": "admin_users_user_id_sessions_get",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {

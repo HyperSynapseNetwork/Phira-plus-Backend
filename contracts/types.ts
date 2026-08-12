@@ -1203,7 +1203,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users/{user_id}/actions": {
+    "/api/v1/admin/users/{phira_id}/actions": {
         parameters: {
             query?: never;
             header?: never;
@@ -1224,7 +1224,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users/{user_id}/audit": {
+    "/api/v1/admin/users/{phira_id}/audit": {
         parameters: {
             query?: never;
             header?: never;
@@ -1241,7 +1241,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users/{user_id}/multiplayer": {
+    "/api/v1/admin/users/{phira_id}/multiplayer": {
         parameters: {
             query?: never;
             header?: never;
@@ -1258,7 +1258,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users/{user_id}/security": {
+    "/api/v1/admin/users/{phira_id}/security": {
         parameters: {
             query?: never;
             header?: never;
@@ -1275,7 +1275,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users/{user_id}/sessions": {
+    "/api/v1/admin/users/{phira_id}/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -5182,7 +5182,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                phira_id: number;
             };
             cookie?: never;
         };
@@ -5217,7 +5217,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                phira_id: number;
             };
             cookie?: never;
         };
@@ -5248,7 +5248,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                phira_id: number;
             };
             cookie?: never;
         };
@@ -5279,7 +5279,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                phira_id: number;
             };
             cookie?: never;
         };
@@ -5310,7 +5310,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                phira_id: number;
             };
             cookie?: never;
         };
