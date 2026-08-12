@@ -1315,7 +1315,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "PATCH /api/v1/admin/groups/{id} — rename a group.",
+        "summary": "PATCH /api/v1/admin/groups/{id} — patch name/description/is_default in one",
+        "description": "transaction (§23 #4).",
         "operationId": "admin_groups_id_patch",
         "parameters": [
           {
@@ -1332,15 +1333,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RenameGroupBody"
+                "$ref": "#/components/schemas/PatchGroupBody"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "204": {
-            "description": "renamed"
+          "200": {
+            "description": "group patched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
           },
           "403": {
             "description": "permission denied",
@@ -4203,7 +4211,8 @@
         "tags": [
           "notifications"
         ],
-        "summary": "POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd).",
+        "summary": "POST /api/v1/notifications/{id}/action — run a notification action.",
+        "description": "§23 #8: social / navigation actions do NOT require High reauth (session +\nCSRF + resource policy suffice). The whitelist forbids arbitrary Action\nRegistry IDs, so no elevated context is needed here.",
         "operationId": "notifications_id_action_post",
         "parameters": [
           {
@@ -4228,7 +4237,7 @@
         },
         "responses": {
           "200": {
-            "description": "action acknowledged",
+            "description": "action result",
             "content": {
               "application/json": {
                 "schema": {}
@@ -4236,7 +4245,7 @@
             }
           },
           "401": {
-            "description": "reauth required",
+            "description": "unauthenticated",
             "content": {
               "application/json": {
                 "schema": {
@@ -4288,7 +4297,8 @@
         "tags": [
           "notifications"
         ],
-        "summary": "POST /api/v1/notifications/{id}/input — reply (contract §8: goes to room.chat_send).",
+        "summary": "POST /api/v1/notifications/{id}/input — reply (§23 #8: ordinary chat reply",
+        "description": "does NOT require High reauth; session + CSRF + chat rate-limit suffice).",
         "operationId": "notifications_id_input_post",
         "parameters": [
           {
@@ -4321,7 +4331,7 @@
             }
           },
           "401": {
-            "description": "reauth required",
+            "description": "unauthenticated",
             "content": {
               "application/json": {
                 "schema": {
@@ -6059,6 +6069,24 @@
           }
         }
       },
+      "PatchGroupBody": {
+        "type": "object",
+        "description": "§23 #4: `PATCH /groups/{id} {name?, description?, is_default?}`.",
+        "properties": {
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_default": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "PhiraLoginRequest": {
         "type": "object",
         "required": [
@@ -6181,17 +6209,6 @@
           "risk": {
             "type": "string",
             "nullable": true
-          }
-        }
-      },
-      "RenameGroupBody": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
           }
         }
       },

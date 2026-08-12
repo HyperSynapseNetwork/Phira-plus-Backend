@@ -563,7 +563,10 @@ export interface paths {
         delete: operations["admin_groups_id_delete"];
         options?: never;
         head?: never;
-        /** PATCH /api/v1/admin/groups/{id} — rename a group. */
+        /**
+         * PATCH /api/v1/admin/groups/{id} — patch name/description/is_default in one
+         * @description transaction (§23 #4).
+         */
         patch: operations["admin_groups_id_patch"];
         trace?: never;
     };
@@ -1772,7 +1775,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd). */
+        /**
+         * POST /api/v1/notifications/{id}/action — run a notification action.
+         * @description §23 #8: social / navigation actions do NOT require High reauth (session +
+         *     CSRF + resource policy suffice). The whitelist forbids arbitrary Action
+         *     Registry IDs, so no elevated context is needed here.
+         */
         post: operations["notifications_id_action_post"];
         delete?: never;
         options?: never;
@@ -1806,7 +1814,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/notifications/{id}/input — reply (contract §8: goes to room.chat_send). */
+        /**
+         * POST /api/v1/notifications/{id}/input — reply (§23 #8: ordinary chat reply
+         * @description does NOT require High reauth; session + CSRF + chat rate-limit suffice).
+         */
         post: operations["notifications_id_input_post"];
         delete?: never;
         options?: never;
@@ -2519,6 +2530,12 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        /** @description §23 #4: `PATCH /groups/{id} {name?, description?, is_default?}`. */
+        PatchGroupBody: {
+            description?: string | null;
+            is_default?: boolean | null;
+            name?: string | null;
+        };
         PhiraLoginRequest: {
             client_type?: string | null;
             device_name?: string | null;
@@ -2552,9 +2569,6 @@ export interface components {
             email?: string | null;
             password: string;
             risk?: string | null;
-        };
-        RenameGroupBody: {
-            name: string;
         };
         ReplaceMembersBody: {
             user_ids: string[];
@@ -3848,16 +3862,18 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RenameGroupBody"];
+                "application/json": components["schemas"]["PatchGroupBody"];
             };
         };
         responses: {
-            /** @description renamed */
-            204: {
+            /** @description group patched */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
             };
             /** @description permission denied */
             403: {
@@ -6317,7 +6333,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description action acknowledged */
+            /** @description action result */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6326,7 +6342,7 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description reauth required */
+            /** @description unauthenticated */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6390,7 +6406,7 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description reauth required */
+            /** @description unauthenticated */
             401: {
                 headers: {
                     [name: string]: unknown;
