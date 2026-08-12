@@ -23,10 +23,14 @@ use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
 use crate::jobs::Job;
 use crate::audit::model::AuditEvent;
+use crate::audit::routes::AuditListResponse;
 use crate::preferences::UserPreference;
 use crate::logs::routes::{LogInputBody, TranslateParams};
 use crate::notifications::push::SubscriptionWire;
-use crate::notifications::routes::{ActionBody as NotificationActionBody, InputBody};
+use crate::notifications::routes::{
+    ActionBody as NotificationActionBody, AppNotificationWire, InputBody,
+    NotificationInboxResponse,
+};
 use crate::permissions::groups::{Group, GroupListItem, GroupListResponse};
 use crate::permissions::repo::GroupMember;
 use crate::permissions::routes::{
@@ -275,6 +279,7 @@ pub struct RoomActionRequest {
             RollbackBody,
             Job,
             AuditEvent,
+            AuditListResponse,
             UserPreference,
             LogInputBody,
             TranslateParams,
@@ -312,6 +317,8 @@ pub struct RoomActionRequest {
             SendRequestBody,
             NotificationActionBody,
             InputBody,
+            AppNotificationWire,
+            NotificationInboxResponse,
             UpdatePreferencesBody,
         )
     ),

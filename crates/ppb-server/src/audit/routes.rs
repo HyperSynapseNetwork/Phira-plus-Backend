@@ -37,13 +37,23 @@ pub struct AuditFilterParams {
     pub page_num: Option<i64>,
 }
 
+/// Paginated audit list response (§22 `{items, total, page, pageNum}`).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct AuditListResponse {
+    pub items: Vec<AuditEvent>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
+}
+
 /// GET /api/v1/admin/audit — filtered audit list.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/audit",
     operation_id = "admin_audit_get",
     responses(
-        (status = 200, description = "audit events (paginated)", body = serde_json::Value),
+        (status = 200, description = "audit events (paginated)", body = AuditListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -52,7 +62,7 @@ pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<AuditFilterParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<AuditListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "audit:view").await?;
     let db = state.require_db()?;
     let page = params.page.unwrap_or(1).max(1);
@@ -73,12 +83,13 @@ pub async fn list(
     )
     .await?;
 
-    Ok(Json(serde_json::json!({
-        "items": events,
-        "total": events.len() as i64,
-        "page": page,
-        "pageNum": page_num,
-    })))
+    let total = events.len() as i64;
+    Ok(Json(AuditListResponse {
+        items: events,
+        total,
+        page,
+        page_num,
+    }))
 }
 
 /// GET /api/v1/admin/audit/{id} — single audit event.

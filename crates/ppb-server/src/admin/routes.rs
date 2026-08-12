@@ -10,7 +10,6 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::stream::{self, Stream};
 use futures_util::StreamExt;
-use serde_json::json;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::actions::routes as action_routes;

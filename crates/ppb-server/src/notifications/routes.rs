@@ -38,11 +38,42 @@ pub struct InboxParams {
     pub page_num: Option<i64>,
 }
 
+/// Wire shape of one inbox notification (contract §8).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct AppNotificationWire {
+    pub id: Uuid,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub priority: String,
+    pub title: String,
+    pub body: Option<Value>,
+    pub actor: Value,
+    pub target: Value,
+    pub actions: Vec<Value>,
+    pub input: Option<Value>,
+    pub deep_link: String,
+    pub expires_at: Option<Value>,
+    pub dedup_key: String,
+    pub read_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Inbox response (§22 `{items, total, page, pageNum, unread}`).
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct NotificationInboxResponse {
+    pub items: Vec<AppNotificationWire>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
+    pub unread: i64,
+}
+
 /// Build the wire shape of one inbox row (contract §8).
 async fn wire_notification(
     db: &sqlx::PgPool,
     row: &UserNotificationWithEvent,
-) -> Result<Value, ApiError> {
+) -> Result<AppNotificationWire, ApiError> {
     let payload = &row.payload;
     let actor = if let Some(uid) = row.actor_user_id {
         match crate::users::repo::find_by_id(db, uid).await? {
@@ -52,22 +83,22 @@ async fn wire_notification(
     } else {
         payload.get("actor").cloned().unwrap_or(Value::Null)
     };
-    Ok(json!({
-        "id": row.id,
-        "type": row.event_type,
-        "priority": payload.get("priority").and_then(Value::as_str).unwrap_or("normal"),
-        "title": payload.get("title").and_then(Value::as_str).unwrap_or(""),
-        "body": payload.get("body").cloned().unwrap_or(Value::Null),
-        "actor": actor,
-        "target": payload.get("target").cloned().unwrap_or(Value::Null),
-        "actions": payload.get("actions").cloned().unwrap_or(Value::Array(vec![])),
-        "input": payload.get("input").cloned().unwrap_or(Value::Null),
-        "deep_link": payload.get("deep_link").and_then(Value::as_str).unwrap_or(""),
-        "expires_at": payload.get("expires_at").cloned().unwrap_or(Value::Null),
-        "dedup_key": payload.get("dedup_key").and_then(Value::as_str).unwrap_or(""),
-        "read_at": row.read_at,
-        "created_at": row.created_at,
-    }))
+    Ok(AppNotificationWire {
+        id: row.id,
+        r#type: row.event_type.clone(),
+        priority: payload.get("priority").and_then(Value::as_str).unwrap_or("normal").to_string(),
+        title: payload.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
+        body: payload.get("body").cloned(),
+        actor,
+        target: payload.get("target").cloned().unwrap_or(Value::Null),
+        actions: payload.get("actions").and_then(Value::as_array).cloned().unwrap_or_default(),
+        input: payload.get("input").cloned(),
+        deep_link: payload.get("deep_link").and_then(Value::as_str).unwrap_or("").to_string(),
+        expires_at: payload.get("expires_at").cloned(),
+        dedup_key: payload.get("dedup_key").and_then(Value::as_str).unwrap_or("").to_string(),
+        read_at: row.read_at,
+        created_at: row.created_at,
+    })
 }
 
 /// GET /api/v1/notifications — inbox (paginated + unread).
@@ -76,7 +107,7 @@ async fn wire_notification(
     path = "/api/v1/notifications",
     operation_id = "notifications_get",
     responses(
-        (status = 200, description = "notification inbox", body = serde_json::Value),
+        (status = 200, description = "notification inbox", body = NotificationInboxResponse),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "notifications"
@@ -85,7 +116,7 @@ pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<InboxParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<NotificationInboxResponse>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
@@ -98,7 +129,13 @@ pub async fn list(
     for r in &rows {
         items.push(wire_notification(db, r).await?);
     }
-    Ok(Json(json!({ "items": items, "total": total, "page": page, "pageNum": page_num, "unread": unread })))
+    Ok(Json(NotificationInboxResponse {
+        items,
+        total,
+        page,
+        page_num,
+        unread,
+    }))
 }
 
 /// POST /api/v1/notifications/{id}/read — mark read.
