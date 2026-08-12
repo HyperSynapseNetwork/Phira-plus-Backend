@@ -99,7 +99,9 @@
             "description": "audit events (paginated)",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuditListResponse"
+                }
               }
             }
           },
@@ -738,7 +740,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes.",
+        "summary": "GET /api/v1/admin/config/descriptors — Form Descriptors (§22 model A:",
+        "description": "`{ version, groups: [{ key, label, fields }] }`).",
         "operationId": "admin_config_descriptors_get",
         "responses": {
           "200": {
@@ -767,13 +770,13 @@
         "tags": [
           "admin"
         ],
-        "summary": "POST /api/v1/admin/config/diff — field-level diff of current vs proposed.",
+        "summary": "POST /api/v1/admin/config/diff — field-level diff (§22 `{ changes: [{path, old, new}] }`).",
         "operationId": "admin_config_diff_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigContentBody"
+                "$ref": "#/components/schemas/ConfigValuesBody"
               }
             }
           },
@@ -932,14 +935,14 @@
         "tags": [
           "admin"
         ],
-        "summary": "POST /api/v1/admin/config/save — validate → snapshot → atomic write →",
-        "description": "reload → health check (design §20.3).",
+        "summary": "POST /api/v1/admin/config/save — validate → snapshot → generate YAML →",
+        "description": "write → reload (§22 `{ ok, snapshot_id }`).",
         "operationId": "admin_config_save_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigContentBody"
+                "$ref": "#/components/schemas/ConfigValuesBody"
               }
             }
           },
@@ -947,7 +950,7 @@
         },
         "responses": {
           "200": {
-            "description": "saved + health",
+            "description": "saved + snapshot id",
             "content": {
               "application/json": {
                 "schema": {}
@@ -972,7 +975,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/config/snapshots — list PMP snapshots.",
+        "summary": "GET /api/v1/admin/config/snapshots — list PMP snapshots (§22 `{ items }`).",
         "operationId": "admin_config_snapshots_get",
         "responses": {
           "200": {
@@ -1001,13 +1004,13 @@
         "tags": [
           "admin"
         ],
-        "summary": "POST /api/v1/admin/config/validate — validate proposed YAML parses.",
+        "summary": "POST /api/v1/admin/config/validate — validate form values (§22 `{ ok, errors }`).",
         "operationId": "admin_config_validate_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigContentBody"
+                "$ref": "#/components/schemas/ConfigValuesBody"
               }
             }
           },
@@ -1172,14 +1175,16 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/groups — list user groups.",
+        "summary": "GET /api/v1/admin/groups — list user groups (typed, with permissions).",
         "operationId": "admin_groups_get",
         "responses": {
           "200": {
             "description": "group list",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GroupListResponse"
+                }
               }
             }
           },
@@ -2785,7 +2790,9 @@
             "description": "server status",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStatusResponse"
+                }
               }
             }
           },
@@ -2814,7 +2821,9 @@
             "description": "paginated users",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                }
               }
             }
           },
@@ -2831,16 +2840,17 @@
         }
       }
     },
-    "/api/v1/admin/users/{user_id}": {
+    "/api/v1/admin/users/{phira_id}": {
       "get": {
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/users/{user_id} — PPB account + PMP player info.",
-        "operationId": "admin_users_user_id_get",
+        "summary": "GET /api/v1/admin/users/{phira_id} — PPB account + PMP player info (§22",
+        "description": "`{account, groups, player}`; path is Phira ID).",
+        "operationId": "admin_users_phira_id_get",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "phira_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -2854,7 +2864,9 @@
             "description": "user detail",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailResponse"
+                }
               }
             }
           },
@@ -3886,7 +3898,9 @@
             "description": "user preferences",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesListResponse"
+                }
               }
             }
           },
@@ -4165,7 +4179,9 @@
             "description": "notification inbox",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxResponse"
+                }
               }
             }
           },
@@ -5182,6 +5198,211 @@
           "args": {}
         }
       },
+      "AdminUserItem": {
+        "type": "object",
+        "description": "Admin user list/detail wire item (§22: `ppb_user_id` UUID, `phira_id`,\n`username`/`avatar` naming aligned with Panel).",
+        "required": [
+          "ppb_user_id",
+          "phira_id",
+          "username",
+          "avatar",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "avatar": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ppb_user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AppNotificationWire": {
+        "type": "object",
+        "description": "Wire shape of one inbox notification (contract §8).",
+        "required": [
+          "id",
+          "type",
+          "priority",
+          "title",
+          "actor",
+          "target",
+          "actions",
+          "deep_link",
+          "dedup_key",
+          "created_at"
+        ],
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {}
+          },
+          "actor": {},
+          "body": {
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dedup_key": {
+            "type": "string"
+          },
+          "deep_link": {
+            "type": "string"
+          },
+          "expires_at": {
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "input": {
+            "nullable": true
+          },
+          "priority": {
+            "type": "string"
+          },
+          "read_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "target": {},
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "principal_type",
+          "action",
+          "resource_type",
+          "resource_id",
+          "parameters_redacted",
+          "result",
+          "error_code",
+          "request_id",
+          "command_id",
+          "ip",
+          "user_agent"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor_session_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "actor_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "parameters_redacted": {},
+          "principal_type": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditListResponse": {
+        "type": "object",
+        "description": "Paginated audit list response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "BroadcastBody": {
         "type": "object",
         "required": [
@@ -5228,18 +5449,144 @@
           }
         }
       },
-      "ConfigContentBody": {
+      "ConfigFieldDescriptor": {
+        "type": "object",
+        "description": "A PMP config field descriptor (Panel renders grouped forms). Schema-freeze\n(§22): descriptor carries type/widget/min/max/risk/permission/reload\nsemantics/sensitive/default.",
+        "required": [
+          "path",
+          "label",
+          "description",
+          "type",
+          "widget",
+          "risk",
+          "permission",
+          "reload_semantics",
+          "sensitive",
+          "order"
+        ],
+        "properties": {
+          "default": {
+            "nullable": true
+          },
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "min": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "order": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "reload_semantics": {
+            "type": "string",
+            "description": "hot | restart | rebuild"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "description": "Wire type: `string | number | boolean`."
+          },
+          "widget": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigFieldGroup": {
+        "type": "object",
+        "description": "A named group of related config fields (Panel renders per group).",
+        "required": [
+          "key",
+          "label",
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldDescriptor"
+            }
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigSnapshot": {
         "type": "object",
         "required": [
-          "content"
+          "id",
+          "scope",
+          "content",
+          "note",
+          "created_at"
         ],
         "properties": {
           "content": {
             "type": "string"
           },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "note": {
             "type": "string"
+          },
+          "restored_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string"
           }
+        }
+      },
+      "ConfigValuesBody": {
+        "type": "object",
+        "description": "Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB\nvalidates/generates YAML/saves.",
+        "required": [
+          "values"
+        ],
+        "properties": {
+          "note": {
+            "type": "string"
+          },
+          "values": {}
         }
       },
       "CreateCouponBody": {
@@ -5375,6 +5722,155 @@
           }
         }
       },
+      "Group": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "is_default",
+          "protected",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "system_kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GroupListItem": {
+        "type": "object",
+        "description": "Typed group list item (§22: group fields + member_count + permissions).",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "is_default",
+          "protected",
+          "created_at",
+          "updated_at",
+          "member_count",
+          "permissions"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "system_kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GroupListResponse": {
+        "type": "object",
+        "description": "Paginated group list response (§22: `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupListItem"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "GroupMember": {
+        "type": "object",
+        "description": "A group member with the PPB account display fields.",
+        "required": [
+          "user_id",
+          "phira_id",
+          "username"
+        ],
+        "properties": {
+          "phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
       "InputBody": {
         "type": "object",
         "required": [
@@ -5382,6 +5878,54 @@
         ],
         "properties": {
           "text": {
+            "type": "string"
+          }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "state",
+          "stage",
+          "created_at",
+          "error"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "progress": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "type": "string"
+          },
+          "type": {
             "type": "string"
           }
         }
@@ -5449,6 +5993,41 @@
           "session": {},
           "user": {
             "nullable": true
+          }
+        }
+      },
+      "NotificationInboxResponse": {
+        "type": "object",
+        "description": "Inbox response (§22 `{items, total, page, pageNum, unread}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum",
+          "unread"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppNotificationWire"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unread": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -5522,6 +6101,41 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "PmpStatus": {
+        "type": "object",
+        "description": "Typed PMP connectivity summary (server status).",
+        "required": [
+          "connected"
+        ],
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PreferencesListResponse": {
+        "type": "object",
+        "description": "Preferences list response (§22).",
+        "required": [
+          "preferences"
+        ],
+        "properties": {
+          "preferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserPreference"
+            }
           }
         }
       },
@@ -5824,6 +6438,28 @@
           "args": {}
         }
       },
+      "ServerStatusResponse": {
+        "type": "object",
+        "description": "Typed server status response (§22).",
+        "required": [
+          "ppb_version",
+          "pmp",
+          "db_configured",
+          "metrics"
+        ],
+        "properties": {
+          "db_configured": {
+            "type": "boolean"
+          },
+          "metrics": {},
+          "pmp": {
+            "$ref": "#/components/schemas/PmpStatus"
+          },
+          "ppb_version": {
+            "type": "string"
+          }
+        }
+      },
       "SubscriptionWire": {
         "type": "object",
         "description": "Encrypted subscription wire shape (before encryption at rest).",
@@ -5879,6 +6515,87 @@
             "type": "string"
           },
           "args": {}
+        }
+      },
+      "UserDetailResponse": {
+        "type": "object",
+        "description": "User detail response (§22 `{account, groups, player}`).",
+        "required": [
+          "account",
+          "groups"
+        ],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AdminUserItem"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "player": {
+            "description": "Best-effort PMP player info (dynamic payload; null when PMP offline).",
+            "nullable": true
+          }
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "description": "Paginated user list response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUserItem"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "UserPreference": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "namespace",
+          "revision",
+          "data",
+          "updated_at"
+        ],
+        "properties": {
+          "data": {},
+          "namespace": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       }
     }
