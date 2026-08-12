@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -16,8 +15,6 @@ use uuid::Uuid;
 
 use super::UserNotificationWithEvent;
 use crate::app::AppState;
-use crate::auth::reauth::ReauthRisk;
-use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
@@ -206,30 +203,30 @@ const LINK_ACTIONS: &[&str] = &[
     "open_profile",
 ];
 
-/// POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd).
+/// POST /api/v1/notifications/{id}/action — run a notification action.
+/// §23 #8: social / navigation actions do NOT require High reauth (session +
+/// CSRF + resource policy suffice). The whitelist forbids arbitrary Action
+/// Registry IDs, so no elevated context is needed here.
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/action",
     operation_id = "notifications_id_action_post",
     request_body = ActionBody,
     responses(
-        (status = 200, description = "action acknowledged", body = serde_json::Value),
-        (status = 401, description = "reauth required", body = ErrorEnvelope),
+        (status = 200, description = "action result", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "notifications"
 )]
 pub async fn action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(body): Json<ActionBody>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
-    // Contract §8: action re-authenticates every execution.
-    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     let row = super::get_for_user(db, auth.sub, id)
         .await?
@@ -260,18 +257,28 @@ pub async fn action(
                 .get("room_id")
                 .and_then(Value::as_str)
                 .ok_or_else(|| ApiError::validation("join_room requires target.room_id"))?;
-            // Create the JoinIntent (auditable, pollable) then force_move now —
-            // the user is already online (they clicked the notification), so the
-            // `user.online` listener won't re-fire.
-            let _intent = state
-                .join_intents
-                .create(auth.sub, user.phira_id, room_id, None)?;
-            state
-                .rooms
-                .force_move(room_id, user.phira_id as i32, false)
+            // §23 #9: presence first. online → force_move → completed;
+            // offline → create JoinIntent and stay pending (moves on user.online).
+            let online = state
+                .player
+                .info(user.phira_id as i32)
                 .await
-                .map_err(ApiError::from)?;
-            Ok(Json(json!({ "ok": true, "action": action_type, "room_id": room_id })))
+                .ok()
+                .and_then(|p| p.get("room_id").and_then(Value::as_str).map(|s| !s.is_empty()))
+                .unwrap_or(false);
+            if online {
+                state
+                    .rooms
+                    .force_move(room_id, user.phira_id as i32, false)
+                    .await
+                    .map_err(ApiError::from)?;
+                Ok(Json(json!({ "status": "completed", "action": action_type, "room_id": room_id })))
+            } else {
+                let intent = state
+                    .join_intents
+                    .create(auth.sub, user.phira_id, room_id, None)?;
+                Ok(Json(json!({ "status": "pending", "intent_id": intent.id, "action": action_type })))
+            }
         }
         EXEC_FRIEND_ACCEPT | EXEC_FRIEND_REJECT => {
             let req_id = target
@@ -340,7 +347,8 @@ pub struct InputBody {
     pub text: String,
 }
 
-/// POST /api/v1/notifications/{id}/input — reply (contract §8: goes to room.chat_send).
+/// POST /api/v1/notifications/{id}/input — reply (§23 #8: ordinary chat reply
+/// does NOT require High reauth; session + CSRF + chat rate-limit suffice).
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/input",
@@ -348,22 +356,19 @@ pub struct InputBody {
     request_body = InputBody,
     responses(
         (status = 200, description = "input sent", body = serde_json::Value),
-        (status = 401, description = "reauth required", body = ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "notifications"
 )]
 pub async fn input(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(body): Json<InputBody>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
-    // Contract §8: input re-authenticates every call.
-    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     let row = super::get_for_user(db, auth.sub, id)
         .await?
@@ -381,6 +386,9 @@ pub async fn input(
     let user = crate::users::repo::find_by_id(db, auth.sub)
         .await?
         .ok_or_else(|| ApiError::not_found("user"))?;
+    state
+        .rate_limiter
+        .check(&format!("chat-send:{room_id}"), state.config.rate_limit.chat_send_per_minute)?;
     let result = state
         .rooms
         .chat_send(room_id, user.phira_id as i32, text)
