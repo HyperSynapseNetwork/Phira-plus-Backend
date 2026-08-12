@@ -5,7 +5,7 @@
 //! consumed by PPF/Panel instead of hand-written duplicate types.
 
 use serde::Serialize;
-use utoipa::ToSchema;
+use utoipa::{OpenApi, ToSchema};
 
 /// `GET /api/v1/me` session-probe response (S-4).
 #[derive(Debug, Clone, Serialize, ToSchema)]
