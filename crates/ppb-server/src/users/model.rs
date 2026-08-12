@@ -61,11 +61,60 @@ pub struct UserListResponse {
     pub page_num: i64,
 }
 
-/// User detail response (§22 `{account, groups, player}`).
+/// A user's group membership reference (§23 `{id,name}`).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct GroupRef {
+    pub id: Uuid,
+    pub name: String,
+}
+
+/// User detail response (§22/§23 `{account, groups:[{id,name}], player}`).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct UserDetailResponse {
     pub account: AdminUserItem,
-    pub groups: Vec<String>,
+    pub groups: Vec<GroupRef>,
     /// Best-effort PMP player info (dynamic payload; null when PMP offline).
     pub player: Option<serde_json::Value>,
+}
+
+/// User multiplayer subview (§23 #5: presence/current_room/ban_state typed;
+/// playtime/rounds/replay counts null when PMP doesn't provide them).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct UserMultiplayerResponse {
+    pub phira_id: i64,
+    pub online: bool,
+    pub current_room: Option<String>,
+    pub ban_state: bool,
+    pub playtime_secs: Option<i64>,
+    pub rounds_played: Option<i64>,
+    pub replay_count: Option<i64>,
+}
+
+/// One session row (§23 #5).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct SessionItem {
+    pub id: Uuid,
+    pub client_type: String,
+    pub device_name: String,
+    pub ip: String,
+    pub created_at: DateTime<Utc>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// User sessions subview (§23 #5).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct UserSessionsResponse {
+    pub items: Vec<SessionItem>,
+}
+
+/// User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans
+/// and banned_at null when PMP doesn't expose them).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct UserSecurityResponse {
+    pub phira_id: i64,
+    pub ban_state: bool,
+    pub ban_reason: Option<String>,
+    pub ip_history: Vec<serde_json::Value>,
+    pub ip_bans: Option<serde_json::Value>,
+    pub banned_at: Option<serde_json::Value>,
 }

@@ -41,7 +41,10 @@ use crate::social::routes::SendRequestBody;
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
 };
-use crate::users::model::{AdminUserItem, UserDetailResponse, UserListResponse};
+use crate::users::model::{
+    AdminUserItem, GroupRef, SessionItem, UserDetailResponse, UserListResponse,
+    UserMultiplayerResponse, UserSecurityResponse, UserSessionsResponse,
+};
 use crate::users::routes::UserActionBody;
 use crate::admin::routes::{PmpStatus, ServerStatusResponse};
 
@@ -304,8 +307,13 @@ pub struct RoomActionRequest {
             GroupMember,
             UserActionBody,
             AdminUserItem,
+            GroupRef,
+            SessionItem,
             UserListResponse,
             UserDetailResponse,
+            UserMultiplayerResponse,
+            UserSessionsResponse,
+            UserSecurityResponse,
             CreateRoomBody,
             AdminRoomActionBody,
             RoomBatchBody,

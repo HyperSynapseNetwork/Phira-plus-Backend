@@ -13,7 +13,10 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use super::model::{User, UserDetailResponse, UserListResponse};
+use super::model::{
+    GroupRef, SessionItem, User, UserDetailResponse, UserListResponse, UserMultiplayerResponse,
+    UserSecurityResponse, UserSessionsResponse,
+};
 use super::repo as user_repo;
 use crate::actions::types::Risk;
 use crate::app::AppState;
@@ -158,7 +161,7 @@ pub async fn user_detail(
         .await
         .ok();
 
-    let groups = group_ids_for_user(db, user.id).await?;
+    let groups = groups_for_user(db, user.id).await?;
     Ok(Json(UserDetailResponse {
         account: user.to_admin_item(),
         groups,
@@ -166,15 +169,15 @@ pub async fn user_detail(
     }))
 }
 
-async fn group_ids_for_user(db: &sqlx::PgPool, user_id: uuid::Uuid) -> Result<Vec<String>, ApiError> {
-    let rows: Vec<(String,)> = sqlx::query_as::<_, (String,)>(
-        "SELECT g.name FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE gm.user_id = $1 ORDER BY g.name",
+async fn groups_for_user(db: &sqlx::PgPool, user_id: uuid::Uuid) -> Result<Vec<GroupRef>, ApiError> {
+    let rows: Vec<(Uuid, String)> = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT g.id, g.name FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE gm.user_id = $1 ORDER BY g.name",
     )
     .bind(user_id)
     .fetch_all(db)
     .await
     .map_err(db_err)?;
-    Ok(rows.into_iter().map(|r| r.0).collect())
+    Ok(rows.into_iter().map(|(id, name)| GroupRef { id, name }).collect())
 }
 
 #[derive(Debug, Deserialize)]
@@ -274,7 +277,7 @@ async fn ip_history(
     path = "/api/v1/admin/users/{phira_id}/multiplayer",
     operation_id = "admin_users_user_id_multiplayer_get",
     responses(
-        (status = 200, description = "player + presence", body = serde_json::Value),
+        (status = 200, description = "player + presence", body = UserMultiplayerResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -283,30 +286,34 @@ pub async fn user_multiplayer(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<UserMultiplayerResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:view")
         .await?;
-    let player = state
-        .player
-        .info(user_id as i32)
-        .await
-        .map(|v| serde_json::to_value(&v).unwrap_or(Value::Null))
-        .unwrap_or(Value::Null);
-    let room = player
-        .get("room_id")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    Ok(Json(json!({
-        "phira_id": user_id,
-        "player": player,
-        "presence": {
-            "online": !room.is_empty(),
-            "room_id": if room.is_empty() { Value::Null } else { Value::String(room) },
-        },
-    })))
+    let player = state.player.info(user_id as i32).await.ok();
+    let online = player
+        .as_ref()
+        .and_then(|p| p.get("online").and_then(Value::as_bool))
+        .unwrap_or(false);
+    let current_room = player
+        .as_ref()
+        .and_then(|p| p.get("room_id").and_then(Value::as_str))
+        .map(str::to_string);
+    let ban_state = player
+        .as_ref()
+        .and_then(|p| p.get("banned").and_then(Value::as_bool))
+        .unwrap_or(false);
+    Ok(Json(UserMultiplayerResponse {
+        phira_id: user_id,
+        online,
+        current_room,
+        ban_state,
+        // PMP does not expose these — null rather than fabricated.
+        playtime_secs: None,
+        rounds_played: None,
+        replay_count: None,
+    }))
 }
 
 /// GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions.
@@ -315,7 +322,7 @@ pub async fn user_multiplayer(
     path = "/api/v1/admin/users/{phira_id}/sessions",
     operation_id = "admin_users_user_id_sessions_get",
     responses(
-        (status = 200, description = "user sessions", body = serde_json::Value),
+        (status = 200, description = "user sessions", body = UserSessionsResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -324,7 +331,7 @@ pub async fn user_sessions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<UserSessionsResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:view")
@@ -341,20 +348,18 @@ pub async fn user_sessions(
     .fetch_all(db)
     .await
     .map_err(db_err)?;
-    let items: Vec<Value> = rows
+    let items: Vec<SessionItem> = rows
         .into_iter()
-        .map(|(id, client_type, device_name, ip, created_at, revoked_at)| {
-            json!({
-                "id": id,
-                "client_type": client_type,
-                "device_name": device_name,
-                "ip": ip,
-                "created_at": created_at,
-                "revoked_at": revoked_at,
-            })
+        .map(|(id, client_type, device_name, ip, created_at, revoked_at)| SessionItem {
+            id,
+            client_type,
+            device_name,
+            ip,
+            created_at,
+            revoked_at,
         })
         .collect();
-    Ok(Json(json!({ "items": items })))
+    Ok(Json(UserSessionsResponse { items }))
 }
 
 /// GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort).
@@ -363,7 +368,7 @@ pub async fn user_sessions(
     path = "/api/v1/admin/users/{phira_id}/security",
     operation_id = "admin_users_user_id_security_get",
     responses(
-        (status = 200, description = "user security state", body = serde_json::Value),
+        (status = 200, description = "user security state", body = UserSecurityResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -372,23 +377,48 @@ pub async fn user_security(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<UserSecurityResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:view")
         .await?;
-    let banlist = state.player.banlist().await.ok();
-    let banned = banlist
+    let player = state.player.info(user_id as i32).await.ok();
+    let ban_state = player
         .as_ref()
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().any(|b| b.get("user_id").and_then(Value::as_i64) == Some(user_id)))
+        .and_then(|p| p.get("banned").and_then(Value::as_bool))
         .unwrap_or(false);
-    Ok(Json(json!({
-        "phira_id": user_id,
-        "banned": banned,
-        "ip_banned": Value::Null,
-        "reason": Value::Null,
-    })))
+
+    // Ban reason from the PMP banlist (BanEntry {user_id, reason}).
+    let ban_reason = state
+        .player
+        .banlist()
+        .await
+        .ok()
+        .and_then(|v| v.get("bans").and_then(Value::as_array).cloned())
+        .and_then(|bans| {
+            bans.iter()
+                .find(|b| b.get("user_id").and_then(Value::as_i64) == Some(user_id))
+                .and_then(|b| b.get("reason").and_then(Value::as_str).map(str::to_string))
+        });
+
+    // IP history from PMP (dynamic list; empty when unavailable).
+    let ip_history = state
+        .player
+        .ip_history(user_id as i32)
+        .await
+        .ok()
+        .and_then(|v| v.get("ip_history").and_then(Value::as_array).cloned())
+        .unwrap_or_default();
+
+    Ok(Json(UserSecurityResponse {
+        phira_id: user_id,
+        ban_state,
+        ban_reason,
+        ip_history,
+        // PMP exposes no IP-ban list / banned_at over OpenUDS — null.
+        ip_bans: None,
+        banned_at: None,
+    }))
 }
 
 /// GET /api/v1/admin/users/{id}/audit — audit events targeting this user.
