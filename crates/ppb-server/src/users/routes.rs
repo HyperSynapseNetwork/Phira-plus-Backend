@@ -28,16 +28,16 @@ use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 pub fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/users", get(list_users))
-        .route("/users/{user_id}", get(user_detail))
-        .route("/users/{user_id}/multiplayer", get(user_multiplayer))
-        .route("/users/{user_id}/sessions", get(user_sessions))
-        .route("/users/{user_id}/security", get(user_security))
-        .route("/users/{user_id}/audit", get(user_audit))
-        .route("/users/{user_id}/actions", post(user_actions))
-        .route("/users/{user_id}/ban", post(ban_user))
-        .route("/users/{user_id}/unban", post(unban_user))
-        .route("/users/{user_id}/kick", post(kick_user))
-        .route("/users/{user_id}/ip-history", get(ip_history))
+        .route("/users/{phira_id}", get(user_detail))
+        .route("/users/{phira_id}/multiplayer", get(user_multiplayer))
+        .route("/users/{phira_id}/sessions", get(user_sessions))
+        .route("/users/{phira_id}/security", get(user_security))
+        .route("/users/{phira_id}/audit", get(user_audit))
+        .route("/users/{phira_id}/actions", post(user_actions))
+        .route("/users/{phira_id}/ban", post(ban_user))
+        .route("/users/{phira_id}/unban", post(unban_user))
+        .route("/users/{phira_id}/kick", post(kick_user))
+        .route("/users/{phira_id}/ip-history", get(ip_history))
 }
 
 #[derive(Debug, Deserialize)]
@@ -271,7 +271,7 @@ async fn ip_history(
 /// GET /api/v1/admin/users/{id}/multiplayer — PMP player + presence (best-effort).
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/users/{user_id}/multiplayer",
+    path = "/api/v1/admin/users/{phira_id}/multiplayer",
     operation_id = "admin_users_user_id_multiplayer_get",
     responses(
         (status = 200, description = "player + presence", body = serde_json::Value),
@@ -312,7 +312,7 @@ pub async fn user_multiplayer(
 /// GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions.
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/users/{user_id}/sessions",
+    path = "/api/v1/admin/users/{phira_id}/sessions",
     operation_id = "admin_users_user_id_sessions_get",
     responses(
         (status = 200, description = "user sessions", body = serde_json::Value),
@@ -360,7 +360,7 @@ pub async fn user_sessions(
 /// GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort).
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/users/{user_id}/security",
+    path = "/api/v1/admin/users/{phira_id}/security",
     operation_id = "admin_users_user_id_security_get",
     responses(
         (status = 200, description = "user security state", body = serde_json::Value),
@@ -394,7 +394,7 @@ pub async fn user_security(
 /// GET /api/v1/admin/users/{id}/audit — audit events targeting this user.
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/users/{user_id}/audit",
+    path = "/api/v1/admin/users/{phira_id}/audit",
     operation_id = "admin_users_user_id_audit_get",
     responses(
         (status = 200, description = "user audit events", body = serde_json::Value),
@@ -438,7 +438,7 @@ pub struct UserActionBody {
 /// POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a user.
 #[utoipa::path(
     post,
-    path = "/api/v1/admin/users/{user_id}/actions",
+    path = "/api/v1/admin/users/{phira_id}/actions",
     operation_id = "admin_users_user_id_actions_post",
     request_body = UserActionBody,
     responses(
