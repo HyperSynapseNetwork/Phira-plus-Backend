@@ -354,6 +354,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(crate::phira::routes::routes())
         .merge(crate::replay::routes::routes())
         .route("/friends/{phira_id}/remove", post(friend_remove))
+        .route("/openapi.json", get(openapi_json))
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
@@ -421,6 +422,15 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
 /// Returns `{principal, user, permissions[], capabilities[], session, ...}`
 /// with permissions resolved at runtime (never baked into the JWT), plus the
 /// session-bound `csrf_token` for state-changing requests.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me",
+    responses(
+        (status = 200, description = "session probe", body = crate::openapi::MeResponse),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -510,6 +520,15 @@ async fn session_created_at(
 }
 
 /// GET /api/v1/me/profile — community profile (defaults when unset).
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/profile",
+    responses(
+        (status = 200, description = "community profile", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 ///
 /// Optional fields (contract supplement): `rks`/`stats` (Phira gateway),
 /// `online_status` (presence), `friends_count` (PPB social). Each is `null`
@@ -581,6 +600,15 @@ pub async fn me_profile(
 }
 
 /// GET /api/v1/me/preferences — all namespaces for the current user.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/preferences",
+    responses(
+        (status = 200, description = "user preferences", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_preferences(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -604,6 +632,15 @@ pub async fn me_preferences(
 }
 
 /// GET /api/v1/me/join-intents — list the caller's active join intents.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/join-intents",
+    responses(
+        (status = 200, description = "join intents", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_join_intents(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -655,6 +692,15 @@ pub async fn me_join_intent_cancel(
 
 /// GET /api/v1/me/join-intents/{id} — poll an intent's status
 /// (`pending | user_online | moving | completed | failed | expired`, §21).
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/join-intents/{intent_id}",
+    responses(
+        (status = 200, description = "intent status", body = serde_json::Value),
+        (status = 404, description = "not found", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_join_intent_get(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -668,6 +714,15 @@ pub async fn me_join_intent_get(
 }
 
 /// POST /api/v1/friends/{phira_id}/remove — remove a friend by Phira id (§21).
+#[utoipa::path(
+    post,
+    path = "/api/v1/friends/{phira_id}/remove",
+    responses(
+        (status = 204, description = "removed"),
+        (status = 404, description = "user not found", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "friends"
+)]
 pub async fn friend_remove(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -747,6 +802,13 @@ pub async fn me_push_endpoint_delete(
     let db = state.require_db()?;
     crate::notifications::delete_push_endpoint(db, auth.sub, endpoint_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// GET /api/v1/openapi.json — the OpenAPI document (HTTP Source of Truth, §21).
+async fn openapi_json() -> Json<serde_json::Value> {
+    let doc: serde_json::Value = serde_json::from_str(&crate::openapi::build_openapi_json())
+        .unwrap_or_else(|_| serde_json::Value::Object(Default::default()));
+    Json(doc)
 }
 
 /// GET /healthz — liveness.

@@ -47,7 +47,17 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 
 // ── Public / host routes ───────────────────────────────────────
 
-async fn list_rooms(
+/// GET /api/v1/rooms — list rooms (is_self enrichment when authenticated).
+#[utoipa::path(
+    get,
+    path = "/api/v1/rooms",
+    responses(
+        (status = 200, description = "room list", body = serde_json::Value),
+        (status = 502, description = "pmp unavailable", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn list_rooms(
     auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -57,7 +67,17 @@ async fn list_rooms(
     Ok(Json(result))
 }
 
-async fn room_info(
+/// GET /api/v1/rooms/{room_id} — room detail (is_self enrichment).
+#[utoipa::path(
+    get,
+    path = "/api/v1/rooms/{room_id}",
+    responses(
+        (status = 200, description = "room detail", body = serde_json::Value),
+        (status = 404, description = "room not found", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn room_info(
     auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
@@ -68,7 +88,17 @@ async fn room_info(
     Ok(Json(result))
 }
 
-async fn room_history(
+/// GET /api/v1/rooms/{room_id}/history — PMP room.history (rounds + scores).
+#[utoipa::path(
+    get,
+    path = "/api/v1/rooms/{room_id}/history",
+    responses(
+        (status = 200, description = "room rounds + scores", body = serde_json::Value),
+        (status = 502, description = "pmp unavailable", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn room_history(
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
@@ -84,14 +114,24 @@ async fn room_chat_history(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ChatSendBody {
     pub content: String,
 }
 
 /// POST /api/v1/rooms/{room_id}/chat — send a room chat message as the caller.
 /// Client must not specify a trusted user_id (design §13.3).
-async fn send_chat(
+#[utoipa::path(
+    post,
+    path = "/api/v1/rooms/{room_id}/chat",
+    request_body = ChatSendBody,
+    responses(
+        (status = 200, description = "chat sent", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn send_chat(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
@@ -119,7 +159,7 @@ pub struct RoomActionBody {
     pub args: Value,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RoomActionBody2 {
     pub action: String,
     #[serde(default)]
@@ -127,7 +167,18 @@ pub struct RoomActionBody2 {
 }
 
 /// POST /api/v1/rooms/{room_id}/actions — contract §18 body form `{action, args}`.
-async fn room_action_body(
+#[utoipa::path(
+    post,
+    path = "/api/v1/rooms/{room_id}/actions",
+    request_body = RoomActionBody2,
+    responses(
+        (status = 200, description = "action result", body = serde_json::Value),
+        (status = 202, description = "long-running accepted", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn room_action_body(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

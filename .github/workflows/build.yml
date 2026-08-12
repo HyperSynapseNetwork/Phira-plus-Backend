@@ -105,3 +105,33 @@ jobs:
           name: ppb-server-linux-x86_64-musl
           path: target/x86_64-unknown-linux-musl/release/ppb-server
           if-no-files-found: error
+
+  contract-types:
+    # Contract §21: regenerate contracts/types.ts from the OpenAPI doc and
+    # commit it. Runs after `check` so the rust-cache is warm.
+    needs: [auto-patch, check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-patch.outputs.build_ref }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Generate OpenAPI JSON + TS types
+        run: |
+          bash scripts/gen-types.sh
+          git diff --stat contracts/types.ts || true
+      - name: Commit generated types (if changed)
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add contracts/types.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync contracts/types.ts [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi

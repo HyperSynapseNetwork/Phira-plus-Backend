@@ -44,7 +44,7 @@ pub fn root_routes() -> Router<Arc<AppState>> {
 
 // ── Request / response bodies ─────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct PhiraLoginRequest {
     pub email: String,
     pub password: String,
@@ -64,7 +64,7 @@ pub struct UserSummary {
     pub avatar: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ReauthRequest {
     #[serde(default)]
     pub email: Option<String>,
@@ -220,6 +220,17 @@ pub fn check_reauth_header(
 
 // ── Phira login ────────────────────────────────────────────────
 
+/// Phira email/password login (sets access + refresh cookies).
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/phira/login",
+    request_body = PhiraLoginRequest,
+    responses(
+        (status = 200, description = "logged in; cookies set", body = serde_json::Value),
+        (status = 401, description = "invalid credentials", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn phira_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -257,6 +268,17 @@ pub async fn phira_login(
 
 // ── Reauth ─────────────────────────────────────────────────────
 
+/// Issue a short-lived reauth context (`X-Reauth-Token`) for elevated actions.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/phira/reauth",
+    request_body = ReauthRequest,
+    responses(
+        (status = 200, description = "reauth context issued", body = serde_json::Value),
+        (status = 401, description = "invalid credentials / phira_id mismatch", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn phira_reauth(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,
@@ -315,6 +337,16 @@ pub async fn phira_reauth(
 
 // ── Refresh / logout ───────────────────────────────────────────
 
+/// Rotate the refresh token and issue a new access token.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    responses(
+        (status = 200, description = "refreshed; cookies rotated", body = serde_json::Value),
+        (status = 401, description = "invalid/expired refresh token", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -376,6 +408,16 @@ pub async fn refresh(
     Ok(auth_response(body_json, &state.config.session, &access_token, &new_refresh))
 }
 
+/// Revoke the session and clear cookies.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    responses(
+        (status = 204, description = "logged out"),
+        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn logout(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

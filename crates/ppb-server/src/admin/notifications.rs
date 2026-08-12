@@ -19,7 +19,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/notifications/delivery", get(delivery))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SendBody {
     #[serde(rename = "type")]
     pub notification_type: String,
@@ -37,7 +37,17 @@ pub struct SendBody {
 }
 
 /// POST /api/v1/admin/notifications/send — create an event + fan out inbox rows.
-async fn send(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/notifications/send",
+    request_body = SendBody,
+    responses(
+        (status = 200, description = "event created + push summary", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "notifications"
+)]
+pub async fn send(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<SendBody>,

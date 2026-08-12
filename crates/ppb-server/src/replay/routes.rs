@@ -87,7 +87,16 @@ async fn list_replays(
 
 /// GET /api/v1/replays/share/{token} — resolve an opaque share token to the
 /// pinned `(round_uuid, player_phira_id)` (S-3).
-async fn resolve_share(
+#[utoipa::path(
+    get,
+    path = "/api/v1/replays/share/{token}",
+    responses(
+        (status = 200, description = "resolved replay identity", body = serde_json::Value),
+        (status = 404, description = "invalid/expired/revoked token", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn resolve_share(
     State(state): State<Arc<AppState>>,
     Path(token): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
@@ -103,7 +112,16 @@ pub struct ReplayDetailParams {
 
 /// GET /api/v1/replays/{round_uuid}?player_id=... — summary + visibility
 /// (access-enforced for the pair).
-async fn detail(
+#[utoipa::path(
+    get,
+    path = "/api/v1/replays/{round_uuid}",
+    responses(
+        (status = 200, description = "replay detail", body = crate::openapi::ReplayDetail),
+        (status = 403, description = "access denied", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn detail(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
@@ -133,7 +151,16 @@ async fn detail(
 
 /// GET /api/v1/replays/{round_uuid}/manifest?player_id=... — frame counts /
 /// players / range (access-enforced for the pair).
-async fn manifest(
+#[utoipa::path(
+    get,
+    path = "/api/v1/replays/{round_uuid}/manifest",
+    responses(
+        (status = 200, description = "replay manifest", body = crate::openapi::ReplayManifest),
+        (status = 403, description = "access denied", body = crate::error::ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn manifest(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,

@@ -28,6 +28,7 @@ pub mod logs;
 pub mod metrics;
 pub mod middleware;
 pub mod notifications;
+pub mod openapi;
 pub mod permissions;
 pub mod phira;
 pub mod pmp;

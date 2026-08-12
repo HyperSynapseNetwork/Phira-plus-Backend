@@ -16,6 +16,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if args.len() >= 3 && args[1] == "root" && args[2] == "init" {
         return root_init().await;
     }
+    if args.iter().any(|a| a == "--openapi") {
+        // Dump the OpenAPI document (HTTP Source of Truth, §21) and exit.
+        println!("{}", ppb_server::openapi::build_openapi_json());
+        return Ok(());
+    }
     if args.len() >= 3 && args[1] == "--check-config" {
         // Used by deploy/update.sh stage validation.
         let path = &args[2];

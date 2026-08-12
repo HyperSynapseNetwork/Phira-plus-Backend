@@ -92,7 +92,7 @@ impl ErrorCode {
 }
 
 /// Serializable error body (`error` member).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ErrorBody {
     pub code: String,
     pub message: String,
@@ -101,7 +101,7 @@ pub struct ErrorBody {
 }
 
 /// Wrapper for the JSON `{ "error": ... }` envelope.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ErrorEnvelope {
     pub error: ErrorBody,
 }
