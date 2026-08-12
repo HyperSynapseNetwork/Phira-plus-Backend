@@ -2773,7 +2773,9 @@
             "description": "server stats",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStatsResponse"
+                }
               }
             }
           },
@@ -6480,6 +6482,53 @@
             "type": "string"
           },
           "args": {}
+        }
+      },
+      "ServerStatsResponse": {
+        "type": "object",
+        "description": "Typed PMP server stats (§23 #6: separate typed schema, not a giant status).",
+        "required": [
+          "users_online",
+          "active_rooms",
+          "active_sessions",
+          "loaded_plugins",
+          "port",
+          "http_port",
+          "uptime_secs",
+          "server_name"
+        ],
+        "properties": {
+          "active_rooms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "http_port": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "loaded_plugins": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "server_name": {
+            "type": "string"
+          },
+          "uptime_secs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "users_online": {
+            "type": "integer",
+            "format": "int64"
+          }
         }
       },
       "ServerStatusResponse": {

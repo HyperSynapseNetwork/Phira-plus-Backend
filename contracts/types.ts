@@ -2657,6 +2657,24 @@ export interface components {
             action: string;
             args?: unknown;
         };
+        /** @description Typed PMP server stats (§23 #6: separate typed schema, not a giant status). */
+        ServerStatsResponse: {
+            /** Format: int64 */
+            active_rooms: number;
+            /** Format: int64 */
+            active_sessions: number;
+            /** Format: int64 */
+            http_port: number;
+            /** Format: int64 */
+            loaded_plugins: number;
+            /** Format: int64 */
+            port: number;
+            server_name: string;
+            /** Format: int64 */
+            uptime_secs: number;
+            /** Format: int64 */
+            users_online: number;
+        };
         /** @description Typed server status response (§22). */
         ServerStatusResponse: {
             db_configured: boolean;
@@ -5153,7 +5171,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ServerStatsResponse"];
                 };
             };
             /** @description permission denied */
