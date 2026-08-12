@@ -34,6 +34,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/stats",
+    operation_id = "admin_server_stats_get",
     responses(
         (status = 200, description = "server stats", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -53,6 +54,7 @@ pub async fn server_stats(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/runtime",
+    operation_id = "admin_server_runtime_get",
     responses(
         (status = 200, description = "runtime status", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -72,6 +74,7 @@ pub async fn runtime_status(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/config-reload",
+    operation_id = "admin_server_config_reload_post",
     responses(
         (status = 200, description = "config reloaded", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -99,6 +102,7 @@ pub struct ServerActionBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/actions",
+    operation_id = "admin_server_actions_post",
     request_body = ServerActionBody,
     responses(
         (status = 200, description = "server action result", body = serde_json::Value),
@@ -148,6 +152,7 @@ pub struct RoomCreationBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/roomcreation",
+    operation_id = "admin_server_roomcreation_post",
     request_body = RoomCreationBody,
     responses(
         (status = 200, description = "gate toggled", body = serde_json::Value),
@@ -173,6 +178,7 @@ pub async fn room_creation(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/shutdown",
+    operation_id = "admin_server_shutdown_post",
     responses(
         (status = 200, description = "shutdown initiated", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -204,6 +210,7 @@ pub struct BroadcastBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/broadcast/all",
+    operation_id = "admin_server_broadcast_all_post",
     request_body = BroadcastBody,
     responses(
         (status = 200, description = "broadcast sent", body = serde_json::Value),
@@ -229,6 +236,7 @@ pub async fn broadcast_all(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/broadcast/room",
+    operation_id = "admin_server_broadcast_room_post",
     request_body = BroadcastBody,
     responses(
         (status = 200, description = "broadcast sent", body = serde_json::Value),
@@ -257,6 +265,7 @@ pub async fn broadcast_room(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/broadcast/user",
+    operation_id = "admin_server_broadcast_user_post",
     request_body = BroadcastBody,
     responses(
         (status = 200, description = "broadcast sent", body = serde_json::Value),

@@ -53,6 +53,7 @@ pub struct UserListParams {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users",
+    operation_id = "admin_users_get",
     responses(
         (status = 200, description = "paginated users", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -127,6 +128,7 @@ pub async fn list_users(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users/{user_id}",
+    operation_id = "admin_users_user_id_get",
     responses(
         (status = 200, description = "user detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -269,6 +271,7 @@ async fn ip_history(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users/{user_id}/multiplayer",
+    operation_id = "admin_users_user_id_multiplayer_get",
     responses(
         (status = 200, description = "player + presence", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -309,6 +312,7 @@ pub async fn user_multiplayer(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users/{user_id}/sessions",
+    operation_id = "admin_users_user_id_sessions_get",
     responses(
         (status = 200, description = "user sessions", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -356,6 +360,7 @@ pub async fn user_sessions(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users/{user_id}/security",
+    operation_id = "admin_users_user_id_security_get",
     responses(
         (status = 200, description = "user security state", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -389,6 +394,7 @@ pub async fn user_security(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/users/{user_id}/audit",
+    operation_id = "admin_users_user_id_audit_get",
     responses(
         (status = 200, description = "user audit events", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -432,6 +438,7 @@ pub struct UserActionBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/users/{user_id}/actions",
+    operation_id = "admin_users_user_id_actions_post",
     request_body = UserActionBody,
     responses(
         (status = 200, description = "action result", body = serde_json::Value),

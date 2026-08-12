@@ -99,6 +99,7 @@ pub async fn admin_events_sse(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/status",
+    operation_id = "admin_server_status_get",
     responses(
         (status = 200, description = "server status", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

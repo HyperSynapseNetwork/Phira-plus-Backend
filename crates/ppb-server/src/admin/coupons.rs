@@ -39,6 +39,7 @@ pub struct CreateCouponBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/coupons/create",
+    operation_id = "admin_coupons_create_post",
     request_body = CreateCouponBody,
     responses(
         (status = 200, description = "coupon created", body = serde_json::Value),
@@ -90,6 +91,7 @@ pub async fn create(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/coupons/{id}/revoke",
+    operation_id = "admin_coupons_id_revoke_post",
     responses(
         (status = 204, description = "revoked"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -115,6 +117,7 @@ pub async fn revoke(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/coupons",
+    operation_id = "admin_coupons_get",
     responses(
         (status = 200, description = "coupon list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

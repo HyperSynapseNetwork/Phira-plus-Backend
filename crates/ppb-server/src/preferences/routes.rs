@@ -34,6 +34,7 @@ fn validate_namespace(namespace: &str) -> Result<(), ApiError> {
 #[utoipa::path(
     get,
     path = "/api/v1/me/preferences/{namespace}",
+    operation_id = "me_preferences_namespace_get",
     responses(
         (status = 200, description = "namespaced preferences", body = serde_json::Value),
         (status = 404, description = "namespace not set", body = ErrorEnvelope),
@@ -67,6 +68,7 @@ pub struct UpdatePreferencesBody {
 #[utoipa::path(
     put,
     path = "/api/v1/me/preferences/{namespace}",
+    operation_id = "me_preferences_namespace_put",
     request_body = UpdatePreferencesBody,
     responses(
         (status = 200, description = "saved preferences", body = serde_json::Value),
@@ -93,6 +95,7 @@ pub async fn update(
 #[utoipa::path(
     delete,
     path = "/api/v1/me/preferences/{namespace}",
+    operation_id = "me_preferences_namespace_delete",
     responses(
         (status = 204, description = "deleted"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),

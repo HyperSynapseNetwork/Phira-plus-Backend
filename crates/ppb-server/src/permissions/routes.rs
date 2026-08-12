@@ -35,6 +35,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/permissions/manifest",
+    operation_id = "admin_permissions_manifest_get",
     responses(
         (status = 200, description = "permission manifest", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -56,6 +57,7 @@ pub async fn manifest(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/groups",
+    operation_id = "admin_groups_get",
     responses(
         (status = 200, description = "group list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -86,6 +88,7 @@ pub struct CreateGroupBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/groups",
+    operation_id = "admin_groups_post",
     request_body = CreateGroupBody,
     responses(
         (status = 200, description = "group created", body = serde_json::Value),
@@ -112,6 +115,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/groups/{id}",
+    operation_id = "admin_groups_id_get",
     responses(
         (status = 200, description = "group detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -164,6 +168,7 @@ pub struct RenameGroupBody {
 #[utoipa::path(
     patch,
     path = "/api/v1/admin/groups/{id}",
+    operation_id = "admin_groups_id_patch",
     request_body = RenameGroupBody,
     responses(
         (status = 204, description = "renamed"),
@@ -190,6 +195,7 @@ pub async fn rename(
 #[utoipa::path(
     delete,
     path = "/api/v1/admin/groups/{id}",
+    operation_id = "admin_groups_id_delete",
     responses(
         (status = 204, description = "deleted"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -263,6 +269,7 @@ pub struct ReplacePermissionsBody {
 #[utoipa::path(
     put,
     path = "/api/v1/admin/groups/{id}/members",
+    operation_id = "admin_groups_id_members_put",
     request_body = ReplaceMembersBody,
     responses(
         (status = 204, description = "members replaced"),
@@ -289,6 +296,7 @@ pub async fn replace_members(
 #[utoipa::path(
     put,
     path = "/api/v1/admin/groups/{id}/permissions",
+    operation_id = "admin_groups_id_permissions_put",
     request_body = ReplacePermissionsBody,
     responses(
         (status = 204, description = "permissions replaced"),

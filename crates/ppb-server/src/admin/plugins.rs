@@ -29,6 +29,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/plugins",
+    operation_id = "admin_plugins_get",
     responses(
         (status = 200, description = "plugin list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -48,6 +49,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/plugins/{name}",
+    operation_id = "admin_plugins_name_get",
     responses(
         (status = 200, description = "plugin info", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -68,6 +70,7 @@ pub async fn info(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/plugins/{name}/enable",
+    operation_id = "admin_plugins_name_enable_post",
     responses(
         (status = 200, description = "enabled", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -88,6 +91,7 @@ pub async fn enable(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/plugins/{name}/disable",
+    operation_id = "admin_plugins_name_disable_post",
     responses(
         (status = 200, description = "disabled", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -108,6 +112,7 @@ pub async fn disable(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/plugins",
+    operation_id = "admin_plugins_post",
     responses(
         (status = 200, description = "reloaded", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -127,6 +132,7 @@ pub async fn reload(
 #[utoipa::path(
     delete,
     path = "/api/v1/admin/plugins/{name}",
+    operation_id = "admin_plugins_name_delete",
     responses(
         (status = 204, description = "removed"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -157,6 +163,7 @@ pub struct PluginCallBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/plugins/{name}/{action}",
+    operation_id = "admin_plugins_name_action_post",
     request_body = PluginCallBody,
     responses(
         (status = 200, description = "plugin action result", body = serde_json::Value),
@@ -207,6 +214,7 @@ pub async fn action_dispatch(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/plugins/call",
+    operation_id = "admin_plugins_call_post",
     request_body = PluginCallBody,
     responses(
         (status = 200, description = "plugin call result", body = serde_json::Value),

@@ -344,4 +344,32 @@ mod tests {
         let schemas = ApiDoc::openapi().components.as_ref().map(|c| c.schemas.len()).unwrap_or(0);
         assert!(schemas >= 4, "expected core schemas, got {schemas}");
     }
+
+    /// Every operationId must be globally unique — duplicate ids make
+    /// openapi-typescript emit duplicate `operations` identifiers (invalid TS).
+    #[test]
+    fn operation_ids_are_globally_unique() {
+        let doc: serde_json::Value =
+            serde_json::from_str(&build_openapi_json()).expect("openapi is valid json");
+        let mut seen = std::collections::HashSet::new();
+        let mut missing = 0usize;
+        if let Some(paths) = doc.get("paths").and_then(|p| p.as_object()) {
+            for (_path, item) in paths {
+                if let Some(methods) = item.as_object() {
+                    for method in ["get", "post", "put", "patch", "delete"] {
+                        if let Some(op) = methods.get(method) {
+                            match op.get("operationId").and_then(|v| v.as_str()) {
+                                Some(opid) => assert!(
+                                    seen.insert(opid.to_string()),
+                                    "duplicate operationId {opid}"
+                                ),
+                                None => missing += 1,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(missing, 0, "every operation must declare a unique operationId");
+    }
 }

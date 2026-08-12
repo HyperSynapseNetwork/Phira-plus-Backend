@@ -44,6 +44,7 @@ pub struct ChartListParams {
 #[utoipa::path(
     get,
     path = "/api/v1/charts",
+    operation_id = "charts_get",
     responses(
         (status = 200, description = "chart list", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -81,6 +82,7 @@ pub async fn chart_list(
 #[utoipa::path(
     get,
     path = "/api/v1/charts/popular",
+    operation_id = "charts_popular_get",
     responses(
         (status = 200, description = "popular charts", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -100,6 +102,7 @@ pub async fn chart_popular(State(state): State<Arc<AppState>>) -> Result<Json<Va
 #[utoipa::path(
     get,
     path = "/api/v1/charts/{id}",
+    operation_id = "charts_id_get",
     responses(
         (status = 200, description = "chart detail", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -120,6 +123,7 @@ pub async fn chart_detail(
 #[utoipa::path(
     get,
     path = "/api/v1/charts/{id}/preview",
+    operation_id = "charts_id_preview_get",
     responses(
         (status = 200, description = "chart file bytes", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -153,6 +157,7 @@ pub async fn chart_preview(
 #[utoipa::path(
     get,
     path = "/api/v1/charts/{id}/viewer",
+    operation_id = "charts_id_viewer_get",
     responses(
         (status = 200, description = "bincode chart blob", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -193,6 +198,7 @@ pub struct RecordQueryParams {
 #[utoipa::path(
     get,
     path = "/api/v1/charts/{id}/records",
+    operation_id = "charts_id_records_get",
     responses(
         (status = 200, description = "chart records", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -216,6 +222,7 @@ pub async fn chart_records(
 #[utoipa::path(
     get,
     path = "/api/v1/charts/{id}/top",
+    operation_id = "charts_id_top_get",
     responses(
         (status = 200, description = "top records", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -242,6 +249,7 @@ pub struct RecordByPlayerParams {
 #[utoipa::path(
     get,
     path = "/api/v1/records",
+    operation_id = "records_get",
     responses(
         (status = 200, description = "player records", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -264,6 +272,7 @@ pub async fn records_by_player(
 #[utoipa::path(
     get,
     path = "/api/v1/records/query/{chart_id}",
+    operation_id = "records_query_chart_id_get",
     responses(
         (status = 200, description = "chart records", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -287,6 +296,7 @@ pub async fn records_query(
 #[utoipa::path(
     get,
     path = "/api/v1/records/list15/{chart_id}",
+    operation_id = "records_list15_chart_id_get",
     responses(
         (status = 200, description = "top-15 records", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -305,6 +315,7 @@ pub async fn records_list15(
 #[utoipa::path(
     get,
     path = "/api/v1/records/pool/{user_id}",
+    operation_id = "records_pool_user_id_get",
     responses(
         (status = 200, description = "record pool", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -323,6 +334,7 @@ pub async fn records_pool(
 #[utoipa::path(
     get,
     path = "/api/v1/records/{id}",
+    operation_id = "records_id_get",
     responses(
         (status = 200, description = "record detail", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -349,6 +361,7 @@ pub struct UserSearchParams {
 #[utoipa::path(
     get,
     path = "/api/v1/users",
+    operation_id = "users_get",
     responses(
         (status = 200, description = "user search results", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -371,6 +384,7 @@ pub async fn users_search(
 #[utoipa::path(
     get,
     path = "/api/v1/users/{phira_id}",
+    operation_id = "users_phira_id_get",
     responses(
         (status = 200, description = "user profile", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
@@ -389,6 +403,7 @@ pub async fn user_detail(
 #[utoipa::path(
     get,
     path = "/api/v1/users/{phira_id}/stats",
+    operation_id = "users_phira_id_stats_get",
     responses(
         (status = 200, description = "user stats", body = serde_json::Value),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),

@@ -53,6 +53,7 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/rooms",
+    operation_id = "rooms_get",
     responses(
         (status = 200, description = "room list", body = serde_json::Value),
         (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
@@ -73,6 +74,7 @@ pub async fn list_rooms(
 #[utoipa::path(
     get,
     path = "/api/v1/rooms/{room_id}",
+    operation_id = "rooms_room_id_get",
     responses(
         (status = 200, description = "room detail", body = serde_json::Value),
         (status = 404, description = "room not found", body = ErrorEnvelope),
@@ -94,6 +96,7 @@ pub async fn room_info(
 #[utoipa::path(
     get,
     path = "/api/v1/rooms/{room_id}/history",
+    operation_id = "rooms_room_id_history_get",
     responses(
         (status = 200, description = "room rounds + scores", body = serde_json::Value),
         (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
@@ -126,6 +129,7 @@ pub struct ChatSendBody {
 #[utoipa::path(
     post,
     path = "/api/v1/rooms/{room_id}/chat",
+    operation_id = "rooms_room_id_chat_post",
     request_body = ChatSendBody,
     responses(
         (status = 200, description = "chat sent", body = serde_json::Value),
@@ -172,6 +176,7 @@ pub struct RoomActionBody2 {
 #[utoipa::path(
     post,
     path = "/api/v1/rooms/{room_id}/actions",
+    operation_id = "rooms_room_id_actions_post",
     request_body = RoomActionBody2,
     responses(
         (status = 200, description = "action result", body = serde_json::Value),
@@ -315,6 +320,7 @@ async fn execute_room_action(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/rooms",
+    operation_id = "admin_rooms_get",
     responses(
         (status = 200, description = "room list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -343,6 +349,7 @@ pub struct CreateRoomBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/rooms",
+    operation_id = "admin_rooms_post",
     request_body = CreateRoomBody,
     responses(
         (status = 200, description = "room created", body = serde_json::Value),
@@ -368,6 +375,7 @@ pub async fn admin_create_room(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/rooms/{room_id}",
+    operation_id = "admin_rooms_room_id_get",
     responses(
         (status = 200, description = "room detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -388,6 +396,7 @@ pub async fn admin_room_info(
 #[utoipa::path(
     delete,
     path = "/api/v1/admin/rooms/{room_id}",
+    operation_id = "admin_rooms_room_id_delete",
     responses(
         (status = 200, description = "room closed", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -436,6 +445,7 @@ pub struct AdminRoomActionBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/rooms/{room_id}/actions",
+    operation_id = "admin_rooms_room_id_actions_post",
     request_body = AdminRoomActionBody,
     responses(
         (status = 200, description = "action result", body = serde_json::Value),
@@ -550,6 +560,7 @@ pub struct RoomBatchBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/rooms/actions/batch",
+    operation_id = "admin_rooms_actions_batch_post",
     request_body = RoomBatchBody,
     responses(
         (status = 200, description = "per-item results", body = serde_json::Value),

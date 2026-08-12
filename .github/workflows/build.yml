@@ -125,6 +125,9 @@ jobs:
         run: |
           bash scripts/gen-types.sh
           git diff --stat contracts/types.ts || true
+      - name: Type-check generated TS (no duplicate identifiers)
+        run: |
+          npx --yes -p typescript tsc --noEmit --skipLibCheck contracts/types.ts
       - name: Commit generated types (if changed)
         run: |
           git checkout -B main   # checkout is a detached HEAD (ref = build_ref)

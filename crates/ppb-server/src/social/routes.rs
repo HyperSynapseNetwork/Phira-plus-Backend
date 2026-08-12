@@ -62,6 +62,7 @@ async fn user_by_id(db: &sqlx::PgPool, id: Uuid) -> Result<Option<User>, ApiErro
 #[utoipa::path(
     get,
     path = "/api/v1/friends",
+    operation_id = "friends_get",
     responses(
         (status = 200, description = "friend list (paginated)", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -92,6 +93,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/friends/requests",
+    operation_id = "friends_requests_get",
     responses(
         (status = 200, description = "friend requests (paginated)", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -139,6 +141,7 @@ pub struct SendRequestBody {
 #[utoipa::path(
     post,
     path = "/api/v1/friends/requests",
+    operation_id = "friends_requests_post",
     request_body = SendRequestBody,
     responses(
         (status = 200, description = "request sent", body = serde_json::Value),
@@ -169,6 +172,7 @@ pub async fn send_request(
 #[utoipa::path(
     post,
     path = "/api/v1/friends/requests/{request_id}/accept",
+    operation_id = "friends_requests_request_id_accept_post",
     responses(
         (status = 204, description = "accepted"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -192,6 +196,7 @@ pub async fn respond_accept(
 #[utoipa::path(
     post,
     path = "/api/v1/friends/requests/{request_id}/reject",
+    operation_id = "friends_requests_request_id_reject_post",
     responses(
         (status = 204, description = "rejected"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -215,6 +220,7 @@ pub async fn respond_reject(
 #[utoipa::path(
     post,
     path = "/api/v1/users/{phira_id}/block",
+    operation_id = "users_phira_id_block_post",
     responses(
         (status = 204, description = "blocked"),
         (status = 404, description = "user not found", body = ErrorEnvelope),

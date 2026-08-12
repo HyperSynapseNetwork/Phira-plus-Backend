@@ -42,6 +42,7 @@ pub struct ExecuteActionBody {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/actions",
+    operation_id = "admin_actions_get",
     responses(
         (status = 200, description = "action manifest", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -65,6 +66,7 @@ pub async fn list_actions(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/actions/{action_id}/execute",
+    operation_id = "admin_actions_action_id_execute_post",
     request_body = ExecuteActionBody,
     responses(
         (status = 200, description = "action result", body = serde_json::Value),
@@ -183,6 +185,7 @@ pub async fn execute_action(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/commands",
+    operation_id = "admin_commands_get",
     responses(
         (status = 200, description = "command runs", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -213,6 +216,7 @@ pub struct ExecuteCommandBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/commands/execute",
+    operation_id = "admin_commands_execute_post",
     request_body = ExecuteCommandBody,
     responses(
         (status = 200, description = "command result", body = serde_json::Value),

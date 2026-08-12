@@ -42,6 +42,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/automation/runbook-runs/{id}",
+    operation_id = "admin_automation_runbook_runs_id_get",
     responses(
         (status = 200, description = "runbook run detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -71,6 +72,7 @@ pub async fn get_run(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/automation/runbook-runs/{id}/cancel",
+    operation_id = "admin_automation_runbook_runs_id_cancel_post",
     responses(
         (status = 200, description = "cancelled", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -142,6 +144,7 @@ async fn fetch_runbook(db: &sqlx::PgPool, id: Uuid) -> Result<RunbookRow, ApiErr
 #[utoipa::path(
     post,
     path = "/api/v1/admin/automation/runbooks",
+    operation_id = "admin_automation_runbooks_post",
     request_body = CreateRunbookBody,
     responses(
         (status = 200, description = "runbook created", body = serde_json::Value),
@@ -177,6 +180,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/automation/runbooks",
+    operation_id = "admin_automation_runbooks_get",
     responses(
         (status = 200, description = "runbook list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -200,6 +204,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/automation/runbooks/{id}",
+    operation_id = "admin_automation_runbooks_id_get",
     responses(
         (status = 200, description = "runbook detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -220,6 +225,7 @@ pub async fn get_one(
 #[utoipa::path(
     patch,
     path = "/api/v1/admin/automation/runbooks/{id}",
+    operation_id = "admin_automation_runbooks_id_patch",
     request_body = CreateRunbookBody,
     responses(
         (status = 200, description = "runbook updated", body = serde_json::Value),
@@ -257,6 +263,7 @@ pub async fn update(
 #[utoipa::path(
     delete,
     path = "/api/v1/admin/automation/runbooks/{id}",
+    operation_id = "admin_automation_runbooks_id_delete",
     responses(
         (status = 204, description = "deleted"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -288,6 +295,7 @@ pub struct RunBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/automation/runbooks/{id}/run",
+    operation_id = "admin_automation_runbooks_id_run_post",
     responses(
         (status = 200, description = "run result", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -421,6 +429,7 @@ pub async fn run(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/automation/runbook-runs",
+    operation_id = "admin_automation_runbook_runs_get",
     responses(
         (status = 200, description = "runbook run list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

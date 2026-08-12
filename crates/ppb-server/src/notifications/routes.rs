@@ -74,6 +74,7 @@ async fn wire_notification(
 #[utoipa::path(
     get,
     path = "/api/v1/notifications",
+    operation_id = "notifications_get",
     responses(
         (status = 200, description = "notification inbox", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -104,6 +105,7 @@ pub async fn list(
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/read",
+    operation_id = "notifications_id_read_post",
     responses(
         (status = 204, description = "marked read"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -127,6 +129,7 @@ pub async fn read(
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/dismiss",
+    operation_id = "notifications_id_dismiss_post",
     responses(
         (status = 204, description = "dismissed"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -155,6 +158,7 @@ pub struct ActionBody {
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/action",
+    operation_id = "notifications_id_action_post",
     request_body = ActionBody,
     responses(
         (status = 200, description = "action acknowledged", body = serde_json::Value),
@@ -198,6 +202,7 @@ pub struct InputBody {
 #[utoipa::path(
     post,
     path = "/api/v1/notifications/{id}/input",
+    operation_id = "notifications_id_input_post",
     request_body = InputBody,
     responses(
         (status = 200, description = "input sent", body = serde_json::Value),

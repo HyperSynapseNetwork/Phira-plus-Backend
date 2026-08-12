@@ -42,6 +42,7 @@ pub struct LogParams {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/logs",
+    operation_id = "admin_logs_get",
     responses(
         (status = 200, description = "log history", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -86,6 +87,7 @@ pub struct LogInputBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/logs/input",
+    operation_id = "admin_logs_input_post",
     request_body = LogInputBody,
     responses(
         (status = 200, description = "command result", body = serde_json::Value),
@@ -177,6 +179,7 @@ async fn stream(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/logs/translate",
+    operation_id = "admin_logs_translate_get",
     responses(
         (status = 200, description = "translated log message", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -202,6 +205,7 @@ pub struct TranslateParams {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/logs/translate",
+    operation_id = "admin_logs_translate_post",
     request_body = TranslateParams,
     responses(
         (status = 200, description = "translated log message", body = serde_json::Value),

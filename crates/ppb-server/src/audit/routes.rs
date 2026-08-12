@@ -41,6 +41,7 @@ pub struct AuditFilterParams {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/audit",
+    operation_id = "admin_audit_get",
     responses(
         (status = 200, description = "audit events (paginated)", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -84,6 +85,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/audit/{id}",
+    operation_id = "admin_audit_id_get",
     responses(
         (status = 200, description = "audit event", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -113,6 +115,7 @@ pub struct ExportParams {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/audit/export",
+    operation_id = "admin_audit_export_get",
     responses(
         (status = 200, description = "audit export (csv|json)", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -153,6 +156,7 @@ pub async fn export(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/audit/export.csv",
+    operation_id = "admin_audit_export_csv_get",
     responses(
         (status = 200, description = "audit CSV export", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

@@ -115,6 +115,7 @@ async fn list_replays(
 #[utoipa::path(
     get,
     path = "/api/v1/replays/share/{token}",
+    operation_id = "replays_share_token_get",
     responses(
         (status = 200, description = "resolved replay identity", body = serde_json::Value),
         (status = 404, description = "invalid/expired/revoked token", body = ErrorEnvelope),
@@ -144,6 +145,7 @@ pub struct ReplayDetailParams {
 #[utoipa::path(
     get,
     path = "/api/v1/replays/{round_uuid}",
+    operation_id = "replays_round_uuid_get",
     responses(
         (status = 200, description = "replay detail", body = ReplayDetail),
         (status = 403, description = "access denied", body = ErrorEnvelope),
@@ -190,6 +192,7 @@ pub async fn detail(
 #[utoipa::path(
     get,
     path = "/api/v1/replays/{round_uuid}/manifest",
+    operation_id = "replays_round_uuid_manifest_get",
     responses(
         (status = 200, description = "replay manifest", body = ReplayManifest),
         (status = 403, description = "access denied", body = ErrorEnvelope),

@@ -225,6 +225,7 @@ pub fn check_reauth_header(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/phira/login",
+    operation_id = "auth_phira_login_post",
     request_body = PhiraLoginRequest,
     responses(
         (status = 200, description = "logged in; cookies set", body = serde_json::Value),
@@ -273,6 +274,7 @@ pub async fn phira_login(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/phira/reauth",
+    operation_id = "auth_phira_reauth_post",
     request_body = ReauthRequest,
     responses(
         (status = 200, description = "reauth context issued", body = serde_json::Value),
@@ -342,6 +344,7 @@ pub async fn phira_reauth(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/refresh",
+    operation_id = "auth_refresh_post",
     responses(
         (status = 200, description = "refreshed; cookies rotated", body = serde_json::Value),
         (status = 401, description = "invalid/expired refresh token", body = ErrorEnvelope),
@@ -413,6 +416,7 @@ pub async fn refresh(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/logout",
+    operation_id = "auth_logout_post",
     responses(
         (status = 204, description = "logged out"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -538,6 +542,7 @@ pub async fn github_unbind(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/auth/root/login",
+    operation_id = "admin_auth_root_login_post",
     request_body = RootLoginRequest,
     responses(
         (status = 200, description = "root logged in; cookies set", body = serde_json::Value),
@@ -575,6 +580,7 @@ pub async fn root_login(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/auth/root/session",
+    operation_id = "admin_auth_root_session_get",
     responses(
         (status = 200, description = "root session probe", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -602,6 +608,7 @@ pub async fn root_session(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/auth/root/change-password",
+    operation_id = "admin_auth_root_change_password_post",
     request_body = ChangePasswordRequest,
     responses(
         (status = 204, description = "password changed"),

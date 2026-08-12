@@ -41,6 +41,7 @@ pub struct SendBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/notifications/send",
+    operation_id = "admin_notifications_send_post",
     request_body = SendBody,
     responses(
         (status = 200, description = "event created + push summary", body = serde_json::Value),
@@ -102,6 +103,7 @@ pub async fn send(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/notifications/delivery",
+    operation_id = "admin_notifications_delivery_get",
     responses(
         (status = 200, description = "delivery summary", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

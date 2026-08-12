@@ -41,6 +41,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/ppb",
+    operation_id = "admin_config_ppb_get",
     responses(
         (status = 200, description = "effective PPB config", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -116,6 +117,7 @@ async fn pmp_descriptor(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/descriptors",
+    operation_id = "admin_config_descriptors_get",
     responses(
         (status = 200, description = "form descriptors", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -139,6 +141,7 @@ pub async fn descriptors(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/values",
+    operation_id = "admin_config_values_get",
     responses(
         (status = 200, description = "current config values", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -184,6 +187,7 @@ pub struct ConfigContentBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/validate",
+    operation_id = "admin_config_validate_post",
     request_body = ConfigContentBody,
     responses(
         (status = 200, description = "validation result", body = serde_json::Value),
@@ -206,6 +210,7 @@ pub async fn validate(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/diff",
+    operation_id = "admin_config_diff_post",
     request_body = ConfigContentBody,
     responses(
         (status = 200, description = "field-level diff", body = serde_json::Value),
@@ -247,6 +252,7 @@ pub async fn diff(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/save",
+    operation_id = "admin_config_save_post",
     request_body = ConfigContentBody,
     responses(
         (status = 200, description = "saved + health", body = serde_json::Value),
@@ -285,6 +291,7 @@ pub async fn save(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/snapshots",
+    operation_id = "admin_config_snapshots_get",
     responses(
         (status = 200, description = "snapshot list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -305,6 +312,7 @@ pub async fn snapshots(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/raw",
+    operation_id = "admin_config_raw_get",
     responses(
         (status = 200, description = "raw config YAML", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -332,6 +340,7 @@ pub struct RollbackBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/config/rollback",
+    operation_id = "admin_config_rollback_post",
     request_body = RollbackBody,
     responses(
         (status = 200, description = "rolled back + health", body = serde_json::Value),
@@ -498,6 +507,7 @@ async fn health_check(state: &Arc<AppState>) -> Value {
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/ppf",
+    operation_id = "admin_config_ppf_get",
     responses(
         (status = 200, description = "PPF build config", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),

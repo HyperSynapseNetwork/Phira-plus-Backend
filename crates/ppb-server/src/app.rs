@@ -432,6 +432,7 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
 #[utoipa::path(
     get,
     path = "/api/v1/me",
+    operation_id = "me_get",
     responses(
         (status = 200, description = "session probe", body = MeResponse),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -530,6 +531,7 @@ async fn session_created_at(
 #[utoipa::path(
     get,
     path = "/api/v1/me/profile",
+    operation_id = "me_profile_get",
     responses(
         (status = 200, description = "community profile", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -610,6 +612,7 @@ pub async fn me_profile(
 #[utoipa::path(
     get,
     path = "/api/v1/me/identities",
+    operation_id = "me_identities_get",
     responses(
         (status = 200, description = "identity bindings", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -632,6 +635,7 @@ pub async fn me_identities(
 #[utoipa::path(
     get,
     path = "/api/v1/me/preferences",
+    operation_id = "me_preferences_get",
     responses(
         (status = 200, description = "user preferences", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -664,6 +668,7 @@ pub async fn me_preferences(
 #[utoipa::path(
     get,
     path = "/api/v1/me/join-intents",
+    operation_id = "me_join_intents_get",
     responses(
         (status = 200, description = "join intents", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -691,6 +696,7 @@ pub struct JoinIntentBody {
 #[utoipa::path(
     post,
     path = "/api/v1/me/join-intents",
+    operation_id = "me_join_intents_post",
     request_body = JoinIntentBody,
     responses(
         (status = 200, description = "join intent created", body = serde_json::Value),
@@ -720,6 +726,7 @@ pub async fn me_join_intent_create(
 #[utoipa::path(
     delete,
     path = "/api/v1/me/join-intents/{intent_id}",
+    operation_id = "me_join_intents_intent_id_delete",
     responses(
         (status = 204, description = "cancelled"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -743,6 +750,7 @@ pub async fn me_join_intent_cancel(
 #[utoipa::path(
     get,
     path = "/api/v1/me/join-intents/{intent_id}",
+    operation_id = "me_join_intents_intent_id_get",
     responses(
         (status = 200, description = "intent status", body = serde_json::Value),
         (status = 404, description = "not found", body = ErrorEnvelope),
@@ -765,6 +773,7 @@ pub async fn me_join_intent_get(
 #[utoipa::path(
     post,
     path = "/api/v1/friends/{phira_id}/remove",
+    operation_id = "friends_phira_id_remove_post",
     responses(
         (status = 204, description = "removed"),
         (status = 404, description = "user not found", body = ErrorEnvelope),
@@ -791,6 +800,7 @@ pub async fn friend_remove(
 #[utoipa::path(
     get,
     path = "/api/v1/me/push-endpoints",
+    operation_id = "me_push_endpoints_get",
     responses(
         (status = 200, description = "push endpoints", body = serde_json::Value),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),
@@ -823,6 +833,7 @@ pub struct PushEndpointBody {
 #[utoipa::path(
     post,
     path = "/api/v1/me/push-endpoints",
+    operation_id = "me_push_endpoints_post",
     request_body = PushEndpointBody,
     responses(
         (status = 200, description = "registered", body = serde_json::Value),
@@ -861,6 +872,7 @@ pub async fn me_push_endpoint_register(
 #[utoipa::path(
     delete,
     path = "/api/v1/me/push-endpoints/{endpoint_id}",
+    operation_id = "me_push_endpoints_endpoint_id_delete",
     responses(
         (status = 204, description = "removed"),
         (status = 401, description = "unauthenticated", body = ErrorEnvelope),

@@ -33,6 +33,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     get,
     path = "/api/v1/public/meta",
+    operation_id = "public_meta_get",
     responses(
         (status = 200, description = "meta + capabilities", body = serde_json::Value),
     ),
@@ -63,6 +64,7 @@ pub async fn meta(
 #[utoipa::path(
     get,
     path = "/api/v1/public/site",
+    operation_id = "public_site_get",
     responses(
         (status = 200, description = "public site config", body = serde_json::Value),
     ),
@@ -98,6 +100,7 @@ pub async fn site(
 #[utoipa::path(
     get,
     path = "/api/v1/public/announcements",
+    operation_id = "public_announcements_get",
     responses(
         (status = 200, description = "announcements content", body = serde_json::Value),
     ),
@@ -113,6 +116,7 @@ pub async fn announcements(
 #[utoipa::path(
     get,
     path = "/api/v1/public/downloads",
+    operation_id = "public_downloads_get",
     responses(
         (status = 200, description = "downloads content", body = serde_json::Value),
     ),
@@ -128,6 +132,7 @@ pub async fn downloads(
 #[utoipa::path(
     get,
     path = "/api/v1/public/nodes",
+    operation_id = "public_nodes_get",
     responses(
         (status = 200, description = "nodes content", body = serde_json::Value),
     ),

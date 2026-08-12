@@ -29,6 +29,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs/{job_id}/retry",
+    operation_id = "admin_jobs_job_id_retry_post",
     responses(
         (status = 200, description = "job re-queued", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -49,6 +50,7 @@ pub async fn retry_job(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/jobs/tasks",
+    operation_id = "admin_jobs_tasks_get",
     responses(
         (status = 200, description = "admin tasks", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -86,6 +88,7 @@ pub async fn list_tasks(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs/tasks/{task_id}/complete",
+    operation_id = "admin_jobs_tasks_task_id_complete_post",
     responses(
         (status = 200, description = "task completed", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -114,6 +117,7 @@ pub async fn complete_task(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/jobs",
+    operation_id = "admin_jobs_get",
     responses(
         (status = 200, description = "job list", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -151,6 +155,7 @@ pub struct CreateJobBody {
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs",
+    operation_id = "admin_jobs_post",
     request_body = CreateJobBody,
     responses(
         (status = 200, description = "job started", body = serde_json::Value),
@@ -179,6 +184,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/api/v1/admin/jobs/{job_id}",
+    operation_id = "admin_jobs_job_id_get",
     responses(
         (status = 200, description = "job detail", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
@@ -211,6 +217,7 @@ pub async fn get_job(
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs/{job_id}/cancel",
+    operation_id = "admin_jobs_job_id_cancel_post",
     responses(
         (status = 200, description = "cancelled", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
