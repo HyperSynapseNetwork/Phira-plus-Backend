@@ -22,6 +22,7 @@ use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+// `use crate::error::ErrorEnvelope` is referenced by utoipa path macros below.
 
 /// Public + logged-in room routes.
 pub fn routes() -> Router<Arc<AppState>> {
@@ -310,7 +311,17 @@ async fn execute_room_action(
 
 // ── Admin room routes ──────────────────────────────────────────
 
-async fn admin_list_rooms(
+/// GET /api/v1/admin/rooms — list rooms (admin superset).
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/rooms",
+    responses(
+        (status = 200, description = "room list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_list_rooms(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -319,7 +330,7 @@ async fn admin_list_rooms(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateRoomBody {
     pub room_id: String,
     #[serde(default)]
@@ -328,7 +339,18 @@ pub struct CreateRoomBody {
     pub persistent_empty: bool,
 }
 
-async fn admin_create_room(
+/// POST /api/v1/admin/rooms — create a room.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/rooms",
+    request_body = CreateRoomBody,
+    responses(
+        (status = 200, description = "room created", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_create_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateRoomBody>,
@@ -342,7 +364,17 @@ async fn admin_create_room(
     Ok(Json(result))
 }
 
-async fn admin_room_info(
+/// GET /api/v1/admin/rooms/{room_id} — room detail (admin).
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/rooms/{room_id}",
+    responses(
+        (status = 200, description = "room detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_room_info(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
@@ -352,7 +384,17 @@ async fn admin_room_info(
     Ok(Json(result))
 }
 
-async fn admin_close_room(
+/// DELETE /api/v1/admin/rooms/{room_id} — close a room.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/rooms/{room_id}",
+    responses(
+        (status = 200, description = "room closed", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_close_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
@@ -383,6 +425,7 @@ async fn room_whitelist(
 }
 
 #[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct AdminRoomActionBody {
     pub action: String,
     #[serde(default)]
@@ -391,7 +434,17 @@ pub struct AdminRoomActionBody {
 
 /// POST /api/v1/admin/rooms/{room_id}/actions — run a registered action scoped
 /// to a room (admin-gated or host-allowed, re-derived host).
-async fn admin_room_action(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/rooms/{room_id}/actions",
+    request_body = AdminRoomActionBody,
+    responses(
+        (status = 200, description = "action result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_room_action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -486,6 +539,7 @@ async fn admin_room_action(
 }
 
 #[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RoomBatchBody {
     pub action: String,
     pub room_ids: Vec<String>,
@@ -495,7 +549,17 @@ pub struct RoomBatchBody {
 
 /// POST /api/v1/admin/rooms/actions/batch — batch room action (kick/move/ban)
 /// with per-item results and partial failure.
-async fn admin_room_actions_batch(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/rooms/actions/batch",
+    request_body = RoomBatchBody,
+    responses(
+        (status = 200, description = "per-item results", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn admin_room_actions_batch(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

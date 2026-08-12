@@ -15,7 +15,8 @@ use super::model::AuditEvent;
 use super::repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -24,6 +25,18 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/audit/export", get(export))
         .route("/audit/export.csv", get(export_csv))
 }
+
+/// GET /api/v1/admin/audit — filtered audit list.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit",
+    responses(
+        (status = 200, description = "audit events (paginated)", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
 
 #[derive(Debug, Deserialize)]
 pub struct AuditFilterParams {
@@ -69,7 +82,17 @@ async fn list(
     })))
 }
 
-async fn detail(
+/// GET /api/v1/admin/audit/{id} — single audit event.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit/{id}",
+    responses(
+        (status = 200, description = "audit event", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -89,7 +112,16 @@ pub struct ExportParams {
 }
 
 /// GET /api/v1/admin/audit/export?format=csv|json — export (contract §17).
-async fn export(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit/export",
+    responses(
+        (status = 200, description = "audit export (csv|json)", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn export(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<ExportParams>,
@@ -120,7 +152,16 @@ async fn export(
 }
 
 /// GET /api/v1/admin/audit/export.csv — CSV export (redacted; no secrets).
-async fn export_csv(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit/export.csv",
+    responses(
+        (status = 200, description = "audit CSV export", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn export_csv(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<AuditFilterParams>,

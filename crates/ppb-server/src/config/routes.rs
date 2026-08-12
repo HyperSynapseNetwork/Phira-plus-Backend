@@ -13,7 +13,8 @@ use super::pmp::{pmp_config_descriptor, PmpConfigManager};
 use super::repo as config_repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::{ApiError, ErrorCode};
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -37,7 +38,16 @@ pub fn routes() -> Router<Arc<AppState>> {
 // ── PPB runtime config ──────────────────────────────────────────
 
 /// GET /api/v1/admin/config/ppb — effective PPB config (merged with overrides).
-async fn ppb_config(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/ppb",
+    responses(
+        (status = 200, description = "effective PPB config", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn ppb_config(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -103,7 +113,16 @@ async fn pmp_descriptor(
 // ── §17 unified config endpoints ───────────────────────────────
 
 /// GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes.
-async fn descriptors(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/descriptors",
+    responses(
+        (status = 200, description = "form descriptors", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn descriptors(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -117,7 +136,16 @@ async fn descriptors(
 }
 
 /// GET /api/v1/admin/config/values — current PMP config field values (redacted).
-async fn values(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/values",
+    responses(
+        (status = 200, description = "current config values", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn values(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -145,7 +173,7 @@ async fn values(
     Ok(Json(serde_json::json!({ "version": 1, "values": values })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ConfigContentBody {
     pub content: String,
     #[serde(default)]
@@ -153,7 +181,17 @@ pub struct ConfigContentBody {
 }
 
 /// POST /api/v1/admin/config/validate — validate proposed YAML parses.
-async fn validate(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/config/validate",
+    request_body = ConfigContentBody,
+    responses(
+        (status = 200, description = "validation result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn validate(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<ConfigContentBody>,
@@ -165,7 +203,17 @@ async fn validate(
 }
 
 /// POST /api/v1/admin/config/diff — field-level diff of current vs proposed.
-async fn diff(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/config/diff",
+    request_body = ConfigContentBody,
+    responses(
+        (status = 200, description = "field-level diff", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn diff(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<ConfigContentBody>,
@@ -196,7 +244,17 @@ async fn diff(
 
 /// POST /api/v1/admin/config/save — validate → snapshot → atomic write →
 /// reload → health check (design §20.3).
-async fn save(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/config/save",
+    request_body = ConfigContentBody,
+    responses(
+        (status = 200, description = "saved + health", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn save(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<ConfigContentBody>,
@@ -224,7 +282,16 @@ async fn save(
 }
 
 /// GET /api/v1/admin/config/snapshots — list PMP snapshots.
-async fn snapshots(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/snapshots",
+    responses(
+        (status = 200, description = "snapshot list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn snapshots(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -235,7 +302,16 @@ async fn snapshots(
 }
 
 /// GET /api/v1/admin/config/raw — raw PMP config YAML.
-async fn raw(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/raw",
+    responses(
+        (status = 200, description = "raw config YAML", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn raw(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -247,13 +323,23 @@ async fn raw(
     Ok(Json(serde_json::json!({ "content": manager.read_yaml()? })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RollbackBody {
     pub snapshot_id: Uuid,
 }
 
 /// POST /api/v1/admin/config/rollback — rollback to a snapshot.
-async fn rollback(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/config/rollback",
+    request_body = RollbackBody,
+    responses(
+        (status = 200, description = "rolled back + health", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn rollback(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<RollbackBody>,
@@ -408,7 +494,17 @@ async fn health_check(state: &Arc<AppState>) -> Value {
 
 // ── PPF build/SEO config ────────────────────────────────────────
 
-async fn ppf_config(
+/// GET /api/v1/admin/config/ppf — PPF build/SEO config.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/config/ppf",
+    responses(
+        (status = 200, description = "PPF build config", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn ppf_config(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {

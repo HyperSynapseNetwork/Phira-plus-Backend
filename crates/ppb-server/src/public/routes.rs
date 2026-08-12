@@ -15,7 +15,8 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 use crate::pmp::events::{PpbEvent, ReplayResult};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -29,6 +30,14 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// GET /api/v1/public/meta — capabilities / meta contract.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/meta",
+    responses(
+        (status = 200, description = "meta + capabilities", body = serde_json::Value),
+    ),
+    tag = "public"
+)]
 pub async fn meta(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
@@ -51,6 +60,14 @@ pub async fn meta(
 /// `visit_count` (P-86): privacy-friendly aggregate. Baseline from config
 /// (`site.visit_count`), plus a server-side in-memory counter incremented on
 /// each fetch. No client fingerprint is used; defaults to 0 when unset.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/site",
+    responses(
+        (status = 200, description = "public site config", body = serde_json::Value),
+    ),
+    tag = "public"
+)]
 pub async fn site(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
@@ -78,6 +95,14 @@ pub async fn site(
 }
 
 /// GET /api/v1/public/announcements — public runtime content.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/announcements",
+    responses(
+        (status = 200, description = "announcements content", body = serde_json::Value),
+    ),
+    tag = "public"
+)]
 pub async fn announcements(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
@@ -85,6 +110,14 @@ pub async fn announcements(
 }
 
 /// GET /api/v1/public/downloads — public runtime content.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/downloads",
+    responses(
+        (status = 200, description = "downloads content", body = serde_json::Value),
+    ),
+    tag = "public"
+)]
 pub async fn downloads(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
@@ -92,6 +125,14 @@ pub async fn downloads(
 }
 
 /// GET /api/v1/public/nodes — public runtime content.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/nodes",
+    responses(
+        (status = 200, description = "nodes content", body = serde_json::Value),
+    ),
+    tag = "public"
+)]
 pub async fn nodes(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {

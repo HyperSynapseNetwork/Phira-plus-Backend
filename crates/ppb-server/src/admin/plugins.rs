@@ -11,7 +11,8 @@ use serde_json::{json, Value};
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -24,7 +25,17 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/plugins/call", post(call))
 }
 
-async fn list(
+/// GET /api/v1/admin/plugins — list plugins.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/plugins",
+    responses(
+        (status = 200, description = "plugin list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -33,7 +44,17 @@ async fn list(
     Ok(Json(result))
 }
 
-async fn info(
+/// GET /api/v1/admin/plugins/{name} — plugin info.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/plugins/{name}",
+    responses(
+        (status = 200, description = "plugin info", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn info(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -43,7 +64,17 @@ async fn info(
     Ok(Json(result))
 }
 
-async fn enable(
+/// POST /api/v1/admin/plugins/{name}/enable — enable a plugin.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/plugins/{name}/enable",
+    responses(
+        (status = 200, description = "enabled", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn enable(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -53,7 +84,17 @@ async fn enable(
     Ok(Json(result))
 }
 
-async fn disable(
+/// POST /api/v1/admin/plugins/{name}/disable — disable a plugin.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/plugins/{name}/disable",
+    responses(
+        (status = 200, description = "disabled", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn disable(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -64,7 +105,16 @@ async fn disable(
 }
 
 /// POST /api/v1/admin/plugins — reload all plugins.
-async fn reload(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/plugins",
+    responses(
+        (status = 200, description = "reloaded", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn reload(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -73,7 +123,17 @@ async fn reload(
     Ok(Json(result))
 }
 
-async fn remove(
+/// DELETE /api/v1/admin/plugins/{name} — remove a plugin.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/plugins/{name}",
+    responses(
+        (status = 204, description = "removed"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn remove(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -83,7 +143,7 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, utoipa::ToSchema)]
 pub struct PluginCallBody {
     pub name: String,
     #[serde(default)]
@@ -94,7 +154,17 @@ pub struct PluginCallBody {
 
 /// POST /api/v1/admin/plugins/{name}/{action} — unified plugin action dispatch
 /// (contract §17): enable | disable | reload | remove | call.
-async fn action_dispatch(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/plugins/{name}/{action}",
+    request_body = PluginCallBody,
+    responses(
+        (status = 200, description = "plugin action result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn action_dispatch(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path((name, action)): Path<(String, String)>,
@@ -133,7 +203,18 @@ async fn action_dispatch(
     }
 }
 
-async fn call(
+/// POST /api/v1/admin/plugins/call — call a plugin API.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/plugins/call",
+    request_body = PluginCallBody,
+    responses(
+        (status = 200, description = "plugin call result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn call(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<PluginCallBody>,

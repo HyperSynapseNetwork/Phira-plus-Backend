@@ -13,7 +13,8 @@ use super::manifest::PermissionDef;
 use super::repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -31,7 +32,16 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// GET /api/v1/admin/permissions/manifest
-async fn manifest(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/permissions/manifest",
+    responses(
+        (status = 200, description = "permission manifest", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn manifest(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<PermissionDef>>, ApiError> {
@@ -42,7 +52,17 @@ async fn manifest(
     Ok(Json(state.permissions.manifest().to_vec()))
 }
 
-async fn list(
+/// GET /api/v1/admin/groups — list user groups.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/groups",
+    responses(
+        (status = 200, description = "group list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -55,14 +75,25 @@ async fn list(
     Ok(Json(serde_json::to_value(groups).unwrap_or(serde_json::Value::Null)))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateGroupBody {
     pub name: String,
     #[serde(default)]
     pub description: String,
 }
 
-async fn create(
+/// POST /api/v1/admin/groups — create a user group.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/groups",
+    request_body = CreateGroupBody,
+    responses(
+        (status = 200, description = "group created", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateGroupBody>,
@@ -78,7 +109,16 @@ async fn create(
 
 /// GET /api/v1/admin/groups/{id} — group detail + permissions + members +
 /// effective permission preview (design §18.5).
-async fn detail(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/groups/{id}",
+    responses(
+        (status = 200, description = "group detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,
@@ -115,12 +155,23 @@ async fn set_default(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RenameGroupBody {
     pub name: String,
 }
 
-async fn rename(
+/// PATCH /api/v1/admin/groups/{id} — rename a group.
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/groups/{id}",
+    request_body = RenameGroupBody,
+    responses(
+        (status = 204, description = "renamed"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn rename(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,
@@ -135,7 +186,17 @@ async fn rename(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-async fn delete_group(
+/// DELETE /api/v1/admin/groups/{id} — delete a group.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/groups/{id}",
+    responses(
+        (status = 204, description = "deleted"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn delete_group(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,
@@ -183,23 +244,33 @@ async fn remove_permission(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct MemberBody {
     pub user_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ReplaceMembersBody {
     pub user_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ReplacePermissionsBody {
     pub permissions: Vec<String>,
 }
 
 /// PUT /api/v1/admin/groups/{id}/members — replace the member set.
-async fn replace_members(
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/groups/{id}/members",
+    request_body = ReplaceMembersBody,
+    responses(
+        (status = 204, description = "members replaced"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn replace_members(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,
@@ -215,7 +286,17 @@ async fn replace_members(
 }
 
 /// PUT /api/v1/admin/groups/{id}/permissions — replace the permission set.
-async fn replace_permissions(
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/groups/{id}/permissions",
+    request_body = ReplacePermissionsBody,
+    responses(
+        (status = 204, description = "permissions replaced"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn replace_permissions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,

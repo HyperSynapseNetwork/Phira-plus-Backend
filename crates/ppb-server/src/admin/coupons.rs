@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::{ApiError, ErrorCode};
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -24,7 +25,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/coupons/{id}/revoke", post(revoke))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateCouponBody {
     #[serde(default)]
     pub code: String,
@@ -35,7 +36,17 @@ pub struct CreateCouponBody {
 }
 
 /// POST /api/v1/admin/coupons/create — create a coupon (generates a code if blank).
-async fn create(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/coupons/create",
+    request_body = CreateCouponBody,
+    responses(
+        (status = 200, description = "coupon created", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateCouponBody>,
@@ -76,7 +87,16 @@ async fn create(
 }
 
 /// POST /api/v1/admin/coupons/{id}/revoke — revoke a coupon.
-async fn revoke(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/coupons/{id}/revoke",
+    responses(
+        (status = 204, description = "revoked"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn revoke(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -92,7 +112,16 @@ async fn revoke(
 }
 
 /// GET /api/v1/admin/coupons — list coupons.
-async fn list(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/coupons",
+    responses(
+        (status = 200, description = "coupon list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {

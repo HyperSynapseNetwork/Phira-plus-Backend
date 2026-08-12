@@ -239,7 +239,7 @@ pub struct PushEndpointRow {
 }
 
 /// Encrypted subscription wire shape (before encryption at rest).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SubscriptionWire {
     pub endpoint: String,
     pub p256dh: String, // base64url

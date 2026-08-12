@@ -22,7 +22,8 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
-use crate::error::{ApiError, ErrorCode};
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -49,7 +50,16 @@ pub struct UserListParams {
 }
 
 /// GET /api/v1/admin/users — search PPB accounts (by phira_id or username).
-async fn list_users(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users",
+    responses(
+        (status = 200, description = "paginated users", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list_users(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<UserListParams>,
@@ -114,7 +124,16 @@ async fn list_users(
 }
 
 /// GET /api/v1/admin/users/{user_id} — PPB account + PMP player info.
-async fn user_detail(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{user_id}",
+    responses(
+        (status = 200, description = "user detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn user_detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
@@ -247,7 +266,16 @@ async fn ip_history(
 // ── §17 user subpaths ───────────────────────────────────────────
 
 /// GET /api/v1/admin/users/{id}/multiplayer — PMP player + presence (best-effort).
-async fn user_multiplayer(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{user_id}/multiplayer",
+    responses(
+        (status = 200, description = "player + presence", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn user_multiplayer(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
@@ -278,7 +306,16 @@ async fn user_multiplayer(
 }
 
 /// GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions.
-async fn user_sessions(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{user_id}/sessions",
+    responses(
+        (status = 200, description = "user sessions", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn user_sessions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
@@ -316,7 +353,16 @@ async fn user_sessions(
 }
 
 /// GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort).
-async fn user_security(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{user_id}/security",
+    responses(
+        (status = 200, description = "user security state", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn user_security(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
@@ -340,7 +386,16 @@ async fn user_security(
 }
 
 /// GET /api/v1/admin/users/{id}/audit — audit events targeting this user.
-async fn user_audit(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{user_id}/audit",
+    responses(
+        (status = 200, description = "user audit events", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn user_audit(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
@@ -366,16 +421,28 @@ async fn user_audit(
     Ok(Json(json!({ "items": rows })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UserActionBody {
     pub action: String,
     #[serde(default)]
     pub args: Value,
 }
 
+/// POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a user.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{user_id}/actions",
+    request_body = UserActionBody,
+    responses(
+        (status = 200, description = "action result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+
 /// POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a
 /// user (e.g. player.kick / player.ban). The phira_id is injected as user_id.
-async fn user_actions(
+pub async fn user_actions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

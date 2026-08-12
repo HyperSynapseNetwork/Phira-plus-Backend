@@ -20,7 +20,8 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
-use crate::error::{ApiError, ErrorCode};
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -31,14 +32,23 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/commands/execute", post(execute_command))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ExecuteActionBody {
     #[serde(default)]
     pub args: Value,
 }
 
 /// GET /api/v1/admin/actions — Action Manifest.
-async fn list_actions(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/actions",
+    responses(
+        (status = 200, description = "action manifest", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list_actions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<&'static ActionDescriptor>>, ApiError> {
@@ -52,7 +62,17 @@ async fn list_actions(
 }
 
 /// POST /api/v1/admin/actions/{id}/execute
-async fn execute_action(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/actions/{action_id}/execute",
+    request_body = ExecuteActionBody,
+    responses(
+        (status = 200, description = "action result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn execute_action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -160,7 +180,16 @@ async fn execute_action(
 }
 
 /// GET /api/v1/admin/commands — recent command runs.
-async fn list_commands(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/commands",
+    responses(
+        (status = 200, description = "command runs", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list_commands(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<crate::commands::model::CommandRun>>, ApiError> {
@@ -173,7 +202,7 @@ async fn list_commands(
     Ok(Json(runs))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ExecuteCommandBody {
     pub command: String,
 }
@@ -181,7 +210,17 @@ pub struct ExecuteCommandBody {
 /// POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).
 /// Requires an elevated reauth context and is fully audited with the **final**
 /// result (success / failure / timeout) — never a pre-recorded success.
-async fn execute_command(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/commands/execute",
+    request_body = ExecuteCommandBody,
+    responses(
+        (status = 200, description = "command result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn execute_command(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

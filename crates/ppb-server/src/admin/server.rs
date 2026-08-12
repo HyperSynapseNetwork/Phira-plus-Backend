@@ -13,7 +13,8 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -29,7 +30,17 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/server/broadcast/user", post(broadcast_user))
 }
 
-async fn server_stats(
+/// GET /api/v1/admin/server/stats — PMP server stats.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/server/stats",
+    responses(
+        (status = 200, description = "server stats", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn server_stats(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -38,7 +49,17 @@ async fn server_stats(
     Ok(Json(result))
 }
 
-async fn runtime_status(
+/// GET /api/v1/admin/server/runtime — runtime status.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/server/runtime",
+    responses(
+        (status = 200, description = "runtime status", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn runtime_status(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -47,7 +68,17 @@ async fn runtime_status(
     Ok(Json(result))
 }
 
-async fn config_reload(
+/// POST /api/v1/admin/server/config-reload — hot reload PMP config.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/config-reload",
+    responses(
+        (status = 200, description = "config reloaded", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn config_reload(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
@@ -56,7 +87,7 @@ async fn config_reload(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ServerActionBody {
     pub action: String,
     #[serde(default)]
@@ -65,7 +96,17 @@ pub struct ServerActionBody {
 
 /// POST /api/v1/admin/server/actions — unified server operation dispatch
 /// (contract §17). config_reload / shutdown / roomcreation / connections.
-async fn server_actions(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/actions",
+    request_body = ServerActionBody,
+    responses(
+        (status = 200, description = "server action result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn server_actions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -98,12 +139,23 @@ async fn server_actions(
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RoomCreationBody {
     pub enabled: bool,
 }
 
-async fn room_creation(
+/// POST /api/v1/admin/server/roomcreation — toggle room creation gate.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/roomcreation",
+    request_body = RoomCreationBody,
+    responses(
+        (status = 200, description = "gate toggled", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn room_creation(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<RoomCreationBody>,
@@ -117,7 +169,17 @@ async fn room_creation(
     Ok(Json(result))
 }
 
-async fn shutdown(
+/// POST /api/v1/admin/server/shutdown — shutdown PMP (critical reauth).
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/shutdown",
+    responses(
+        (status = 200, description = "shutdown initiated", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn shutdown(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -129,7 +191,7 @@ async fn shutdown(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct BroadcastBody {
     pub content: String,
     #[serde(default)]
@@ -138,7 +200,18 @@ pub struct BroadcastBody {
     pub user_id: Option<i64>,
 }
 
-async fn broadcast_all(
+/// POST /api/v1/admin/server/broadcast/all — server-wide system broadcast.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/broadcast/all",
+    request_body = BroadcastBody,
+    responses(
+        (status = 200, description = "broadcast sent", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn broadcast_all(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<BroadcastBody>,
@@ -152,7 +225,18 @@ async fn broadcast_all(
     Ok(Json(result))
 }
 
-async fn broadcast_room(
+/// POST /api/v1/admin/server/broadcast/room — room system broadcast.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/broadcast/room",
+    request_body = BroadcastBody,
+    responses(
+        (status = 200, description = "broadcast sent", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn broadcast_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<BroadcastBody>,
@@ -169,7 +253,18 @@ async fn broadcast_room(
     Ok(Json(result))
 }
 
-async fn broadcast_user(
+/// POST /api/v1/admin/server/broadcast/user — user system message.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/server/broadcast/user",
+    request_body = BroadcastBody,
+    responses(
+        (status = 200, description = "broadcast sent", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn broadcast_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<BroadcastBody>,

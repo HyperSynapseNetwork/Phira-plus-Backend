@@ -12,7 +12,8 @@ use uuid::Uuid;
 use super::Job;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -21,7 +22,17 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/jobs/{job_id}/cancel", post(cancel))
 }
 
-async fn list(
+/// GET /api/v1/admin/jobs — recent jobs.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/jobs",
+    responses(
+        (status = 200, description = "job list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Job>>, ApiError> {
@@ -40,7 +51,7 @@ async fn list(
     Ok(Json(jobs))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateJobBody {
     #[serde(rename = "type")]
     pub job_type: String,
@@ -48,7 +59,18 @@ pub struct CreateJobBody {
     pub args: Value,
 }
 
-async fn create(
+/// POST /api/v1/admin/jobs — start a new job.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/jobs",
+    request_body = CreateJobBody,
+    responses(
+        (status = 200, description = "job started", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateJobBody>,
@@ -65,7 +87,17 @@ async fn create(
     Ok(Json(json!({ "job": job })))
 }
 
-async fn get_job(
+/// GET /api/v1/admin/jobs/{job_id} — job detail.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/jobs/{job_id}",
+    responses(
+        (status = 200, description = "job detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn get_job(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<Uuid>,
@@ -87,7 +119,17 @@ async fn get_job(
     Ok(Json(job))
 }
 
-async fn cancel(
+/// POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/jobs/{job_id}/cancel",
+    responses(
+        (status = 200, description = "cancelled", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn cancel(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<Uuid>,

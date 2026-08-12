@@ -25,7 +25,8 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
-use crate::error::{ApiError, ErrorCode};
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -58,7 +59,7 @@ pub struct RunbookRunRow {
     pub finished_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateRunbookBody {
     pub name: String,
     #[serde(default)]
@@ -78,7 +79,18 @@ async fn fetch_runbook(db: &sqlx::PgPool, id: Uuid) -> Result<RunbookRow, ApiErr
         .ok_or_else(|| ApiError::not_found("runbook"))
 }
 
-async fn create(
+/// POST /api/v1/admin/automation/runbooks — create a runbook.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/automation/runbooks",
+    request_body = CreateRunbookBody,
+    responses(
+        (status = 200, description = "runbook created", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateRunbookBody>,
@@ -102,7 +114,17 @@ async fn create(
     Ok(Json(serde_json::to_value(row).unwrap_or(Value::Null)))
 }
 
-async fn list(
+/// GET /api/v1/admin/automation/runbooks — list runbooks.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/automation/runbooks",
+    responses(
+        (status = 200, description = "runbook list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<RunbookRow>>, ApiError> {
@@ -115,7 +137,17 @@ async fn list(
     Ok(Json(rows))
 }
 
-async fn get_one(
+/// GET /api/v1/admin/automation/runbooks/{id} — runbook detail.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/automation/runbooks/{id}",
+    responses(
+        (status = 200, description = "runbook detail", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn get_one(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -125,7 +157,18 @@ async fn get_one(
     Ok(Json(fetch_runbook(db, id).await?))
 }
 
-async fn update(
+/// PATCH /api/v1/admin/automation/runbooks/{id} — update a runbook.
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/automation/runbooks/{id}",
+    request_body = CreateRunbookBody,
+    responses(
+        (status = 200, description = "runbook updated", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn update(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -151,7 +194,17 @@ async fn update(
     Ok(Json(row))
 }
 
-async fn delete_runbook(
+/// DELETE /api/v1/admin/automation/runbooks/{id} — delete a runbook.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/automation/runbooks/{id}",
+    responses(
+        (status = 204, description = "deleted"),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn delete_runbook(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -172,8 +225,17 @@ pub struct RunBody {
     pub args: Value,
 }
 
-/// POST /api/v1/admin/runbooks/{id}/run — snapshot + execute steps sequentially.
-async fn run(
+/// POST /api/v1/admin/automation/runbooks/{id}/run — snapshot + execute steps sequentially.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/automation/runbooks/{id}/run",
+    responses(
+        (status = 200, description = "run result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn run(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
@@ -296,8 +358,17 @@ async fn run(
     Ok(Json(json!({ "run_id": run_id, "status": status, "results": results })))
 }
 
-/// GET /api/v1/admin/runbook-runs — recent runbook runs.
-async fn runs(
+/// GET /api/v1/admin/automation/runbook-runs — recent runbook runs.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/automation/runbook-runs",
+    responses(
+        (status = 200, description = "runbook run list", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn runs(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<RunbookRunRow>>, ApiError> {

@@ -76,12 +76,12 @@ pub struct ReauthRequest {
     pub risk: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RootLoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ChangePasswordRequest {
     #[serde(default)]
     pub current_password: Option<String>,
@@ -534,6 +534,17 @@ pub async fn github_unbind(
 
 // ── Root ───────────────────────────────────────────────────────
 
+/// POST /api/v1/admin/auth/root/login — Root local principal login.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/auth/root/login",
+    request_body = RootLoginRequest,
+    responses(
+        (status = 200, description = "root logged in; cookies set", body = serde_json::Value),
+        (status = 401, description = "invalid password", body = ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn root_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -561,6 +572,15 @@ pub async fn root_login(
 }
 
 /// GET /api/v1/admin/auth/root/session — root session probe (P1).
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/auth/root/session",
+    responses(
+        (status = 200, description = "root session probe", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn root_session(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
@@ -578,6 +598,17 @@ pub async fn root_session(
     })))
 }
 
+/// POST /api/v1/admin/auth/root/change-password — change Root password.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/auth/root/change-password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "password changed"),
+        (status = 401, description = "invalid current password", body = ErrorEnvelope),
+    ),
+    tag = "auth"
+)]
 pub async fn root_change_password(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,

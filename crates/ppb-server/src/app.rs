@@ -655,13 +655,23 @@ pub async fn me_join_intents(
     Ok(Json(json!({ "items": items })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct JoinIntentBody {
     pub room_id: String,
     pub ttl_secs: Option<i64>,
 }
 
 /// POST /api/v1/me/join-intents — create a short-lived join intent (design §14.6).
+#[utoipa::path(
+    post,
+    path = "/api/v1/me/join-intents",
+    request_body = JoinIntentBody,
+    responses(
+        (status = 200, description = "join intent created", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_join_intent_create(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -681,6 +691,15 @@ pub async fn me_join_intent_create(
 }
 
 /// DELETE /api/v1/me/join-intents/{id} — cancel a join intent.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/me/join-intents/{intent_id}",
+    responses(
+        (status = 204, description = "cancelled"),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_join_intent_cancel(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -743,6 +762,15 @@ pub async fn friend_remove(
 }
 
 /// GET /api/v1/me/push-endpoints — list the caller's registered push endpoints.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/push-endpoints",
+    responses(
+        (status = 200, description = "push endpoints", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_push_endpoints(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -755,7 +783,7 @@ pub async fn me_push_endpoints(
     Ok(Json(json!({ "items": items })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct PushEndpointBody {
     pub device_id: String,
     pub channel: String, // web_push | fcm | wns
@@ -766,6 +794,16 @@ pub struct PushEndpointBody {
 
 /// POST /api/v1/me/push-endpoints — register a push endpoint (subscription
 /// material encrypted at rest with the deployment key).
+#[utoipa::path(
+    post,
+    path = "/api/v1/me/push-endpoints",
+    request_body = PushEndpointBody,
+    responses(
+        (status = 200, description = "registered", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_push_endpoint_register(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -794,6 +832,15 @@ pub async fn me_push_endpoint_register(
 }
 
 /// DELETE /api/v1/me/push-endpoints/{id} — remove a push endpoint.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/me/push-endpoints/{endpoint_id}",
+    responses(
+        (status = 204, description = "removed"),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
 pub async fn me_push_endpoint_delete(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,

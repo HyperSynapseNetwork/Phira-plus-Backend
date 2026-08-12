@@ -99,7 +99,16 @@ pub async fn send(
 }
 
 /// GET /api/v1/admin/notifications/delivery — recent events + delivered counts.
-async fn delivery(
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/notifications/delivery",
+    responses(
+        (status = 200, description = "delivery summary", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn delivery(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, ApiError> {
