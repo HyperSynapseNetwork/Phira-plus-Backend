@@ -459,9 +459,12 @@ pub struct RollbackBody {
 pub async fn rollback(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<RollbackBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:rollback").await?;
+    // §23 #10: config rollback requires reauth.
+    crate::auth::routes::check_reauth_header(&state, &auth, &headers, crate::auth::reauth::ReauthRisk::Critical)?;
     let db = state.require_db()?;
     let snapshot = config_repo::get_snapshot(db, body.snapshot_id)
         .await?

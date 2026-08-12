@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
+use axum::http::HeaderMap;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -12,6 +13,8 @@ use super::groups::{bootstrap_groups, list_groups, Group, GroupListItem, GroupLi
 use super::manifest::PermissionDef;
 use super::repo;
 use crate::app::AppState;
+use crate::auth::reauth::ReauthRisk;
+use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorEnvelope};
@@ -170,12 +173,15 @@ pub async fn detail(
 async fn set_default(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
+    // §23 #10: default group change requires reauth.
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::set_default_group(db, group_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -208,6 +214,7 @@ pub struct PatchGroupBody {
 pub async fn patch_group(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
     Json(body): Json<PatchGroupBody>,
 ) -> Result<Json<Group>, ApiError> {
@@ -215,6 +222,10 @@ pub async fn patch_group(
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
+    // §23 #10: switching default group requires reauth.
+    if body.is_default == Some(true) {
+        check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
+    }
     let db = state.require_db()?;
     let group = repo::patch_group(
         db,
@@ -260,6 +271,7 @@ pub struct PermissionBody {
 async fn add_permission(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
     Json(body): Json<PermissionBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -267,6 +279,7 @@ async fn add_permission(
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::add_permission(db, group_id, &body.permission).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -275,12 +288,14 @@ async fn add_permission(
 async fn remove_permission(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path((group_id, permission)): Path<(Uuid, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::remove_permission(db, group_id, &permission).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -316,6 +331,7 @@ pub struct ReplacePermissionsBody {
 pub async fn replace_members(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
     Json(body): Json<ReplaceMembersBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -323,6 +339,7 @@ pub async fn replace_members(
         .permissions
         .require(&state.db, &auth, "group:assign_user")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::replace_group_members(db, group_id, &body.user_ids).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -343,6 +360,7 @@ pub async fn replace_members(
 pub async fn replace_permissions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
     Json(body): Json<ReplacePermissionsBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -350,6 +368,7 @@ pub async fn replace_permissions(
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::replace_group_permissions(db, group_id, &body.permissions).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -358,6 +377,7 @@ pub async fn replace_permissions(
 async fn add_member(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(group_id): Path<Uuid>,
     Json(body): Json<MemberBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -365,6 +385,7 @@ async fn add_member(
         .permissions
         .require(&state.db, &auth, "group:assign_user")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::add_member(db, group_id, body.user_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -373,12 +394,14 @@ async fn add_member(
 async fn remove_member(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path((group_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:assign_user")
         .await?;
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let db = state.require_db()?;
     repo::remove_member(db, group_id, user_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
