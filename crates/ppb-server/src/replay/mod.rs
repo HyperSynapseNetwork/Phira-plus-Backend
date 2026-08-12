@@ -19,31 +19,21 @@ use crate::error::{ApiError, ErrorCode};
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ReplayOverride {
     pub id: Uuid,
-    #[serde(rename = "pmpReplayId")]
     pub pmp_replay_id: String,
-    #[serde(rename = "playerPhiraId")]
     pub player_phira_id: i64,
-    #[serde(rename = "ownerUserId")]
     pub owner_user_id: Option<Uuid>,
     pub visibility: String,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ReplayShareLink {
     pub id: Uuid,
-    #[serde(rename = "replayRound")]
     pub replay_round: String,
-    #[serde(rename = "playerPhiraId")]
     pub player_phira_id: i64,
-    #[serde(rename = "tokenHash")]
     pub token_hash: String,
-    #[serde(rename = "createdBy")]
     pub created_by: Uuid,
-    #[serde(rename = "expiresAt")]
     pub expires_at: Option<DateTime<Utc>>,
-    #[serde(rename = "revokedAt")]
     pub revoked_at: Option<DateTime<Utc>>,
 }
 

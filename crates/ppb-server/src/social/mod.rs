@@ -11,14 +11,10 @@ use crate::error::{ApiError, ErrorCode};
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct FriendRequest {
     pub id: Uuid,
-    #[serde(rename = "fromUserId")]
     pub from_user_id: Uuid,
-    #[serde(rename = "toUserId")]
     pub to_user_id: Uuid,
     pub status: String,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "respondedAt")]
     pub responded_at: Option<DateTime<Utc>>,
 }
 

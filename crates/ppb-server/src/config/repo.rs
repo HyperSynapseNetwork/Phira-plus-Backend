@@ -13,11 +13,8 @@ pub struct ConfigSnapshot {
     pub scope: String,
     pub content: String,
     pub note: String,
-    #[serde(rename = "createdBy")]
     pub created_by: Option<Uuid>,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "restoredAt")]
     pub restored_at: Option<DateTime<Utc>>,
 }
 

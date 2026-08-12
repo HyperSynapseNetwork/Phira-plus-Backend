@@ -21,12 +21,9 @@ pub struct Group {
     pub name: String,
     pub description: String,
     pub system_kind: Option<String>,
-    #[serde(rename = "isDefault")]
     pub is_default: bool,
     pub protected: bool,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -145,7 +142,6 @@ pub async fn list_groups(db: &sqlx::PgPool) -> Result<Vec<GroupWithCount>, ApiEr
 pub struct GroupWithCount {
     #[serde(flatten)]
     pub group: Group,
-    #[serde(rename = "memberCount")]
     pub member_count: i64,
 }
 

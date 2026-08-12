@@ -9,12 +9,10 @@ use crate::error::{ApiError, ErrorCode};
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct UserPreference {
-    #[serde(rename = "userId")]
     pub user_id: Uuid,
     pub namespace: String,
     pub revision: i64,
     pub data: serde_json::Value,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 }
 

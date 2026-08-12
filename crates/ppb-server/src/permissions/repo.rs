@@ -221,7 +221,6 @@ pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct GroupMember {
     pub user_id: Uuid,
-    #[serde(rename = "phiraId")]
     pub phira_id: i64,
     pub username: String,
 }

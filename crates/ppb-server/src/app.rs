@@ -605,7 +605,6 @@ pub async fn me_join_intents(
 #[derive(Debug, Deserialize)]
 pub struct JoinIntentBody {
     pub room_id: String,
-    #[serde(rename = "ttlSecs", default)]
     pub ttl_secs: Option<i64>,
 }
 
@@ -656,7 +655,6 @@ pub async fn me_push_endpoints(
 
 #[derive(Debug, Deserialize)]
 pub struct PushEndpointBody {
-    #[serde(rename = "deviceId")]
     pub device_id: String,
     pub channel: String, // web_push | fcm | wns
     #[serde(default)]

@@ -41,28 +41,20 @@ pub struct RunbookRow {
     pub name: String,
     pub description: String,
     pub definition: Value,
-    #[serde(rename = "createdBy")]
     pub created_by: Option<Uuid>,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct RunbookRunRow {
     pub id: Uuid,
-    #[serde(rename = "runbookId")]
     pub runbook_id: Uuid,
-    #[serde(rename = "definitionSnapshot")]
     pub definition_snapshot: Value,
-    #[serde(rename = "argumentsRedacted")]
     pub arguments_redacted: Value,
     pub actor: String,
     pub status: String,
-    #[serde(rename = "startedAt")]
     pub started_at: Option<DateTime<Utc>>,
-    #[serde(rename = "finishedAt")]
     pub finished_at: Option<DateTime<Utc>>,
 }
 

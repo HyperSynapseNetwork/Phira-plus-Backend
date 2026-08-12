@@ -19,11 +19,8 @@ pub struct Job {
     pub state: String,
     pub progress: Option<f32>,
     pub stage: String,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "startedAt")]
     pub started_at: Option<DateTime<Utc>>,
-    #[serde(rename = "finishedAt")]
     pub finished_at: Option<DateTime<Utc>>,
     pub error: String,
 }

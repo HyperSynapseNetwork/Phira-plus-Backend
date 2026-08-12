@@ -59,7 +59,6 @@ pub struct PhiraLoginRequest {
 #[derive(Debug, Serialize)]
 pub struct UserSummary {
     pub id: Uuid,
-    #[serde(rename = "phiraId")]
     pub phira_id: i64,
     pub username: String,
     pub avatar: String,

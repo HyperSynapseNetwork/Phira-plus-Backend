@@ -21,15 +21,10 @@ pub const MAX_TTL_SECS: i64 = 900;
 #[derive(Debug, Clone, Serialize)]
 pub struct JoinIntent {
     pub id: Uuid,
-    #[serde(rename = "userId")]
     pub user_id: Uuid,
-    #[serde(rename = "phiraId")]
     pub phira_id: i64,
-    #[serde(rename = "roomId")]
     pub room_id: String,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "expiresAt")]
     pub expires_at: DateTime<Utc>,
 }
 

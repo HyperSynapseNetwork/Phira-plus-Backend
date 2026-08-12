@@ -249,7 +249,6 @@ async fn raw(
 
 #[derive(Debug, Deserialize)]
 pub struct RollbackBody {
-    #[serde(rename = "snapshotId")]
     pub snapshot_id: Uuid,
 }
 

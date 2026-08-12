@@ -41,7 +41,6 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 
 #[derive(Debug, Deserialize)]
 pub struct UserListParams {
-    #[serde(rename = "phiraId")]
     pub phira_id: Option<i64>,
     pub search: Option<String>,
     pub page: Option<i64>,

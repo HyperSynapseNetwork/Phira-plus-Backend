@@ -28,7 +28,6 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[derive(Debug, Deserialize)]
 pub struct AuditFilterParams {
     pub action: Option<String>,
-    #[serde(rename = "principalType")]
     pub principal_type: Option<String>,
     pub actor: Option<Uuid>,
     pub result: Option<String>,

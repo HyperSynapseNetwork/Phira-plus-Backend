@@ -190,7 +190,6 @@ pub struct MemberBody {
 
 #[derive(Debug, Deserialize)]
 pub struct ReplaceMembersBody {
-    #[serde(rename = "userIds")]
     pub user_ids: Vec<Uuid>,
 }
 

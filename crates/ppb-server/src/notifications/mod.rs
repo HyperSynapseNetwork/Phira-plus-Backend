@@ -15,25 +15,18 @@ pub struct NotificationEvent {
     #[sqlx(rename = "type")]
     #[serde(rename = "type")]
     pub r#type: String,
-    #[serde(rename = "actorUserId")]
     pub actor_user_id: Option<Uuid>,
     pub payload: serde_json::Value,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct UserNotification {
     pub id: Uuid,
-    #[serde(rename = "eventId")]
     pub event_id: Uuid,
-    #[serde(rename = "userId")]
     pub user_id: Uuid,
-    #[serde(rename = "readAt")]
     pub read_at: Option<DateTime<Utc>>,
-    #[serde(rename = "dismissedAt")]
     pub dismissed_at: Option<DateTime<Utc>>,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
 }
 
@@ -110,22 +103,14 @@ pub async fn publish_to_users(
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct UserNotificationWithEvent {
     pub id: Uuid,
-    #[serde(rename = "eventId")]
     pub event_id: Uuid,
-    #[serde(rename = "userId")]
     pub user_id: Uuid,
-    #[serde(rename = "readAt")]
     pub read_at: Option<DateTime<Utc>>,
-    #[serde(rename = "dismissedAt")]
     pub dismissed_at: Option<DateTime<Utc>>,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "eventType")]
     pub event_type: String,
-    #[serde(rename = "actorUserId")]
     pub actor_user_id: Option<Uuid>,
     pub payload: serde_json::Value,
-    #[serde(rename = "eventCreatedAt")]
     pub event_created_at: DateTime<Utc>,
 }
 
@@ -169,15 +154,11 @@ pub async fn mark_read(db: &sqlx::PgPool, notification_id: Uuid, user_id: Uuid) 
 pub struct PushEndpoint {
     pub id: Uuid,
     pub user_id: Uuid,
-    #[serde(rename = "deviceId")]
     pub device_id: String,
     pub channel: String,
     pub platform: String,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "lastSeenAt")]
     pub last_seen_at: Option<DateTime<Utc>>,
-    #[serde(rename = "disabledAt")]
     pub disabled_at: Option<DateTime<Utc>>,
 }
 

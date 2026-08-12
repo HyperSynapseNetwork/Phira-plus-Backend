@@ -28,11 +28,9 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub struct CreateCouponBody {
     #[serde(default)]
     pub code: String,
-    #[serde(rename = "actionType")]
     pub action_type: String,
     #[serde(default)]
     pub payload: Value,
-    #[serde(rename = "maxUses", default)]
     pub max_uses: Option<i32>,
 }
 
@@ -110,7 +108,7 @@ async fn list(
     let items: Vec<Value> = rows
         .into_iter()
         .map(|(id, code, action_type, max_uses, used_count, revoked_at, created_at)| {
-            json!({ "id": id, "code": code, "actionType": action_type, "maxUses": max_uses, "usedCount": used_count, "revokedAt": revoked_at, "createdAt": created_at })
+            json!({ "id": id, "code": code, "action_type": action_type, "max_uses": max_uses, "used_count": used_count, "revoked_at": revoked_at, "created_at": created_at })
         })
         .collect();
     Ok(Json(json!({ "items": items })))
