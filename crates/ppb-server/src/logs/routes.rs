@@ -3,7 +3,10 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use std::time::Duration;
+
 use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -15,8 +18,11 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern};
 use crate::app::AppState;
+use crate::auth::reauth::ReauthRisk;
+use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+#[allow(unused_imports)]
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -32,7 +38,17 @@ pub struct LogParams {
     pub limit: Option<u64>,
 }
 
-async fn history(
+/// GET /api/v1/admin/logs — recent PMP log history.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/logs",
+    responses(
+        (status = 200, description = "log history", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn history(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<LogParams>,
@@ -60,41 +76,67 @@ async fn input(
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct LogInputBody {
     pub command: String,
 }
 
 /// POST /api/v1/admin/logs/input — submit a PMP console command (full audit).
-async fn submit_input(
+/// Requires an elevated reauth context; audit records the FINAL result.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/logs/input",
+    request_body = LogInputBody,
+    responses(
+        (status = 200, description = "command result", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn submit_input(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<LogInputBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     state
         .rate_limiter
         .check(&format!("raw-cli:{}", auth.sub), state.config.rate_limit.raw_cli_per_minute)?;
-    let result = crate::pmp::cli::cli_execute(&state.openuds, &body.command)
-        .await
-        .map_err(map_err)?;
+    // Gate 0 A3: raw console requires an elevated reauth context.
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
+
+    let (result, result_status, error_code) = match tokio::time::timeout(
+        Duration::from_secs(30),
+        crate::pmp::cli::cli_execute(&state.openuds, &body.command),
+    )
+    .await
+    {
+        Ok(Ok(v)) => (Ok(v), "succeeded", String::new()),
+        Ok(Err(e)) => (Err(ApiError::from(e)), "failed", "cli_execute_error".to_string()),
+        Err(_) => (
+            Err(ApiError::new(ErrorCode::PmpUnavailable, "command timed out")),
+            "timeout",
+            "timeout".to_string(),
+        ),
+    };
     if let Some(db) = &state.db {
-        crate::audit::service::record_principal(
+        let _ = crate::audit::service::record_principal(
             db,
             &auth,
             "pmp.cli.execute",
             "pmp",
             "console",
             serde_json::json!({ "command": "[REDACTED input]" }),
-            "success",
-            "",
+            result_status,
+            &error_code,
             "",
             "",
             "",
         )
-        .await?;
+        .await;
     }
-    Ok(Json(result))
+    Ok(Json(result?))
 }
 
 /// GET /api/v1/admin/logs/stream — live PMP logs via OpenUDS `logs` stream.
@@ -132,6 +174,15 @@ async fn stream(
 }
 
 /// GET /api/v1/admin/logs/translate?code=... — rule-based error translation.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/logs/translate",
+    responses(
+        (status = 200, description = "translated log message", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
 pub async fn translate_endpoint(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
@@ -142,13 +193,23 @@ pub async fn translate_endpoint(
     Ok(Json(json!({ "code": params.code, "translated": t })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct TranslateParams {
     pub code: String,
 }
 
 /// POST /api/v1/admin/logs/translate — body-based error translation (contract §17).
-async fn translate_post(
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/logs/translate",
+    request_body = TranslateParams,
+    responses(
+        (status = 200, description = "translated log message", body = serde_json::Value),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn translate_post(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<TranslateParams>,
