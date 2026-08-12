@@ -226,3 +226,12 @@ pub async fn cancel(
     state.jobs.cancel(job_id).await?;
     Ok(Json(json!({ "cancelled": job_id })))
 }
+
+fn db_err(e: sqlx::Error) -> ApiError {
+    if matches!(&e, sqlx::Error::RowNotFound) {
+        ApiError::not_found("job")
+    } else {
+        tracing::error!(error = %e, "jobs db error");
+        ApiError::internal()
+    }
+}
