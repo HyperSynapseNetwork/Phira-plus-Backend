@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Used by deploy/update.sh stage validation.
         let path = &args[2];
         ppb_server::config::RuntimeConfig::from_toml_file(std::path::Path::new(path))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         println!("config OK: {path}");
         return Ok(());
     }
