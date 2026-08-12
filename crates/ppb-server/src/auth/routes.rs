@@ -276,14 +276,26 @@ pub async fn phira_reauth(
     };
 
     if auth.is_root() {
+        // Root uses independent local reauth (S-2).
         RootAuthService::verify(db, &body.password).await?;
     } else {
         let email = body
             .email
             .ok_or_else(|| ApiError::validation("email required for phira reauth"))?;
-        phira_service::authenticate_phira(state.phira.as_ref(), &email, &body.password)
+        let (login, _me) = phira_service::authenticate_phira(state.phira.as_ref(), &email, &body.password)
             .await
             .map_err(phira_service::phira_error_to_api)?;
+        // S-2: the reauthenticated Phira identity MUST equal the current user's
+        // phira_id; otherwise refuse to issue the elevated context.
+        let user = crate::users::repo::find_by_id(db, auth.sub)
+            .await?
+            .ok_or_else(|| ApiError::not_found("user"))?;
+        if login.id != user.phira_id {
+            return Err(ApiError::new(
+                ErrorCode::Auth,
+                "reauth phira_id does not match the current user",
+            ));
+        }
     }
 
     let claims = ReauthClaims::new(
