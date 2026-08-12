@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use super::groups::{bootstrap_groups, list_groups};
+use super::groups::{bootstrap_groups, list_groups, GroupListItem, GroupListResponse};
 use super::manifest::PermissionDef;
 use super::repo;
 use crate::app::AppState;
@@ -53,13 +53,13 @@ pub async fn manifest(
     Ok(Json(state.permissions.manifest().to_vec()))
 }
 
-/// GET /api/v1/admin/groups — list user groups.
+/// GET /api/v1/admin/groups — list user groups (typed, with permissions).
 #[utoipa::path(
     get,
     path = "/api/v1/admin/groups",
     operation_id = "admin_groups_get",
     responses(
-        (status = 200, description = "group list", body = serde_json::Value),
+        (status = 200, description = "group list", body = GroupListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -67,14 +67,36 @@ pub async fn manifest(
 pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<GroupListResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:view")
         .await?;
     let db = state.require_db()?;
     let groups = list_groups(db).await?;
-    Ok(Json(serde_json::to_value(groups).unwrap_or(serde_json::Value::Null)))
+    let mut items = Vec::with_capacity(groups.len());
+    for g in groups {
+        let permissions = repo::list_group_permissions(db, g.group.id).await?;
+        items.push(GroupListItem {
+            id: g.group.id,
+            name: g.group.name,
+            description: g.group.description,
+            system_kind: g.group.system_kind,
+            is_default: g.group.is_default,
+            protected: g.group.protected,
+            created_at: g.group.created_at,
+            updated_at: g.group.updated_at,
+            member_count: g.member_count,
+            permissions,
+        });
+    }
+    let total = items.len() as i64;
+    Ok(Json(GroupListResponse {
+        items,
+        total,
+        page: 1,
+        page_num: total.max(1),
+    }))
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

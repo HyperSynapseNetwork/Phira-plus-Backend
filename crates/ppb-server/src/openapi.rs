@@ -23,6 +23,8 @@ use crate::jobs::routes::CreateJobBody;
 use crate::logs::routes::{LogInputBody, TranslateParams};
 use crate::notifications::push::SubscriptionWire;
 use crate::notifications::routes::{ActionBody as NotificationActionBody, InputBody};
+use crate::permissions::groups::{Group, GroupListItem, GroupListResponse};
+use crate::permissions::repo::GroupMember;
 use crate::permissions::routes::{
     CreateGroupBody, RenameGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
 };
@@ -281,6 +283,10 @@ pub struct RoomActionRequest {
             RenameGroupBody,
             ReplaceMembersBody,
             ReplacePermissionsBody,
+            Group,
+            GroupListItem,
+            GroupListResponse,
+            GroupMember,
             UserActionBody,
             CreateRoomBody,
             AdminRoomActionBody,

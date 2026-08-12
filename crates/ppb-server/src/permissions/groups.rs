@@ -15,7 +15,7 @@ pub const GROUP_MODERATORS: &str = "Moderators";
 pub const GROUP_DEVELOPERS: &str = "Developers";
 pub const GROUP_MEMBERS: &str = "Members";
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct Group {
     pub id: Uuid,
     pub name: String,
@@ -143,6 +143,31 @@ pub struct GroupWithCount {
     #[serde(flatten)]
     pub group: Group,
     pub member_count: i64,
+}
+
+/// Typed group list item (§22: group fields + member_count + permissions).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct GroupListItem {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub system_kind: Option<String>,
+    pub is_default: bool,
+    pub protected: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub member_count: i64,
+    pub permissions: Vec<String>,
+}
+
+/// Paginated group list response (§22: `{items, total, page, pageNum}`).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct GroupListResponse {
+    pub items: Vec<GroupListItem>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {

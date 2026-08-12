@@ -218,7 +218,7 @@ pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), 
 }
 
 /// A group member with the PPB account display fields.
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct GroupMember {
     pub user_id: Uuid,
     pub phira_id: i64,
