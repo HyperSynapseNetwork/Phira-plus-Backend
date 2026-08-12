@@ -14,14 +14,14 @@ grep -q '"/api/v1/me"' /tmp/ppb-openapi.json || { echo "core path /api/v1/me mis
 
 echo "[2/3] generating TS types (openapi-typescript)..."
 # Diagnostic: what components/refs are present (helps debug $ref resolution).
-echo "--- component schema keys ---"
-jq -r '.components.schemas | keys[]' /tmp/ppb-openapi.json 2>/dev/null | head -40 || true
-echo "--- sample \$ref values ---"
-grep -oE '"\\$ref": *"[^"]*"' /tmp/ppb-openapi.json 2>/dev/null | sort -u | head -20 || true
-echo "--- /me 200 schema ---"
-jq -c '.paths["/api/v1/me"].get.responses["200"].content["application/json"].schema' /tmp/ppb-openapi.json 2>/dev/null || true
-echo "--- ErrorEnvelope component ---"
-jq -c '.components.schemas.ErrorEnvelope' /tmp/ppb-openapi.json 2>/dev/null || true
+echo "--- openapi version + info ---"
+jq -c '{openapi, title: .info.title}' /tmp/ppb-openapi.json 2>/dev/null || true
+echo "--- all \$ref occurrences ---"
+grep -oE '\$ref[^,}]*' /tmp/ppb-openapi.json 2>/dev/null | sort -u | head -20 || true
+echo "--- /api/v1/me path ---"
+jq -c '.paths["/api/v1/me"]' /tmp/ppb-openapi.json 2>/dev/null || true
+echo "--- MeResponse component ---"
+jq -c '.components.schemas.MeResponse' /tmp/ppb-openapi.json 2>/dev/null || true
 npx --yes openapi-typescript@latest /tmp/ppb-openapi.json -o contracts/types.ts
 
 echo "[3/3] done: contracts/types.ts"
