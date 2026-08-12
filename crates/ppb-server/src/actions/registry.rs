@@ -116,6 +116,26 @@ mod tests {
     }
 
     #[test]
+    fn host_allowed_actions_are_room_scoped_and_audited() {
+        // Gate 2: a room host must never reach server-level / global config.
+        let reg = ActionRegistry::new();
+        let mut found = 0;
+        for a in reg.all() {
+            if a.host_allowed {
+                found += 1;
+                assert!(a.audit, "host_allowed {} must be audited", a.id);
+                assert!(
+                    a.queue_key.starts_with("room:"),
+                    "host_allowed {} must be room-scoped (got {})",
+                    a.id,
+                    a.queue_key
+                );
+            }
+        }
+        assert!(found > 0, "expected at least one host_allowed action");
+    }
+
+    #[test]
     fn queue_key_substitution() {
         let reg = ActionRegistry::new();
         let kick = reg.get("room.kick").unwrap();

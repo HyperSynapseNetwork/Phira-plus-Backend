@@ -47,8 +47,10 @@ async fn ensure_group(
     is_default: bool,
     protected: bool,
 ) -> Result<(), sqlx::Error> {
-    // Create if absent.
-    sqlx::query(
+    // Create if absent. Only a NEWLY inserted row may flip is_default; we never
+    // reset an existing (possibly admin-changed) default group on bootstrap
+    // (Gate 2).
+    let result = sqlx::query(
         "INSERT INTO groups (name, description, system_kind, is_default, protected)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (name) DO NOTHING",
@@ -61,8 +63,8 @@ async fn ensure_group(
     .execute(db)
     .await?;
 
-    // Ensure only one default group: clear others if this one is flagged default.
-    if is_default {
+    // Only clear other defaults when we actually created a new default-flagged row.
+    if result.rows_affected() > 0 && is_default {
         sqlx::query("UPDATE groups SET is_default = (name = $1)")
             .bind(name)
             .execute(db)

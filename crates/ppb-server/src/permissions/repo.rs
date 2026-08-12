@@ -98,7 +98,10 @@ pub async fn add_member(db: &sqlx::PgPool, group_id: Uuid, user_id: Uuid) -> Res
 }
 
 /// Replace a group's full member set (contract §17 Groups `PUT /members`).
+/// Users removed from their last group are re-added to the default group
+/// (Gate 2: a user must belong to at least one group).
 pub async fn replace_group_members(db: &sqlx::PgPool, group_id: Uuid, user_ids: &[Uuid]) -> Result<(), ApiError> {
+    let existing = list_group_members(db, group_id).await?;
     sqlx::query("DELETE FROM group_members WHERE group_id = $1")
         .bind(group_id)
         .execute(db)
@@ -111,6 +114,12 @@ pub async fn replace_group_members(db: &sqlx::PgPool, group_id: Uuid, user_ids: 
             .execute(db)
             .await
             .map_err(db_err)?;
+    }
+    let new_set: std::collections::HashSet<Uuid> = user_ids.iter().cloned().collect();
+    for m in existing {
+        if !new_set.contains(&m.user_id) {
+            ensure_user_not_orphaned(db, m.user_id).await?;
+        }
     }
     Ok(())
 }
@@ -151,6 +160,30 @@ pub async fn remove_member(db: &sqlx::PgPool, group_id: Uuid, user_id: Uuid) -> 
         .execute(db)
         .await
         .map_err(db_err)?;
+    // A user must stay in at least one group (Gate 2).
+    ensure_user_not_orphaned(db, user_id).await
+}
+
+/// If `user_id` now has zero group memberships, add them to the default group.
+async fn ensure_user_not_orphaned(db: &sqlx::PgPool, user_id: Uuid) -> Result<(), ApiError> {
+    let (count,): (i64,) = sqlx::query_as::<_, (i64,)>(
+        "SELECT COUNT(*) FROM group_members WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
+    if count == 0 {
+        let default_id = super::groups::default_group_id(db).await?;
+        sqlx::query(
+            "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(default_id)
+        .bind(user_id)
+        .execute(db)
+        .await
+        .map_err(db_err)?;
+    }
     Ok(())
 }
 
@@ -167,15 +200,14 @@ pub async fn get_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<Group, ApiEr
     .ok_or_else(|| ApiError::not_found("group"))
 }
 
-/// Switch the default group to `group_id` (clears others).
+/// Switch the default group to `group_id` (clears others). An `admin_scope`
+/// group can never be the default (Gate 2).
 pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), ApiError> {
-    let exists: Option<(Uuid,)> = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM groups WHERE id = $1")
-        .bind(group_id)
-        .fetch_optional(db)
-        .await
-        .map_err(db_err)?;
-    if exists.is_none() {
-        return Err(ApiError::not_found("group"));
+    let group = get_group(db, group_id).await?;
+    if group.system_kind.as_deref() == Some("admin_scope") {
+        return Err(ApiError::validation(
+            "admin_scope group cannot be the default group",
+        ));
     }
     sqlx::query("UPDATE groups SET is_default = (id = $1)")
         .bind(group_id)
