@@ -31,7 +31,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// Typed PMP server stats (§23 #6: separate typed schema, not a giant status).
-#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct ServerStatsResponse {
     pub users_online: i64,
     pub active_rooms: i64,
