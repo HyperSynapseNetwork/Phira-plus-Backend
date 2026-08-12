@@ -21,9 +21,12 @@ use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
 use crate::logs::routes::{LogInputBody, TranslateParams};
 use crate::notifications::push::SubscriptionWire;
+use crate::notifications::routes::{ActionBody as NotificationActionBody, InputBody};
 use crate::permissions::routes::{
     CreateGroupBody, RenameGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
 };
+use crate::preferences::routes::UpdatePreferencesBody;
+use crate::social::routes::SendRequestBody;
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
 };
@@ -217,6 +220,27 @@ pub struct RoomActionRequest {
         crate::public::routes::announcements,
         crate::public::routes::downloads,
         crate::public::routes::nodes,
+        crate::social::routes::list,
+        crate::social::routes::list_requests,
+        crate::social::routes::send_request,
+        crate::social::routes::respond_accept,
+        crate::social::routes::respond_reject,
+        crate::social::routes::block,
+        crate::notifications::routes::list,
+        crate::notifications::routes::read,
+        crate::notifications::routes::dismiss,
+        crate::notifications::routes::action,
+        crate::notifications::routes::input,
+        crate::preferences::routes::get_one,
+        crate::preferences::routes::update,
+        crate::preferences::routes::delete_one,
+        crate::app::me_identities,
+        crate::jobs::routes::retry_job,
+        crate::jobs::routes::list_tasks,
+        crate::jobs::routes::complete_task,
+        crate::automation::routes::get_run,
+        crate::automation::routes::cancel_run,
+        crate::admin::routes::server_status,
     ),
     components(
         schemas(
@@ -260,6 +284,10 @@ pub struct RoomActionRequest {
             JoinIntentBody,
             PushEndpointBody,
             SubscriptionWire,
+            SendRequestBody,
+            NotificationActionBody,
+            InputBody,
+            UpdatePreferencesBody,
         )
     ),
     tags(
