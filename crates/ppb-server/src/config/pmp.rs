@@ -68,8 +68,8 @@ macro_rules! field {
 }
 
 /// Versioned flat descriptor for PMP `server_config.yml` (source: PMP server/config.rs).
-pub fn pmp_config_descriptor() -> &'static [ConfigFieldDescriptor] {
-    &[
+pub fn pmp_config_descriptor() -> Vec<ConfigFieldDescriptor> {
+    vec![
         field!("server_name", "服务器名称", "服务器显示名称", "server", "text", "low", "hot", false, 1),
         field!("welcome", "欢迎语", "加入房间时的欢迎消息", "server", "text", "low", "hot", false, 2),
         field!("chat_enabled", "启用聊天", "是否允许房间聊天", "chat", "switch", "low", "hot", false, 10),
@@ -97,7 +97,7 @@ pub fn pmp_config_descriptor() -> &'static [ConfigFieldDescriptor] {
 pub fn pmp_config_groups() -> Vec<ConfigFieldGroup> {
     let mut groups: Vec<ConfigFieldGroup> = Vec::new();
     for f in pmp_config_descriptor() {
-        let group_key = group_key_of(f);
+        let group_key = group_key_of(&f);
         match groups.iter_mut().find(|g| g.key == group_key) {
             Some(g) => g.fields.push(f.clone()),
             None => groups.push(ConfigFieldGroup {
