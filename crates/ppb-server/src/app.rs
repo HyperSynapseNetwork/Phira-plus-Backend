@@ -66,6 +66,9 @@ pub struct AppState {
     pub join_intents: JoinIntentStore,
     pub push: Arc<PushService>,
     pub phira_gateway: Arc<PhiraGateway>,
+    /// Privacy-friendly aggregate visit counter (P-86); resets on restart, adds
+    /// to the `site.visit_count` config baseline.
+    pub visit_counter: std::sync::atomic::AtomicI64,
 }
 
 impl AppState {
@@ -183,6 +186,7 @@ pub async fn build_state(
         join_intents,
         push,
         phira_gateway,
+        visit_counter: std::sync::atomic::AtomicI64::new(0),
     });
 
     if let Some(db) = &state.db {
@@ -722,6 +726,7 @@ impl AppState {
             join_intents,
             push,
             phira_gateway,
+            visit_counter: std::sync::atomic::AtomicI64::new(0),
         }
     }
 }

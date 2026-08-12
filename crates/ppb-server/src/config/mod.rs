@@ -56,6 +56,10 @@ pub struct SiteConfig {
     pub ppf_url: String,
     pub panel_url: String,
     pub docs_url: String,
+    /// Privacy-friendly aggregate visit count baseline (P-86). A server-side
+    /// in-memory counter adds to this; without client fingerprinting the value
+    /// comes from config/counting, and defaults to 0 when unset.
+    pub visit_count: i64,
 }
 
 impl Default for SiteConfig {
@@ -64,6 +68,7 @@ impl Default for SiteConfig {
             ppf_url: "https://phira.htadiy.com".to_string(),
             panel_url: "https://panel-phira.htadiy.com".to_string(),
             docs_url: "https://docs.phira.htadiy.com".to_string(),
+            visit_count: 0,
         }
     }
 }

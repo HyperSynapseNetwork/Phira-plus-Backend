@@ -14,6 +14,9 @@ graceful_shutdown_secs = 15
 ppf_url = "https://phira.htadiy.com"
 panel_url = "https://panel-phira.htadiy.com"
 docs_url = "https://docs.phira.htadiy.com"
+# Privacy-friendly aggregate visit count baseline (P-86); server-side counter
+# adds on each /api/v1/public/site fetch. Default 0.
+visit_count = 0
 
 # Credentialed CORS exact-origin allowlist. '*' is forbidden when credentials=true.
 [cors]

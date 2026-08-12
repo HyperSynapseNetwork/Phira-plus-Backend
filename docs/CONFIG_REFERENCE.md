@@ -28,6 +28,7 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 | `ppf_url` | `https://phira.htadiy.com` | PPF 站点 |
 | `panel_url` | `https://panel-phira.htadiy.com` | Panel 站点 |
 | `docs_url` | `https://docs.phira.htadiy.com` | Docs 站点 |
+| `visit_count` | `0` | 隐私友好聚合访问数基线（P-86）；服务端计数叠加，缺失为 0 |
 
 ## `[cors]`
 

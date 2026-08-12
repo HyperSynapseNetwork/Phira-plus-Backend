@@ -69,14 +69,21 @@ pub async fn meta(
 }
 
 /// GET /api/v1/public/site — public site config (merged with runtime content).
+///
+/// `visit_count` (P-86): privacy-friendly aggregate. Baseline from config
+/// (`site.visit_count`), plus a server-side in-memory counter incremented on
+/// each fetch. No client fingerprint is used; defaults to 0 when unset.
 pub async fn site(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    use std::sync::atomic::Ordering;
+    let counted = state.visit_counter.fetch_add(1, Ordering::Relaxed);
     let mut base = json!({
         "ppf_url": state.config.site.ppf_url,
         "panel_url": state.config.site.panel_url,
         "docs_url": state.config.site.docs_url,
         "api_url": state.config.server.public_url,
+        "visit_count": state.config.site.visit_count + counted,
     });
     if let Some(db) = &state.db {
         if let Some(over) = crate::config::repo::get_public_content(db, "site").await? {
