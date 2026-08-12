@@ -217,6 +217,55 @@ pub async fn set_default_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), 
     Ok(())
 }
 
+/// §23 #4: patch a group atomically — optional `name`/`description`/`is_default`
+/// in a single transaction (is_default carries set-default semantics).
+pub async fn patch_group(
+    db: &sqlx::PgPool,
+    group_id: Uuid,
+    name: Option<&str>,
+    description: Option<&str>,
+    is_default: Option<bool>,
+) -> Result<Group, ApiError> {
+    let group = get_group(db, group_id).await?;
+    let mut tx = db.begin().await.map_err(db_err)?;
+
+    let new_name = name.map(|s| s.trim()).filter(|s| !s.is_empty());
+    if let Some(n) = new_name {
+        sqlx::query("UPDATE groups SET name = $1, updated_at = now() WHERE id = $2")
+            .bind(n)
+            .bind(group_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+    }
+    if let Some(d) = description {
+        sqlx::query("UPDATE groups SET description = $1, updated_at = now() WHERE id = $2")
+            .bind(d)
+            .bind(group_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+    }
+    if let Some(default) = is_default {
+        if default {
+            if group.system_kind.as_deref() == Some("admin_scope") {
+                return Err(ApiError::validation(
+                    "admin_scope group cannot be the default group",
+                ));
+            }
+            sqlx::query("UPDATE groups SET is_default = (id = $1)")
+                .bind(group_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        }
+        // is_default=false is a no-op (the default is only switched by setting
+        // another group default); clearing is not supported.
+    }
+    tx.commit().await.map_err(db_err)?;
+    get_group(db, group_id).await
+}
+
 /// A group member with the PPB account display fields.
 #[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct GroupMember {

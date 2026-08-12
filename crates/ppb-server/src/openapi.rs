@@ -34,7 +34,7 @@ use crate::notifications::routes::{
 use crate::permissions::groups::{Group, GroupListItem, GroupListResponse};
 use crate::permissions::repo::GroupMember;
 use crate::permissions::routes::{
-    CreateGroupBody, RenameGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
+    CreateGroupBody, PatchGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
 };
 use crate::preferences::routes::UpdatePreferencesBody;
 use crate::social::routes::SendRequestBody;
@@ -192,7 +192,7 @@ pub struct RoomActionRequest {
         crate::permissions::routes::list,
         crate::permissions::routes::create,
         crate::permissions::routes::detail,
-        crate::permissions::routes::rename,
+        crate::permissions::routes::patch_group,
         crate::permissions::routes::delete_group,
         crate::permissions::routes::replace_members,
         crate::permissions::routes::replace_permissions,
@@ -295,7 +295,7 @@ pub struct RoomActionRequest {
             RootLoginRequest,
             ChangePasswordRequest,
             CreateGroupBody,
-            RenameGroupBody,
+            PatchGroupBody,
             ReplaceMembersBody,
             ReplacePermissionsBody,
             Group,

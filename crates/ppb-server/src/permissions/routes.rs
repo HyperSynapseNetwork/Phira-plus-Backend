@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use super::groups::{bootstrap_groups, list_groups, GroupListItem, GroupListResponse};
+use super::groups::{bootstrap_groups, list_groups, Group, GroupListItem, GroupListResponse};
 use super::manifest::PermissionDef;
 use super::repo;
 use crate::app::AppState;
@@ -20,7 +20,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/permissions/manifest", get(manifest))
         .route("/groups", get(list).post(create))
-        .route("/groups/{id}", get(detail).patch(rename).delete(delete_group))
+        .route("/groups/{id}", get(detail).patch(patch_group).delete(delete_group))
         .route("/groups/{id}/set-default", post(set_default))
         .route("/groups/{id}/permissions", post(add_permission).put(replace_permissions))
         .route(
@@ -181,36 +181,50 @@ async fn set_default(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+/// §23 #4: `PATCH /groups/{id} {name?, description?, is_default?}`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct RenameGroupBody {
-    pub name: String,
+pub struct PatchGroupBody {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub is_default: Option<bool>,
 }
 
-/// PATCH /api/v1/admin/groups/{id} — rename a group.
+/// PATCH /api/v1/admin/groups/{id} — patch name/description/is_default in one
+/// transaction (§23 #4).
 #[utoipa::path(
     patch,
     path = "/api/v1/admin/groups/{id}",
     operation_id = "admin_groups_id_patch",
-    request_body = RenameGroupBody,
+    request_body = PatchGroupBody,
     responses(
-        (status = 204, description = "renamed"),
+        (status = 200, description = "group patched", body = Group),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
 )]
-pub async fn rename(
+pub async fn patch_group(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<Uuid>,
-    Json(body): Json<RenameGroupBody>,
-) -> Result<axum::http::StatusCode, ApiError> {
+    Json(body): Json<PatchGroupBody>,
+) -> Result<Json<Group>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:edit")
         .await?;
     let db = state.require_db()?;
-    repo::rename_group(db, group_id, &body.name).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    let group = repo::patch_group(
+        db,
+        group_id,
+        body.name.as_deref(),
+        body.description.as_deref(),
+        body.is_default,
+    )
+    .await?;
+    Ok(Json(group))
 }
 
 /// DELETE /api/v1/admin/groups/{id} — delete a group.
