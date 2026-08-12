@@ -222,6 +222,14 @@ impl PushAdapter for WnsAdapter {
 
 // ── PushService ────────────────────────────────────────────────
 
+/// Whether the user has any active APP push endpoint (`fcm`/`wns`). Owner
+/// decision: when true, `web_push` is skipped during fan-out.
+fn app_push_present(endpoints: &[PushEndpointRow]) -> bool {
+    endpoints
+        .iter()
+        .any(|ep| matches!(ep.channel.as_str(), "fcm" | "wns"))
+}
+
 #[derive(Debug, Default, Serialize)]
 pub struct PushSummary {
     pub delivered: u32,
@@ -264,7 +272,12 @@ impl PushService {
         }
     }
 
-    /// Deliver to all push endpoints of `user_id`. Non-fatal per endpoint.
+    /// Deliver to push endpoints of `user_id`. Non-fatal per endpoint.
+    ///
+    /// Owner decision (channel dedup): when the user has any active APP push
+    /// endpoint (`fcm`/`wns`), prefer APP push and **skip `web_push`** so the
+    /// user is not notified twice. Otherwise fall back to `web_push` (+ in-app,
+    /// which is created separately via inbox rows).
     pub async fn notify(
         &self,
         db: &sqlx::PgPool,
@@ -282,8 +295,14 @@ impl PushService {
         .await
         .map_err(db_err)?;
 
+        let prefer_app_push = app_push_present(&endpoints);
         let mut summary = PushSummary::default();
         for ep in endpoints {
+            // Channel dedup: with an APP endpoint present, never also deliver
+            // via web_push (avoid duplicate notifications).
+            if prefer_app_push && ep.channel == "web_push" {
+                continue;
+            }
             let sub = match self.decrypt_subscription(&ep.endpoint_ciphertext) {
                 Some(s) => s,
                 None => {
@@ -357,5 +376,53 @@ mod tests {
         let cfg = NotificationConfig::default();
         let adapter = WebPushAdapter::new(&cfg);
         assert!(!adapter.configured());
+    }
+
+    fn row(channel: &str) -> PushEndpointRow {
+        PushEndpointRow {
+            id: Uuid::new_v4(),
+            channel: channel.to_string(),
+            endpoint_ciphertext: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn app_push_present_detects_fcm_wns() {
+        assert!(!app_push_present(&[]));
+        assert!(!app_push_present(&[row("web_push")]));
+        assert!(app_push_present(&[row("web_push"), row("fcm")]));
+        assert!(app_push_present(&[row("wns")]));
+        assert!(app_push_present(&[row("fcm"), row("wns")]));
+    }
+
+    #[test]
+    fn app_push_present_ignores_unknown() {
+        assert!(!app_push_present(&[row("web_push"), row("bogus")]));
+    }
+
+    #[test]
+    fn notify_skips_web_push_when_app_push_present() {
+        // fcm present -> the fan-out set must not include web_push.
+        let endpoints = [row("web_push"), row("fcm")];
+        assert!(app_push_present(&endpoints));
+        let selected: Vec<&str> = endpoints
+            .iter()
+            .filter(|ep| !(app_push_present(&endpoints) && ep.channel == "web_push"))
+            .map(|ep| ep.channel.as_str())
+            .collect();
+        assert!(!selected.contains(&"web_push"));
+        assert!(selected.contains(&"fcm"));
+    }
+
+    #[test]
+    fn notify_keeps_web_push_when_no_app_push() {
+        // Only web_push -> the fan-out set includes web_push.
+        let endpoints = [row("web_push")];
+        let selected: Vec<&str> = endpoints
+            .iter()
+            .filter(|ep| !(app_push_present(&endpoints) && ep.channel == "web_push"))
+            .map(|ep| ep.channel.as_str())
+            .collect();
+        assert!(selected.contains(&"web_push"));
     }
 }
