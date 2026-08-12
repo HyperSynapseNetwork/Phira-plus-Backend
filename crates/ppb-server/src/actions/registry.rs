@@ -120,6 +120,14 @@ mod tests {
     }
 
     #[test]
+    fn room_lock_unified_no_unlock() {
+        // §22: no room.unlock; lock/unlock both go through room.lock {locked:bool}.
+        let reg = ActionRegistry::new();
+        assert!(reg.get("room.lock").is_some());
+        assert!(reg.get("room.unlock").is_none());
+    }
+
+    #[test]
     fn host_allowed_actions_are_room_scoped_and_audited() {
         // Gate 2: a room host must never reach server-level / global config.
         let reg = ActionRegistry::new();

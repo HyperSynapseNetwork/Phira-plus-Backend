@@ -154,6 +154,21 @@ pub struct ActionBody {
     pub action: String,
 }
 
+/// Whitelisted notification action types (§22). Only these may be dispatched:
+/// executable actions run backend-side; pure deep-link actions verify the
+/// target exists and return (the frontend navigates). Arbitrary Action Registry
+/// IDs are rejected.
+const EXEC_JOIN_ROOM: &str = "join_room";
+const EXEC_FRIEND_ACCEPT: &str = "friend_accept";
+const EXEC_FRIEND_REJECT: &str = "friend_reject";
+const LINK_ACTIONS: &[&str] = &[
+    "open_chart",
+    "open_replay",
+    "open_room",
+    "open_user",
+    "open_profile",
+];
+
 /// POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd).
 #[utoipa::path(
     post,
@@ -182,15 +197,105 @@ pub async fn action(
     let row = super::get_for_user(db, auth.sub, id)
         .await?
         .ok_or_else(|| ApiError::not_found("notification"))?;
+
+    // Resolve the requested button id to its frozen action type (whitelist).
     let actions = row.payload.get("actions").and_then(Value::as_array).cloned().unwrap_or_default();
-    let found = actions.iter().any(|a| {
-        a.get("id").and_then(Value::as_str) == Some(body.action.as_str())
-            || a.get("action").and_then(Value::as_str) == Some(body.action.as_str())
-    });
-    if !found {
-        return Err(ApiError::validation("action not available on this notification"));
+    let requested = body.action.as_str();
+    let mut action_type: Option<String> = None;
+    for a in &actions {
+        let a_id = a.get("id").and_then(Value::as_str);
+        let a_action = a.get("action").and_then(Value::as_str);
+        if a_id == Some(requested) || a_action == Some(requested) {
+            action_type = a_action.or(a_id).map(str::to_string);
+            break;
+        }
     }
-    Ok(Json(json!({ "ok": true })))
+    let action_type = action_type.ok_or_else(|| ApiError::validation("action not available on this notification"))?;
+
+    let target = row.payload.get("target").cloned().unwrap_or(Value::Null);
+    let user = crate::users::repo::find_by_id(db, auth.sub)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user"))?;
+
+    match action_type.as_str() {
+        EXEC_JOIN_ROOM => {
+            let room_id = target
+                .get("room_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ApiError::validation("join_room requires target.room_id"))?;
+            // Create the JoinIntent (auditable, pollable) then force_move now —
+            // the user is already online (they clicked the notification), so the
+            // `user.online` listener won't re-fire.
+            let _intent = state
+                .join_intents
+                .create(auth.sub, user.phira_id, room_id, None)?;
+            state
+                .rooms
+                .force_move(room_id, user.phira_id as i32, false)
+                .await
+                .map_err(ApiError::from)?;
+            Ok(Json(json!({ "ok": true, "action": action_type, "room_id": room_id })))
+        }
+        EXEC_FRIEND_ACCEPT | EXEC_FRIEND_REJECT => {
+            let req_id = target
+                .get("friend_request_id")
+                .and_then(Value::as_str)
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .ok_or_else(|| ApiError::validation("friend action requires target.friend_request_id"))?;
+            let accept = action_type == EXEC_FRIEND_ACCEPT;
+            crate::social::respond_request(db, req_id, auth.sub, accept).await?;
+            Ok(Json(json!({ "ok": true, "action": action_type })))
+        }
+        t if LINK_ACTIONS.contains(&t) => {
+            verify_link_target(&state, t, &target).await?;
+            Ok(Json(json!({ "ok": true, "action": action_type, "target": target })))
+        }
+        other => Err(ApiError::validation(format!(
+            "notification action type not allowed: {other}"
+        ))),
+    }
+}
+
+/// Best-effort existence check for pure deep-link actions. Network-dependent
+/// sources (Phira API / PMP) failing to verify degrade to `ok` (frontend still
+/// navigates and shows its own error); a structurally missing target is an error.
+async fn verify_link_target(state: &Arc<AppState>, action_type: &str, target: &Value) -> Result<(), ApiError> {
+    match action_type {
+        "open_room" => {
+            let room_id = target
+                .get("room_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ApiError::validation("open_room requires target.room_id"))?;
+            let _ = state.rooms.info(room_id).await;
+            Ok(())
+        }
+        "open_chart" => {
+            let chart_id = target
+                .get("chart_id")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| ApiError::validation("open_chart requires target.chart_id"))?;
+            let _ = state.phira_gateway.chart(chart_id).await;
+            Ok(())
+        }
+        "open_user" | "open_profile" => {
+            let phira_id = target
+                .get("phira_id")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| ApiError::validation("open_user requires target.phira_id"))?;
+            let _ = state.phira_gateway.user(phira_id).await;
+            Ok(())
+        }
+        // open_replay: existence is verified on the viewer stream itself; a
+        // target round_uuid must be present.
+        "open_replay" => {
+            let _ = target
+                .get("round_uuid")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ApiError::validation("open_replay requires target.round_uuid"))?;
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
