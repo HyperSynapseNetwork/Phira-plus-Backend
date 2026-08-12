@@ -111,8 +111,8 @@ impl JobRunner {
 
     async fn run(&self, job_id: Uuid, job_type: &str, args: Value, cancel: Arc<AtomicBool>) {
         if let Some(db) = &self.db {
-            let _ = update_state(db, job_id, "running", "starting", Some(0.0), "").await;
-            self.publish(job_id, "running", "starting", 0.0);
+            let _ = update_state(db, job_id, "running", "starting", None, "").await;
+            self.publish(job_id, "running", "starting", None);
         }
 
         let result = self.execute(job_id, job_type, &args, &cancel).await;
@@ -121,11 +121,11 @@ impl JobRunner {
             match &result {
                 Ok((stage, progress)) => {
                     let _ = update_state(db, job_id, "succeeded", stage, Some(*progress), "").await;
-                    self.publish(job_id, "succeeded", stage, *progress);
+                    self.publish(job_id, "succeeded", stage, Some(*progress));
                 }
                 Err(e) => {
                     let _ = update_state(db, job_id, "failed", "error", None, e).await;
-                    self.publish(job_id, "failed", "error", -1.0);
+                    self.publish(job_id, "failed", "error", None);
                 }
             }
         }
@@ -142,49 +142,50 @@ impl JobRunner {
         match job_type {
             "pmp.update.check" => {
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update check");
+                self.tick_stage(job_id, "checking", cancel).await?;
                 let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
-                self.tick(job_id, "checking", 0.5, cancel).await?;
                 result.map(|_| ("checked".to_string(), 1.0f32)).map_err(|e| e.to_string())
             }
             "pmp.update.apply" => {
-                self.tick(job_id, "downloading", 0.3, cancel).await?;
-                self.tick(job_id, "verifying", 0.6, cancel).await?;
+                // No real PMP progress → stage strings only, progress stays null.
+                self.tick_stage(job_id, "downloading", cancel).await?;
+                self.tick_stage(job_id, "verifying", cancel).await?;
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update apply");
                 let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
-                self.tick(job_id, "applying", 0.9, cancel).await?;
+                self.tick_stage(job_id, "applying", cancel).await?;
                 result.map(|_| ("applied".to_string(), 1.0f32)).map_err(|e| e.to_string())
             }
             "ppf.build" => {
-                for i in 1..=5 {
-                    self.tick(job_id, "building", i as f32 / 5.0, cancel).await?;
-                }
+                self.tick_stage(job_id, "building", cancel).await?;
                 Ok(("built".to_string(), 1.0f32))
             }
             "backup" => {
-                self.tick(job_id, "backing-up", 0.5, cancel).await?;
+                self.tick_stage(job_id, "backing-up", cancel).await?;
                 Ok(("backup-complete".to_string(), 1.0f32))
             }
             other => Err(format!("unknown job type: {other}")),
         }
     }
 
-    async fn tick(&self, job_id: Uuid, stage: &str, progress: f32, cancel: &Arc<AtomicBool>) -> Result<(), String> {
+    /// Advance a job's stage without faking a numeric progress value (§22:
+    /// `progress=null` when PMP provides no real progress).
+    async fn tick_stage(&self, job_id: Uuid, stage: &str, cancel: &Arc<AtomicBool>) -> Result<(), String> {
         if cancel.load(Ordering::Acquire) {
             if let Some(db) = &self.db {
-                let _ = update_state(db, job_id, "cancelled", "cancelled", Some(progress), "cancelled").await;
+                let _ = update_state(db, job_id, "cancelled", "cancelled", None, "cancelled").await;
             }
-            self.publish(job_id, "cancelled", "cancelled", progress);
+            self.publish(job_id, "cancelled", "cancelled", None);
             return Err("cancelled".to_string());
         }
         if let Some(db) = &self.db {
-            let _ = update_state(db, job_id, "running", stage, Some(progress), "").await;
+            let _ = update_state(db, job_id, "running", stage, None, "").await;
         }
-        self.publish(job_id, "running", stage, progress);
+        self.publish(job_id, "running", stage, None);
         tokio::time::sleep(Duration::from_millis(500)).await;
         Ok(())
     }
 
-    fn publish(&self, job_id: Uuid, state: &str, stage: &str, progress: f32) {
+    fn publish(&self, job_id: Uuid, state: &str, stage: &str, progress: Option<f32>) {
         self.events.publish(PpbEvent {
             id: Uuid::new_v4().to_string(),
             event_type: "job.updated".to_string(),

@@ -53,7 +53,8 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("server.roomcreation", "server:manage", Executor::OpenUds, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("server.shutdown", "server:shutdown", Executor::OpenUds, Risk::Critical, true, true, false, "server", false),
         // ── PMP CLI / update (design §9.3) ────────────────────────
-        ActionDescriptor::new("pmp.cli.execute", "pmp:cli", Executor::CliRaw, Risk::High, true, false, false, "server", false),
+        // Raw Console requires reauth (same semantics as Automation/Runbook, §22).
+        ActionDescriptor::new("pmp.cli.execute", "pmp:cli", Executor::CliRaw, Risk::High, true, true, false, "server", false),
         ActionDescriptor::new("pmp.update.apply", "server:update", Executor::CliExecute, Risk::Critical, true, true, false, "server", true),
     ]
 }
