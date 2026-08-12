@@ -111,7 +111,18 @@ pub async fn room_history(
     Ok(Json(result))
 }
 
-async fn room_chat_history(
+/// GET /api/v1/rooms/{room_id}/chat — room chat history.
+#[utoipa::path(
+    get,
+    path = "/api/v1/rooms/{room_id}/chat",
+    operation_id = "rooms_room_id_chat_get",
+    responses(
+        (status = 200, description = "chat history", body = serde_json::Value),
+        (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
+    ),
+    tag = "rooms"
+)]
+pub async fn room_chat_history(
     State(state): State<Arc<AppState>>,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {

@@ -124,17 +124,25 @@ jobs:
       - name: Generate OpenAPI JSON + TS types
         run: |
           bash scripts/gen-types.sh
-          git diff --stat contracts/types.ts || true
+          git diff --stat contracts/types.ts contracts/openapi.json || true
       - name: Type-check generated TS (no duplicate identifiers)
         run: |
           npx --yes -p typescript tsc --noEmit --skipLibCheck contracts/types.ts
+      - name: Clone frontends for consistency check
+        run: |
+          git clone --depth 1 https://github.com/HyperSynapseNetwork/Phira-plus-frontend.git /tmp/ppf
+          git clone --depth 1 https://github.com/HyperSynapseNetwork/Phira-plus-panel.git /tmp/panel
+      - name: Contract consistency check (PPF)
+        run: bash scripts/check-contract-consistency.sh contracts/openapi.json /tmp/ppf/src
+      - name: Contract consistency check (Panel)
+        run: bash scripts/check-contract-consistency.sh contracts/openapi.json /tmp/panel
       - name: Commit generated types (if changed)
         run: |
           git checkout -B main   # checkout is a detached HEAD (ref = build_ref)
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add contracts/types.ts
+          git add contracts/types.ts contracts/openapi.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: sync contracts/types.ts [skip ci]"
+            git commit -m "chore: sync contracts/types.ts + openapi.json [skip ci]"
             git push origin main
           fi

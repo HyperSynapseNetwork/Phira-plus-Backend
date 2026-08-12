@@ -111,6 +111,7 @@ pub struct RoomActionRequest {
         crate::rooms::routes::list_rooms,
         crate::rooms::routes::room_info,
         crate::rooms::routes::room_history,
+        crate::rooms::routes::room_chat_history,
         crate::rooms::routes::send_chat,
         crate::rooms::routes::room_action_body,
         crate::replay::routes::detail,
