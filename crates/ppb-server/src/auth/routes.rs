@@ -18,7 +18,7 @@ use super::session::{self, Session};
 use super::types::{AuthPrincipal, ClientType, PrincipalType};
 use super::{phira as phira_service, ACCESS_COOKIE, REFRESH_COOKIE};
 use crate::app::AppState;
-use crate::error::{ApiError, ErrorCode};
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::identities::repo as identities_repo;
 use crate::middleware::cookies::{self, CookieOpts};
 use crate::middleware::rate_limit::RateLimiter;
@@ -227,7 +227,7 @@ pub fn check_reauth_header(
     request_body = PhiraLoginRequest,
     responses(
         (status = 200, description = "logged in; cookies set", body = serde_json::Value),
-        (status = 401, description = "invalid credentials", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "invalid credentials", body = ErrorEnvelope),
     ),
     tag = "auth"
 )]
@@ -275,7 +275,7 @@ pub async fn phira_login(
     request_body = ReauthRequest,
     responses(
         (status = 200, description = "reauth context issued", body = serde_json::Value),
-        (status = 401, description = "invalid credentials / phira_id mismatch", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "invalid credentials / phira_id mismatch", body = ErrorEnvelope),
     ),
     tag = "auth"
 )]
@@ -343,7 +343,7 @@ pub async fn phira_reauth(
     path = "/api/v1/auth/refresh",
     responses(
         (status = 200, description = "refreshed; cookies rotated", body = serde_json::Value),
-        (status = 401, description = "invalid/expired refresh token", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "invalid/expired refresh token", body = ErrorEnvelope),
     ),
     tag = "auth"
 )]
@@ -414,7 +414,7 @@ pub async fn refresh(
     path = "/api/v1/auth/logout",
     responses(
         (status = 204, description = "logged out"),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "auth"
 )]

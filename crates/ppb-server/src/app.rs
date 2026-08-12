@@ -27,7 +27,8 @@ use crate::commands::broker::CommandBroker;
 use crate::config::deployment::Secrets;
 use crate::config::RuntimeConfig;
 use crate::jobs::runner::JobRunner;
-use crate::error::{ApiError, ErrorCode};
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::openapi::MeResponse;
 use crate::identities::repo as identities_repo;
 use crate::join_intent::JoinIntentStore;
 use crate::middleware::csrf;
@@ -426,8 +427,8 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
     get,
     path = "/api/v1/me",
     responses(
-        (status = 200, description = "session probe", body = crate::openapi::MeResponse),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 200, description = "session probe", body = MeResponse),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "me"
 )]
@@ -525,7 +526,7 @@ async fn session_created_at(
     path = "/api/v1/me/profile",
     responses(
         (status = 200, description = "community profile", body = serde_json::Value),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "me"
 )]
@@ -605,7 +606,7 @@ pub async fn me_profile(
     path = "/api/v1/me/preferences",
     responses(
         (status = 200, description = "user preferences", body = serde_json::Value),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "me"
 )]
@@ -637,7 +638,7 @@ pub async fn me_preferences(
     path = "/api/v1/me/join-intents",
     responses(
         (status = 200, description = "join intents", body = serde_json::Value),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "me"
 )]
@@ -697,7 +698,7 @@ pub async fn me_join_intent_cancel(
     path = "/api/v1/me/join-intents/{intent_id}",
     responses(
         (status = 200, description = "intent status", body = serde_json::Value),
-        (status = 404, description = "not found", body = crate::error::ErrorEnvelope),
+        (status = 404, description = "not found", body = ErrorEnvelope),
     ),
     tag = "me"
 )]
@@ -719,7 +720,7 @@ pub async fn me_join_intent_get(
     path = "/api/v1/friends/{phira_id}/remove",
     responses(
         (status = 204, description = "removed"),
-        (status = 404, description = "user not found", body = crate::error::ErrorEnvelope),
+        (status = 404, description = "user not found", body = ErrorEnvelope),
     ),
     tag = "friends"
 )]

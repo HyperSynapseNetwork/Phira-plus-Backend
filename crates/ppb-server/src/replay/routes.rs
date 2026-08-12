@@ -22,7 +22,8 @@ use super::visibility::resolve_replay_access;
 use super::{create_share_link, revoke_share_link, set_visibility, ReplayOverride};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::ApiError;
+use crate::error::{ApiError, ErrorEnvelope};
+use crate::openapi::{ReplayDetail, ReplayManifest};
 use crate::middleware::auth::OptionalAuthPrincipal;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -92,7 +93,7 @@ async fn list_replays(
     path = "/api/v1/replays/share/{token}",
     responses(
         (status = 200, description = "resolved replay identity", body = serde_json::Value),
-        (status = 404, description = "invalid/expired/revoked token", body = crate::error::ErrorEnvelope),
+        (status = 404, description = "invalid/expired/revoked token", body = ErrorEnvelope),
     ),
     tag = "replays"
 )]
@@ -116,8 +117,8 @@ pub struct ReplayDetailParams {
     get,
     path = "/api/v1/replays/{round_uuid}",
     responses(
-        (status = 200, description = "replay detail", body = crate::openapi::ReplayDetail),
-        (status = 403, description = "access denied", body = crate::error::ErrorEnvelope),
+        (status = 200, description = "replay detail", body = ReplayDetail),
+        (status = 403, description = "access denied", body = ErrorEnvelope),
     ),
     tag = "replays"
 )]
@@ -155,8 +156,8 @@ pub async fn detail(
     get,
     path = "/api/v1/replays/{round_uuid}/manifest",
     responses(
-        (status = 200, description = "replay manifest", body = crate::openapi::ReplayManifest),
-        (status = 403, description = "access denied", body = crate::error::ErrorEnvelope),
+        (status = 200, description = "replay manifest", body = ReplayManifest),
+        (status = 403, description = "access denied", body = ErrorEnvelope),
     ),
     tag = "replays"
 )]

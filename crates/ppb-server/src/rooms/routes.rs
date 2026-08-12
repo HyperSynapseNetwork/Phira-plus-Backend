@@ -20,7 +20,7 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandTask};
 use crate::commands::repo as command_repo;
-use crate::error::{ApiError, ErrorCode};
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 /// Public + logged-in room routes.
 pub fn routes() -> Router<Arc<AppState>> {
@@ -53,7 +53,7 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
     path = "/api/v1/rooms",
     responses(
         (status = 200, description = "room list", body = serde_json::Value),
-        (status = 502, description = "pmp unavailable", body = crate::error::ErrorEnvelope),
+        (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
     ),
     tag = "rooms"
 )]
@@ -73,7 +73,7 @@ pub async fn list_rooms(
     path = "/api/v1/rooms/{room_id}",
     responses(
         (status = 200, description = "room detail", body = serde_json::Value),
-        (status = 404, description = "room not found", body = crate::error::ErrorEnvelope),
+        (status = 404, description = "room not found", body = ErrorEnvelope),
     ),
     tag = "rooms"
 )]
@@ -94,7 +94,7 @@ pub async fn room_info(
     path = "/api/v1/rooms/{room_id}/history",
     responses(
         (status = 200, description = "room rounds + scores", body = serde_json::Value),
-        (status = 502, description = "pmp unavailable", body = crate::error::ErrorEnvelope),
+        (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
     ),
     tag = "rooms"
 )]
@@ -127,7 +127,7 @@ pub struct ChatSendBody {
     request_body = ChatSendBody,
     responses(
         (status = 200, description = "chat sent", body = serde_json::Value),
-        (status = 401, description = "unauthenticated", body = crate::error::ErrorEnvelope),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
     ),
     tag = "rooms"
 )]
@@ -174,7 +174,7 @@ pub struct RoomActionBody2 {
     responses(
         (status = 200, description = "action result", body = serde_json::Value),
         (status = 202, description = "long-running accepted", body = serde_json::Value),
-        (status = 403, description = "permission denied", body = crate::error::ErrorEnvelope),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "rooms"
 )]

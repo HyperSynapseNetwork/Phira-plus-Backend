@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-use crate::error::{ApiError, ErrorCode};
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -43,7 +43,7 @@ pub struct SendBody {
     request_body = SendBody,
     responses(
         (status = 200, description = "event created + push summary", body = serde_json::Value),
-        (status = 403, description = "permission denied", body = crate::error::ErrorEnvelope),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "notifications"
 )]
