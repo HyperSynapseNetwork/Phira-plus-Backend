@@ -1,9 +1,13 @@
-# PPB 配置参考
+# 配置参考（Configuration）
 
-> 来源：`crates/ppb-server/src/config/mod.rs` 的 `RuntimeConfig` + `config/example.toml`。
-> 分层（design §20.1 / §25.7）：Deployment/Secret（env/secret file，Panel 不返回原值）；
-> PPB Runtime（TOML，Panel 可改）；PMP Config（PPB Form Descriptor 维护）；PPF Build/SEO 与 Public Content（DB，Panel 可改）。
-> 标注 `[secret]` 的字段绝不写入日志/审计/API 响应。
+> 来源：`crates/ppb-server/src/config/mod.rs` 的 `RuntimeConfig` + [config/example.toml](../config/example.toml)。
+> 分层（design §20.1 / §25.7）：
+> - **Deployment / Secret**（环境变量 / secret file，Panel 不返回原值）；
+> - **PPB Runtime**（TOML，Panel 可改）；
+> - **PMP Config**（PPB Form Descriptor 维护）；
+> - **PPF Build/SEO 与 Public Content**（DB，Panel 可改）。
+>
+> 标注 `[secret]` 的字段**绝不**写入日志 / 审计 / API 响应。
 
 ## 加载顺序
 
@@ -11,7 +15,7 @@
 2. `./config/ppb.toml`；
 3. 内置默认值。
 
-DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽略。
+DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML 之上；未知键忽略。
 
 ## `[server]`
 
@@ -34,7 +38,7 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `credentials` | `true` | 凭据 CORS；为 true 时禁止 `*` |
+| `credentials` | `true` | 凭据 CORS；为 `true` 时禁止 `*` |
 | `allowed_origins` | `[phira, panel]` | 精确来源白名单 |
 | `dev_origins` | `[localhost:3000, localhost:5173]` | 本地开发来源 |
 
@@ -61,7 +65,7 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 | `reconnect_base_ms` / `reconnect_max_ms` | `500` / `30000` | 重连退避 |
 | `request_timeout_ms` | `10000` | OpenUDS 命令超时 |
 | `capabilities` | `[persist.touches, persist.judges, room.chat_send, stream.touches, stream.judges]` | 能力集（与版本映射交集） |
-| `config_path` | 无 | PMP `server_config.yml` 路径（Form Descriptor/快照） |
+| `config_path` | 无 | PMP `server_config.yml` 路径（Form Descriptor / 快照） |
 | `http_url` | 无 | PMP HTTP 健康地址（如 `http://127.0.0.1:12347`） |
 
 ## `[phira]`
@@ -79,8 +83,13 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 
 ## `[rate_limit]`
 
-`login_per_minute=10` `reauth_per_minute=10` `github_callback_per_minute=20`
-`chat_send_per_minute=60` `raw_cli_per_minute=30`
+| 键 | 默认 |
+|---|---|
+| `login_per_minute` | `10` |
+| `reauth_per_minute` | `10` |
+| `github_callback_per_minute` | `20` |
+| `chat_send_per_minute` | `60` |
+| `raw_cli_per_minute` | `30` |
 
 ## `[audit]`
 
@@ -108,6 +117,8 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 
 ## 环境变量（Deployment/Secret）
 
+> 这些是密钥唯一允许存在的位置（环境变量或 secret file）。参考 [config/example.env](../config/example.env) 与 [deploy/systemd/ppb.env.example](../deploy/systemd/ppb.env.example)。
+
 | 变量 | 说明 |
 |---|---|
 | `PPB_DATABASE_URL` | PostgreSQL 连接串 `[secret]` |
@@ -116,4 +127,8 @@ DB 覆盖（`ppb_runtime_overrides`）合并到启动 TOML 之上；未知键忽
 | `PPB_PMP_OPENUDS_TOKEN` | OpenUDS token 认证令牌 `[secret]` |
 | `PPB_GITHUB_CLIENT_ID` / `PPB_GITHUB_CLIENT_SECRET` | GitHub OAuth `[secret]` |
 | `PPB_RUNTIME_CONFIG` | 运行时 TOML 路径 |
-| `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT` | Web Push `[secret]`（前者的 PEM） |
+| `PPB_VAPID_PUBLIC_KEY` / `PPB_VAPID_PRIVATE_KEY` | Web Push VAPID `[secret]`（Phase D；配置侧对应 `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT`） |
+| `PPB_FCM_SERVICE_ACCOUNT_JSON` / `PPB_WNS_PACKAGE_SID` / `PPB_WNS_CLIENT_SECRET` | Android / Windows 推送 `[secret]`（Phase D，待 Owner 凭据） |
+
+> [!NOTE]
+> `example.env` 与 `CONFIG_REFERENCE.md` 在 VAPID 变量名上存在历史命名差异（`PPB_VAPID_PRIVATE_KEY` vs `PPB_VAPID_PRIVATE_KEY_PEM`）。以 `config/mod.rs` 的 `NotificationConfig` 为准：配置侧键为 `vapid_private_key_pem` / `vapid_subject`。
