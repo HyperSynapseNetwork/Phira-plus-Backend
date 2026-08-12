@@ -1,5 +1,7 @@
 //! User preferences — JSONB + revision optimistic concurrency (design §21).
 
+pub mod routes;
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;

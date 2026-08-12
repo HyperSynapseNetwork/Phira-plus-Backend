@@ -356,11 +356,15 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/rooms", crate::rooms::routes::routes())
         .merge(crate::phira::routes::routes())
         .merge(crate::replay::routes::routes())
+        .merge(crate::social::routes::routes())
+        .merge(crate::notifications::routes::routes())
+        .merge(crate::preferences::routes::routes())
         .route("/friends/{phira_id}/remove", post(friend_remove))
         .route("/openapi.json", get(openapi_json))
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
+        .route("/me/identities", get(me_identities))
         .route("/me/preferences", get(me_preferences))
         .route("/me/join-intents", get(me_join_intents).post(me_join_intent_create))
         .route("/me/join-intents/{intent_id}", get(me_join_intent_get).delete(me_join_intent_cancel))
@@ -600,6 +604,28 @@ pub async fn me_profile(
         "online_status": online_status,
         "friends_count": friends_count,
     })))
+}
+
+/// GET /api/v1/me/identities — identity bindings for the current user.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/identities",
+    responses(
+        (status = 200, description = "identity bindings", body = serde_json::Value),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
+pub async fn me_identities(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let identities = identities_repo::list_for_user(db, auth.sub).await?;
+    Ok(Json(json!({ "identities": identities })))
 }
 
 /// GET /api/v1/me/preferences — all namespaces for the current user.
