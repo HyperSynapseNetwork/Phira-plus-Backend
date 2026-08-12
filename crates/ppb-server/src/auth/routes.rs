@@ -18,6 +18,7 @@ use super::session::{self, Session};
 use super::types::{AuthPrincipal, ClientType, PrincipalType};
 use super::{phira as phira_service, ACCESS_COOKIE, REFRESH_COOKIE};
 use crate::app::AppState;
+#[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::identities::repo as identities_repo;
 use crate::middleware::cookies::{self, CookieOpts};

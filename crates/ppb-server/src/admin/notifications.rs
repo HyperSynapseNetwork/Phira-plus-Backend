@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
+#[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {

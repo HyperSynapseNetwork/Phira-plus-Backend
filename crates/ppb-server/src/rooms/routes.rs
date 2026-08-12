@@ -20,6 +20,7 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandTask};
 use crate::commands::repo as command_repo;
+#[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 /// Public + logged-in room routes.

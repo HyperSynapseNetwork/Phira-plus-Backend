@@ -22,7 +22,9 @@ use super::visibility::resolve_replay_access;
 use super::{create_share_link, revoke_share_link, set_visibility, ReplayOverride};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
+#[allow(unused_imports)]
 use crate::error::{ApiError, ErrorEnvelope};
+#[allow(unused_imports)]
 use crate::openapi::{ReplayDetail, ReplayManifest};
 use crate::middleware::auth::OptionalAuthPrincipal;
 
