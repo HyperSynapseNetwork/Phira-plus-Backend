@@ -39,11 +39,12 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("room.whitelist_add", "room:whitelist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         ActionDescriptor::new("room.whitelist_remove", "room:whitelist", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         // ── Player control (design §18.4 Security) ────────────────
+        // §23 #10 Sensitive Action Policy: ban / IP ban always require reauth.
         ActionDescriptor::new("player.kick", "user:kick", Executor::OpenUds, Risk::Medium, true, false, false, "user:{user_id}", false),
-        ActionDescriptor::new("player.ban", "user:ban", Executor::OpenUds, Risk::High, true, false, false, "user:{user_id}", false),
-        ActionDescriptor::new("player.unban", "user:ban", Executor::OpenUds, Risk::Medium, true, false, false, "user:{user_id}", false),
-        ActionDescriptor::new("player.ban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, false, false, "server", false),
-        ActionDescriptor::new("player.unban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("player.ban", "user:ban", Executor::OpenUds, Risk::High, true, true, false, "user:{user_id}", false),
+        ActionDescriptor::new("player.unban", "user:ban", Executor::OpenUds, Risk::Medium, true, true, false, "user:{user_id}", false),
+        ActionDescriptor::new("player.ban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, true, false, "server", false),
+        ActionDescriptor::new("player.unban_ip", "user:ban_ip", Executor::OpenUds, Risk::High, true, true, false, "server", false),
         // ── Broadcast (design §18.9) ──────────────────────────────
         ActionDescriptor::new("broadcast.all", "broadcast:all", Executor::OpenUds, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("broadcast.room", "broadcast:room", Executor::OpenUds, Risk::Medium, true, false, false, "room:{room_id}", false),
@@ -125,6 +126,39 @@ mod tests {
         let reg = ActionRegistry::new();
         assert!(reg.get("room.lock").is_some());
         assert!(reg.get("room.unlock").is_none());
+    }
+
+    #[test]
+    fn canonical_action_ids_present() {
+        // §23 #2: Registry is the single source of Action IDs. PPF/Panel must
+        // use these exact IDs; the legacy `user.*` / `room.blacklist_*` names
+        // are NOT valid.
+        let reg = ActionRegistry::new();
+        for id in [
+            "player.ban", "player.unban", "player.kick", "player.ban_ip", "player.unban_ip",
+            "room.ban", "room.unban", "room.lock",
+            "server.config_reload", "server.roomcreation", "server.shutdown",
+            "pmp.cli.execute", "pmp.update.apply",
+        ] {
+            assert!(reg.get(id).is_some(), "missing canonical action {id}");
+        }
+        for id in ["user.ban", "user.unban", "user.kick", "user.ban_ip", "user.unban_ip",
+                   "room.blacklist_ban", "room.blacklist_unban", "room.unlock"] {
+            assert!(reg.get(id).is_none(), "legacy action {id} must not exist");
+        }
+    }
+
+    #[test]
+    fn sensitive_actions_require_reauth() {
+        // §23 #10: ban / IP ban / shutdown / update / raw CLI require reauth.
+        let reg = ActionRegistry::new();
+        for id in [
+            "player.ban", "player.unban", "player.ban_ip", "player.unban_ip",
+            "server.shutdown", "pmp.cli.execute", "pmp.update.apply",
+        ] {
+            let a = reg.get(id).unwrap();
+            assert!(a.reauth, "sensitive action {id} must require reauth");
+        }
     }
 
     #[test]

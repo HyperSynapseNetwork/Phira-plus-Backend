@@ -124,8 +124,11 @@ impl JobRunner {
                     self.publish(job_id, "succeeded", stage, Some(*progress));
                 }
                 Err(e) => {
-                    let _ = update_state(db, job_id, "failed", "error", None, e).await;
-                    self.publish(job_id, "failed", "error", None);
+                    // §23 #7: terminal stage is `failed` or `timeout`, not a
+                    // hardcoded `error`.
+                    let stage = if e == "timeout" { "timeout" } else { "failed" };
+                    let _ = update_state(db, job_id, "failed", stage, None, e).await;
+                    self.publish(job_id, "failed", stage, None);
                 }
             }
         }
@@ -147,13 +150,22 @@ impl JobRunner {
                 result.map(|_| ("checked".to_string(), 1.0f32)).map_err(|e| e.to_string())
             }
             "pmp.update.apply" => {
-                // No real PMP progress → stage strings only, progress stays null.
-                self.tick_stage(job_id, "downloading", cancel).await?;
-                self.tick_stage(job_id, "verifying", cancel).await?;
+                // §23 #7: honest stage — no fake download/verify/apply progress;
+                // PMP provides no real progress so progress stays null and the
+                // single stage is `executing_pmp_update`. Terminal stages are
+                // completed / failed / timeout.
+                self.tick_stage(job_id, "executing_pmp_update", cancel).await?;
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update apply");
-                let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
-                self.tick_stage(job_id, "applying", cancel).await?;
-                result.map(|_| ("applied".to_string(), 1.0f32)).map_err(|e| e.to_string())
+                let result = tokio::time::timeout(
+                    Duration::from_secs(120),
+                    crate::pmp::cli::cli_execute(&self.openuds, cmd),
+                )
+                .await;
+                match result {
+                    Ok(Ok(_)) => Ok(("completed".to_string(), 1.0f32)),
+                    Ok(Err(e)) => Err(format!("failed: {e}")),
+                    Err(_) => Err("timeout".to_string()),
+                }
             }
             "ppf.build" => {
                 self.tick_stage(job_id, "building", cancel).await?;

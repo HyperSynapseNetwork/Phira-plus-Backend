@@ -135,8 +135,20 @@ pub async fn server_actions(
             Ok(Json(r))
         }
         "connections" => {
-            state.permissions.require(&state.db, &auth, "server:view").await?;
-            let r = state.openuds.command("runtime.status", json!({})).await.map_err(map_err)?;
+            // §23 #2: real gate. `enabled` toggles new-connection acceptance
+            // (PMP `connections on|off` via cli.execute); absent = read state.
+            state.permissions.require(&state.db, &auth, "server:manage").await?;
+            let command = match body.args.get("enabled").and_then(Value::as_bool) {
+                Some(enabled) => {
+                    if enabled { "connections on" } else { "connections off" }
+                }
+                None => "connections",
+            };
+            let r = state
+                .openuds
+                .command("cli.execute", json!({ "command": command }))
+                .await
+                .map_err(map_err)?;
             Ok(Json(r))
         }
         other => Err(ApiError::validation(format!("unknown server action: {other}"))),
