@@ -1,10 +1,12 @@
-//! CSRF double-submit protection for cookie-authenticated state-changing requests.
+//! CSRF protection (contract §20, S-1 redesign).
 //!
-//! Flow: the auth/login endpoints set a non-HttpOnly `ppb_csrf` cookie AND the
-//! HttpOnly `ppb_access` cookie. For any state-changing (POST/PUT/PATCH/DELETE)
-//! request that authenticates via cookie, the `X-CSRF-Token` header must match
-//! the `ppb_csrf` cookie value. Bearer (Tauri) auth is exempt (no ambient
-//! authority). See design §6.4 and §27.3.
+//! The old double-submit required the frontend to read a `ppb_csrf` cookie on
+//! the API domain, which PPF/Panel cannot do cross-origin. New model:
+//! - `GET /api/v1/me` returns a session-bound `csrf_token` (stateless HMAC of
+//!   the session id under a derived server key).
+//! - State-changing requests (POST/PUT/PATCH/DELETE) that authenticate via
+//!   cookie must send `X-CSRF-Token: <token>` AND have an allowed `Origin`.
+//! - Cookie SameSite=Lax; Bearer (Tauri) auth is exempt (no ambient authority).
 
 use std::sync::Arc;
 
@@ -12,11 +14,17 @@ use axum::extract::{Request, State};
 use axum::http::Method;
 use axum::middleware::Next;
 use axum::response::Response;
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::ACCESS_COOKIE;
+use crate::auth::jwt::decode_access;
+use crate::auth::{ACCESS_COOKIE, REFRESH_COOKIE};
 use crate::error::{ApiError, ErrorCode};
 use crate::middleware::cookies;
+
+type HmacSha256 = Hmac<Sha256>;
 
 fn is_state_changing(method: &Method) -> bool {
     matches!(
@@ -25,13 +33,20 @@ fn is_state_changing(method: &Method) -> bool {
     )
 }
 
-/// Detect whether this request authenticates via cookie (vs Bearer).
-fn uses_cookie_auth(req: &Request, csrf_cookie: &str) -> bool {
-    if req.headers().get(axum::http::header::AUTHORIZATION).is_some() {
-        return false;
-    }
-    cookies::get_cookie(req.headers(), ACCESS_COOKIE).is_some()
-        || cookies::get_cookie(req.headers(), csrf_cookie).is_some()
+/// Derive the CSRF HMAC key from the JWT secret (separate domain).
+pub fn csrf_key(jwt_secret: &str) -> Vec<u8> {
+    let mut mac = HmacSha256::new_from_slice(jwt_secret.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(b":ppb-csrf");
+    mac.finalize().into_bytes().to_vec()
+}
+
+/// Session-bound CSRF token (stateless, derived from sid + server key).
+pub fn csrf_token_for(sid: &Uuid, key: &[u8]) -> String {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+    mac.update(sid.as_bytes());
+    let digest = mac.finalize().into_bytes();
+    base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, digest)
 }
 
 /// Constant-time string equality (same-length; no early return on first mismatch).
@@ -46,34 +61,69 @@ fn ct_eq(a: &str, b: &str) -> bool {
     diff == 0
 }
 
-/// Pure double-submit check (unit-testable).
-fn csrf_valid(cookie: Option<&str>, header: Option<&str>) -> bool {
-    match (cookie, header) {
-        (Some(c), Some(h)) if !c.is_empty() && !h.is_empty() => ct_eq(c, h),
-        _ => false,
+/// Whether the request authenticates via cookie (vs Bearer). Checks both the
+/// access cookie and the refresh cookie (logout/refresh carry the latter).
+fn uses_cookie_auth(req: &Request) -> bool {
+    if req.headers().get(axum::http::header::AUTHORIZATION).is_some() {
+        return false;
+    }
+    cookies::get_cookie(req.headers(), ACCESS_COOKIE).is_some()
+        || cookies::get_cookie(req.headers(), REFRESH_COOKIE).is_some()
+}
+
+/// `Origin` must be absent (non-browser) or in the allowlist.
+fn origin_allowed(origin: Option<&str>, allowed: &[String]) -> bool {
+    match origin {
+        Some(o) if !o.is_empty() => allowed.iter().any(|a| a == o),
+        _ => true,
     }
 }
 
-/// Axum middleware enforcing the double-submit rule.
+/// Axum middleware enforcing the CSRF contract.
 pub async fn csrf_middleware(
     State(state): State<Arc<AppState>>,
     req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
     let cfg = &state.config.session;
-    if is_state_changing(req.method()) && uses_cookie_auth(&req, &cfg.csrf_cookie_name) {
-        let cookie_val = cookies::get_cookie(req.headers(), &cfg.csrf_cookie_name);
-        let header_val = req
+    if is_state_changing(req.method()) && uses_cookie_auth(&req) {
+        // 1) Origin must be allowed (defense-in-depth).
+        let origin = req
             .headers()
-            .get(&cfg.csrf_header_name)
+            .get(axum::http::header::ORIGIN)
             .and_then(|v| v.to_str().ok())
             .map(str::to_string);
+        let allowed: Vec<String> = state
+            .config
+            .cors
+            .allowed_origins
+            .iter()
+            .chain(state.config.cors.dev_origins.iter())
+            .cloned()
+            .collect();
+        if !origin_allowed(origin.as_deref(), &allowed) {
+            return Err(ApiError::new(ErrorCode::Auth, "CSRF origin rejected"));
+        }
 
-        if !csrf_valid(cookie_val.as_deref(), header_val.as_deref()) {
-            return Err(ApiError::new(
-                ErrorCode::Auth,
-                "CSRF token mismatch or missing X-CSRF-Token header",
-            ));
+        // 2) Session-bound token must match X-CSRF-Token.
+        let key = csrf_key(&state.secrets.jwt_secret);
+        let token = cookies::get_cookie(req.headers(), ACCESS_COOKIE);
+        if let Some(tok) = token {
+            if let Ok(claims) = decode_access(&tok, &state.secrets.jwt_secret) {
+                let expected = csrf_token_for(&claims.sid, &key);
+                let provided = req
+                    .headers()
+                    .get(&cfg.csrf_header_name)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                if !ct_eq(&expected, provided) {
+                    return Err(ApiError::new(
+                        ErrorCode::Auth,
+                        "CSRF token mismatch or missing X-CSRF-Token header",
+                    ));
+                }
+            }
+            // Invalid cookie is handled downstream by the auth extractor.
         }
     }
     Ok(next.run(req).await)
@@ -85,17 +135,14 @@ mod tests {
     use axum::http::HeaderMap;
 
     #[test]
-    fn valid_when_matching() {
-        assert!(csrf_valid(Some("tok"), Some("tok")));
-    }
-
-    #[test]
-    fn invalid_on_mismatch_or_missing() {
-        assert!(!csrf_valid(Some("tok"), Some("other")));
-        assert!(!csrf_valid(Some("tok"), None));
-        assert!(!csrf_valid(None, Some("tok")));
-        assert!(!csrf_valid(Some(""), Some("")));
-        assert!(!csrf_valid(None, None));
+    fn token_is_deterministic_per_session() {
+        let key = csrf_key("test-secret-test-secret-test-secret!!");
+        let sid = Uuid::new_v4();
+        let a = csrf_token_for(&sid, &key);
+        let b = csrf_token_for(&sid, &key);
+        assert_eq!(a, b);
+        assert_ne!(a, csrf_token_for(&Uuid::new_v4(), &key));
+        assert_ne!(a, csrf_token_for(&sid, &csrf_key("other-secret-other-secret!!")));
     }
 
     #[test]
@@ -125,7 +172,7 @@ mod tests {
             .body(axum::body::Body::empty())
             .unwrap();
         *req.headers_mut() = headers;
-        assert!(!uses_cookie_auth(&req, "ppb_csrf"));
+        assert!(!uses_cookie_auth(&req));
     }
 
     #[test]
@@ -140,6 +187,15 @@ mod tests {
             .body(axum::body::Body::empty())
             .unwrap();
         *req.headers_mut() = headers;
-        assert!(uses_cookie_auth(&req, "ppb_csrf"));
+        assert!(uses_cookie_auth(&req));
+    }
+
+    #[test]
+    fn origin_rules() {
+        let allowed = vec!["https://phira.htadiy.com".to_string(), "http://localhost:3000".to_string()];
+        assert!(origin_allowed(Some("https://phira.htadiy.com"), &allowed));
+        assert!(!origin_allowed(Some("https://evil.example"), &allowed));
+        assert!(origin_allowed(None, &allowed));
+        assert!(origin_allowed(Some(""), &allowed));
     }
 }

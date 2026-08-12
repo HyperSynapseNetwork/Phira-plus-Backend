@@ -403,15 +403,21 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
         .allow_headers(AllowHeaders::list(headers))
 }
 
-/// GET /api/v1/me — current user summary + identity state.
+/// GET /api/v1/me — current user summary + identity state (contract §20 session
+/// probe). Issues the session-bound CSRF token for state-changing requests.
 pub async fn me(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let csrf_token = crate::middleware::csrf::csrf_token_for(
+        &auth.sid,
+        &crate::middleware::csrf::csrf_key(&state.secrets.jwt_secret),
+    );
     if auth.is_root() {
         return Ok(Json(json!({
             "principal_type": "root",
             "permissions": ["*:*"],
+            "csrf_token": csrf_token,
         })));
     }
     let db = state.require_db()?;
@@ -442,6 +448,7 @@ pub async fn me(
         "identities": identities,
         "phira_credential": credential,
         "permissions": perm_list,
+        "csrf_token": csrf_token,
     })))
 }
 

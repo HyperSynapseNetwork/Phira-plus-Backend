@@ -53,6 +53,7 @@ sha2 = { workspace = true }
 percent-encoding = { workspace = true }
 p256 = { workspace = true }
 hkdf = { workspace = true }
+hmac = { workspace = true }
 bincode = { workspace = true }
 zip = { workspace = true }
 

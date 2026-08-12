@@ -135,30 +135,17 @@ fn validate_return_to(allowlist: &[String], return_to: &str) -> Result<(), ApiEr
     Err(ApiError::validation("return_to 不在白名单内"))
 }
 
-/// Issue the three auth cookies (access, refresh, csrf).
+/// Issue the two auth cookies (access, refresh). CSRF token is issued via
+/// `GET /api/v1/me` (contract §20 S-1) — not a readable cookie.
 fn issue_cookies(
     cfg: &crate::config::SessionConfig,
     access_token: &str,
     refresh_token: &str,
-) -> (axum::http::HeaderValue, axum::http::HeaderValue, axum::http::HeaderValue) {
+) -> (axum::http::HeaderValue, axum::http::HeaderValue) {
     let opts = CookieOpts::new(&cfg.cookie_domain);
     let access = cookies::set_cookie(ACCESS_COOKIE, access_token, &opts, cfg.access_ttl_secs);
     let refresh = cookies::set_cookie(REFRESH_COOKIE, refresh_token, &opts, cfg.refresh_ttl_secs);
-    let csrf_opts = CookieOpts::new(&cfg.cookie_domain).http_only(false);
-    let csrf_token = new_csrf_token();
-    let csrf = cookies::set_cookie(
-        &cfg.csrf_cookie_name,
-        &csrf_token,
-        &csrf_opts,
-        cfg.refresh_ttl_secs,
-    );
-    (access, refresh, csrf)
-}
-
-fn new_csrf_token() -> String {
-    let mut bytes = [0u8; 24];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    (access, refresh)
 }
 
 /// Build an authenticated response with cookies attached.
@@ -168,11 +155,10 @@ fn auth_response(
     access_token: &str,
     refresh_token: &str,
 ) -> axum::response::Response {
-    let (access_c, refresh_c, csrf_c) = issue_cookies(cfg, access_token, refresh_token);
+    let (access_c, refresh_c) = issue_cookies(cfg, access_token, refresh_token);
     let mut resp = (StatusCode::OK, Json(body)).into_response();
     resp.headers_mut().append(header::SET_COOKIE, access_c);
     resp.headers_mut().append(header::SET_COOKIE, refresh_c);
-    resp.headers_mut().append(header::SET_COOKIE, csrf_c);
     resp
 }
 
@@ -399,13 +385,10 @@ pub async fn logout(
     let opts = CookieOpts::new(&cfg.cookie_domain);
     let clear_access = cookies::clear_cookie(ACCESS_COOKIE, &opts);
     let clear_refresh = cookies::clear_cookie(REFRESH_COOKIE, &opts);
-    let csrf_opts = CookieOpts::new(&cfg.cookie_domain).http_only(false);
-    let clear_csrf = cookies::clear_cookie(&cfg.csrf_cookie_name, &csrf_opts);
 
     let mut resp = StatusCode::NO_CONTENT.into_response();
     resp.headers_mut().append(header::SET_COOKIE, clear_access);
     resp.headers_mut().append(header::SET_COOKIE, clear_refresh);
-    resp.headers_mut().append(header::SET_COOKIE, clear_csrf);
     Ok(resp)
 }
 
