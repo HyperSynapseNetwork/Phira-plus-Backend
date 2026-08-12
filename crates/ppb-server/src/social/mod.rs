@@ -1,6 +1,8 @@
 //! Social domain — bidirectional friends + blocks (design §7.4).
 //! Never extends into private chat/IM.
 
+pub mod routes;
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;
@@ -128,6 +130,53 @@ pub async fn list_friends(db: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>,
     .await
     .map_err(db_err)?;
     Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Friend requests involving `user_id` (incoming or outgoing), newest first.
+pub async fn list_requests_for_user(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Vec<FriendRequest>, ApiError> {
+    sqlx::query_as::<_, FriendRequest>(
+        "SELECT id, from_user_id, to_user_id, status, created_at, responded_at
+         FROM friend_requests WHERE from_user_id = $1 OR to_user_id = $1
+         ORDER BY created_at DESC",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(db_err)
+}
+
+/// Fetch a single friend request by id.
+pub async fn get_request(
+    db: &sqlx::PgPool,
+    request_id: Uuid,
+) -> Result<Option<FriendRequest>, ApiError> {
+    sqlx::query_as::<_, FriendRequest>(
+        "SELECT id, from_user_id, to_user_id, status, created_at, responded_at
+         FROM friend_requests WHERE id = $1",
+    )
+    .bind(request_id)
+    .fetch_optional(db)
+    .await
+    .map_err(db_err)
+}
+
+/// Whether `a` has blocked `b` (or vice versa).
+pub async fn is_blocked(db: &sqlx::PgPool, a: Uuid, b: Uuid) -> Result<bool, ApiError> {
+    let (row,): (bool,) = sqlx::query_as::<_, (bool,)>(
+        "SELECT EXISTS(
+            SELECT 1 FROM user_blocks WHERE (blocker_id = $1 AND blocked_id = $2)
+                                         OR (blocker_id = $2 AND blocked_id = $1)
+         )",
+    )
+    .bind(a)
+    .bind(b)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
+    Ok(row)
 }
 
 pub async fn block(db: &sqlx::PgPool, blocker: Uuid, blocked: Uuid) -> Result<(), ApiError> {
