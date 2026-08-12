@@ -1,0 +1,5912 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Phira+ Backend API",
+    "description": "PPB — identity / community / control / integration plane. Contract §20: snake_case JSON.",
+    "license": {
+      "name": "Apache-2.0"
+    },
+    "version": "0.1"
+  },
+  "paths": {
+    "/api/v1/admin/actions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/actions — Action Manifest.",
+        "operationId": "admin_actions_get",
+        "responses": {
+          "200": {
+            "description": "action manifest",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/actions/{action_id}/execute": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/actions/{id}/execute",
+        "operationId": "admin_actions_action_id_execute_post",
+        "parameters": [
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/audit — filtered audit list.",
+        "operationId": "admin_audit_get",
+        "responses": {
+          "200": {
+            "description": "audit events (paginated)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/audit/export?format=csv|json — export (contract §17).",
+        "operationId": "admin_audit_export_get",
+        "responses": {
+          "200": {
+            "description": "audit export (csv|json)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/export.csv": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/audit/export.csv — CSV export (redacted; no secrets).",
+        "operationId": "admin_audit_export_csv_get",
+        "responses": {
+          "200": {
+            "description": "audit CSV export",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/audit/{id} — single audit event.",
+        "operationId": "admin_audit_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "audit event",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/auth/root/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/v1/admin/auth/root/change-password — change Root password.",
+        "operationId": "admin_auth_root_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "password changed"
+          },
+          "401": {
+            "description": "invalid current password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/auth/root/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/v1/admin/auth/root/login — Root local principal login.",
+        "operationId": "admin_auth_root_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "root logged in; cookies set",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "invalid password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/auth/root/session": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/v1/admin/auth/root/session — root session probe (P1).",
+        "operationId": "admin_auth_root_session_get",
+        "responses": {
+          "200": {
+            "description": "root session probe",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbook-runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/automation/runbook-runs — recent runbook runs.",
+        "operationId": "admin_automation_runbook_runs_get",
+        "responses": {
+          "200": {
+            "description": "runbook run list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbook-runs/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/automation/runbook-runs/{id} — single run detail.",
+        "operationId": "admin_automation_runbook_runs_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "runbook run detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbook-runs/{id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/automation/runbook-runs/{id}/cancel — cancel a queued/running run.",
+        "operationId": "admin_automation_runbook_runs_id_cancel_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "cancelled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbooks": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/automation/runbooks — list runbooks.",
+        "operationId": "admin_automation_runbooks_get",
+        "responses": {
+          "200": {
+            "description": "runbook list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/automation/runbooks — create a runbook.",
+        "operationId": "admin_automation_runbooks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunbookBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "runbook created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbooks/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/automation/runbooks/{id} — runbook detail.",
+        "operationId": "admin_automation_runbooks_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "runbook detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "DELETE /api/v1/admin/automation/runbooks/{id} — delete a runbook.",
+        "operationId": "admin_automation_runbooks_id_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "deleted"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "PATCH /api/v1/admin/automation/runbooks/{id} — update a runbook.",
+        "operationId": "admin_automation_runbooks_id_patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunbookBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "runbook updated",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/automation/runbooks/{id}/run": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/automation/runbooks/{id}/run — snapshot + execute steps sequentially.",
+        "operationId": "admin_automation_runbooks_id_run_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "run result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/commands": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/commands — recent command runs.",
+        "operationId": "admin_commands_get",
+        "responses": {
+          "200": {
+            "description": "command runs",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/commands/execute": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).",
+        "description": "Requires an elevated reauth context and is fully audited with the **final**\nresult (success / failure / timeout) — never a pre-recorded success.",
+        "operationId": "admin_commands_execute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteCommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "command result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/descriptors": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/descriptors — Form Descriptors for all scopes.",
+        "operationId": "admin_config_descriptors_get",
+        "responses": {
+          "200": {
+            "description": "form descriptors",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/diff": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/config/diff — field-level diff of current vs proposed.",
+        "operationId": "admin_config_diff_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigContentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "field-level diff",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/ppb": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/ppb — effective PPB config (merged with overrides).",
+        "operationId": "admin_config_ppb_get",
+        "responses": {
+          "200": {
+            "description": "effective PPB config",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/ppf": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/ppf — PPF build/SEO config.",
+        "operationId": "admin_config_ppf_get",
+        "responses": {
+          "200": {
+            "description": "PPF build config",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/raw": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/raw — raw PMP config YAML.",
+        "operationId": "admin_config_raw_get",
+        "responses": {
+          "200": {
+            "description": "raw config YAML",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/rollback": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/config/rollback — rollback to a snapshot.",
+        "operationId": "admin_config_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "rolled back + health",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/save": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/config/save — validate → snapshot → atomic write →",
+        "description": "reload → health check (design §20.3).",
+        "operationId": "admin_config_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigContentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "saved + health",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/snapshots": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/snapshots — list PMP snapshots.",
+        "operationId": "admin_config_snapshots_get",
+        "responses": {
+          "200": {
+            "description": "snapshot list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/validate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/config/validate — validate proposed YAML parses.",
+        "operationId": "admin_config_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigContentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "validation result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/config/values": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/config/values — current PMP config field values (redacted).",
+        "operationId": "admin_config_values_get",
+        "responses": {
+          "200": {
+            "description": "current config values",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/coupons": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/coupons — list coupons.",
+        "operationId": "admin_coupons_get",
+        "responses": {
+          "200": {
+            "description": "coupon list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/coupons/create": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/coupons/create — create a coupon (generates a code if blank).",
+        "operationId": "admin_coupons_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCouponBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "coupon created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/coupons/{id}/revoke": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/coupons/{id}/revoke — revoke a coupon.",
+        "operationId": "admin_coupons_id_revoke_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "revoked"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/groups": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/groups — list user groups.",
+        "operationId": "admin_groups_get",
+        "responses": {
+          "200": {
+            "description": "group list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/groups — create a user group.",
+        "operationId": "admin_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "group created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/groups/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/groups/{id} — group detail + permissions + members +",
+        "description": "effective permission preview (design §18.5).",
+        "operationId": "admin_groups_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "group detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "DELETE /api/v1/admin/groups/{id} — delete a group.",
+        "operationId": "admin_groups_id_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "deleted"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "PATCH /api/v1/admin/groups/{id} — rename a group.",
+        "operationId": "admin_groups_id_patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameGroupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "renamed"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/groups/{id}/members": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "PUT /api/v1/admin/groups/{id}/members — replace the member set.",
+        "operationId": "admin_groups_id_members_put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceMembersBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "members replaced"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/groups/{id}/permissions": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "PUT /api/v1/admin/groups/{id}/permissions — replace the permission set.",
+        "operationId": "admin_groups_id_permissions_put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePermissionsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "permissions replaced"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/jobs — recent jobs.",
+        "operationId": "admin_jobs_get",
+        "responses": {
+          "200": {
+            "description": "job list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/jobs — start a new job.",
+        "operationId": "admin_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "job started",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs/tasks": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/jobs/tasks — manual admin tasks (paginated).",
+        "operationId": "admin_jobs_tasks_get",
+        "responses": {
+          "200": {
+            "description": "admin tasks",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs/tasks/{task_id}/complete": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/jobs/tasks/{task_id}/complete — mark an admin task done.",
+        "operationId": "admin_jobs_tasks_task_id_complete_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "task completed",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/jobs/{job_id} — job detail.",
+        "operationId": "admin_jobs_job_id_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "job detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job.",
+        "operationId": "admin_jobs_job_id_cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "cancelled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/jobs/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job.",
+        "operationId": "admin_jobs_job_id_retry_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "job re-queued",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/logs — recent PMP log history.",
+        "operationId": "admin_logs_get",
+        "responses": {
+          "200": {
+            "description": "log history",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logs/input": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/logs/input — submit a PMP console command (full audit).",
+        "description": "Requires an elevated reauth context; audit records the FINAL result.",
+        "operationId": "admin_logs_input_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "command result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logs/translate": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/logs/translate?code=... — rule-based error translation.",
+        "operationId": "admin_logs_translate_get",
+        "responses": {
+          "200": {
+            "description": "translated log message",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/logs/translate — body-based error translation (contract §17).",
+        "operationId": "admin_logs_translate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "translated log message",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/notifications/delivery": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/notifications/delivery — recent events + delivered counts.",
+        "operationId": "admin_notifications_delivery_get",
+        "responses": {
+          "200": {
+            "description": "delivery summary",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/notifications/send": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "POST /api/v1/admin/notifications/send — create an event + fan out inbox rows.",
+        "operationId": "admin_notifications_send_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "event created + push summary",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/permissions/manifest": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/permissions/manifest",
+        "operationId": "admin_permissions_manifest_get",
+        "responses": {
+          "200": {
+            "description": "permission manifest",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/plugins — list plugins.",
+        "operationId": "admin_plugins_get",
+        "responses": {
+          "200": {
+            "description": "plugin list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/plugins — reload all plugins.",
+        "operationId": "admin_plugins_post",
+        "responses": {
+          "200": {
+            "description": "reloaded",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/call": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/plugins/call — call a plugin API.",
+        "operationId": "admin_plugins_call_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginCallBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "plugin call result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/{name}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/plugins/{name} — plugin info.",
+        "operationId": "admin_plugins_name_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "plugin info",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "DELETE /api/v1/admin/plugins/{name} — remove a plugin.",
+        "operationId": "admin_plugins_name_delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "removed"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/{name}/disable": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/plugins/{name}/disable — disable a plugin.",
+        "operationId": "admin_plugins_name_disable_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/{name}/enable": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/plugins/{name}/enable — enable a plugin.",
+        "operationId": "admin_plugins_name_enable_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "enabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/{name}/{action}": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/plugins/{name}/{action} — unified plugin action dispatch",
+        "description": "(contract §17): enable | disable | reload | remove | call.",
+        "operationId": "admin_plugins_name_action_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginCallBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "plugin action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rooms": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/rooms — list rooms (admin superset).",
+        "operationId": "admin_rooms_get",
+        "responses": {
+          "200": {
+            "description": "room list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/rooms — create a room.",
+        "operationId": "admin_rooms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoomBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "room created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rooms/actions/batch": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/rooms/actions/batch — batch room action (kick/move/ban)",
+        "description": "with per-item results and partial failure.",
+        "operationId": "admin_rooms_actions_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomBatchBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "per-item results",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rooms/{room_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/rooms/{room_id} — room detail (admin).",
+        "operationId": "admin_rooms_room_id_get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "room detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "DELETE /api/v1/admin/rooms/{room_id} — close a room.",
+        "operationId": "admin_rooms_room_id_delete",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "room closed",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rooms/{room_id}/actions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/rooms/{room_id}/actions — run a registered action scoped",
+        "description": "to a room (admin-gated or host-allowed, re-derived host).",
+        "operationId": "admin_rooms_room_id_actions_post",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRoomActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/actions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/actions — unified server operation dispatch",
+        "description": "(contract §17). config_reload / shutdown / roomcreation / connections.",
+        "operationId": "admin_server_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "server action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/broadcast/all": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/broadcast/all — server-wide system broadcast.",
+        "operationId": "admin_server_broadcast_all_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "broadcast sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/broadcast/room": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/broadcast/room — room system broadcast.",
+        "operationId": "admin_server_broadcast_room_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "broadcast sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/broadcast/user": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/broadcast/user — user system message.",
+        "operationId": "admin_server_broadcast_user_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "broadcast sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/config-reload": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/config-reload — hot reload PMP config.",
+        "operationId": "admin_server_config_reload_post",
+        "responses": {
+          "200": {
+            "description": "config reloaded",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/roomcreation": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/roomcreation — toggle room creation gate.",
+        "operationId": "admin_server_roomcreation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomCreationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "gate toggled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/runtime": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/server/runtime — runtime status.",
+        "operationId": "admin_server_runtime_get",
+        "responses": {
+          "200": {
+            "description": "runtime status",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/shutdown": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/server/shutdown — shutdown PMP (critical reauth).",
+        "operationId": "admin_server_shutdown_post",
+        "responses": {
+          "200": {
+            "description": "shutdown initiated",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/stats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/server/stats — PMP server stats.",
+        "operationId": "admin_server_stats_get",
+        "responses": {
+          "200": {
+            "description": "server stats",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/server/status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/server/status — scaffold summary.",
+        "operationId": "admin_server_status_get",
+        "responses": {
+          "200": {
+            "description": "server status",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users — search PPB accounts (by phira_id or username).",
+        "operationId": "admin_users_get",
+        "responses": {
+          "200": {
+            "description": "paginated users",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users/{user_id} — PPB account + PMP player info.",
+        "operationId": "admin_users_user_id_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/actions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a user.",
+        "description": "POST /api/v1/admin/users/{id}/actions — run a registered action scoped to a\nuser (e.g. player.kick / player.ban). The phira_id is injected as user_id.",
+        "operationId": "admin_users_user_id_actions_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users/{id}/audit — audit events targeting this user.",
+        "operationId": "admin_users_user_id_audit_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user audit events",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/multiplayer": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users/{id}/multiplayer — PMP player + presence (best-effort).",
+        "operationId": "admin_users_user_id_multiplayer_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "player + presence",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/security": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users/{id}/security — ban/IP-ban state (best-effort).",
+        "operationId": "admin_users_user_id_security_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user security state",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/sessions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/users/{id}/sessions — PPB web/desktop sessions.",
+        "operationId": "admin_users_user_id_sessions_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user sessions",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke the session and clear cookies.",
+        "operationId": "auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "logged out"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/phira/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Phira email/password login (sets access + refresh cookies).",
+        "operationId": "auth_phira_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhiraLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "logged in; cookies set",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/phira/reauth": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Issue a short-lived reauth context (`X-Reauth-Token`) for elevated actions.",
+        "operationId": "auth_phira_reauth_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "reauth context issued",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "invalid credentials / phira_id mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Rotate the refresh token and issue a new access token.",
+        "operationId": "auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "refreshed; cookies rotated",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "invalid/expired refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts — chart list (paginated).",
+        "operationId": "charts_get",
+        "responses": {
+          "200": {
+            "description": "chart list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/popular": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/popular — popular charts.",
+        "operationId": "charts_popular_get",
+        "responses": {
+          "200": {
+            "description": "popular charts",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/{id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/{id} — chart detail.",
+        "operationId": "charts_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "chart detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/{id}/preview": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/{id}/preview — chart file proxy fallback (design §12.7).",
+        "description": "Preferred path is the browser fetching the Phira CDN file directly; this\nroute is used only when CORS blocks the direct download.",
+        "operationId": "charts_id_preview_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "chart file bytes",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/{id}/records": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/{id}/records — chart records.",
+        "operationId": "charts_id_records_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "chart records",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/{id}/top": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/{id}/top — chart top records.",
+        "operationId": "charts_id_top_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "top records",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts/{id}/viewer": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/charts/{id}/viewer — bincode `(ChartInfo, Chart)` varint blob",
+        "description": "(contract §19). Uses the same TTL-cached chart file as `/preview`.",
+        "operationId": "charts_id_viewer_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "bincode chart blob",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/friends": {
+      "get": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "GET /api/v1/friends — the caller's friend list (paginated).",
+        "operationId": "friends_get",
+        "responses": {
+          "200": {
+            "description": "friend list (paginated)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/friends/requests": {
+      "get": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "GET /api/v1/friends/requests — incoming + outgoing friend requests.",
+        "operationId": "friends_requests_get",
+        "responses": {
+          "200": {
+            "description": "friend requests (paginated)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "POST /api/v1/friends/requests — send a friend request by Phira id.",
+        "operationId": "friends_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "request sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "409": {
+            "description": "already friends / request exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/friends/requests/{request_id}/accept": {
+      "post": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "POST /api/v1/friends/requests/{id}/accept — accept a friend request.",
+        "operationId": "friends_requests_request_id_accept_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "accepted"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/friends/requests/{request_id}/reject": {
+      "post": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "POST /api/v1/friends/requests/{id}/reject — reject a friend request.",
+        "operationId": "friends_requests_request_id_reject_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "rejected"
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/friends/{phira_id}/remove": {
+      "post": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "POST /api/v1/friends/{phira_id}/remove — remove a friend by Phira id (§21).",
+        "operationId": "friends_phira_id_remove_post",
+        "parameters": [
+          {
+            "name": "phira_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "removed"
+          },
+          "404": {
+            "description": "user not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me — unified session probe (contract §20 S-4).",
+        "description": "Returns `{principal, user, permissions[], capabilities[], session, ...}`\nwith permissions resolved at runtime (never baked into the JWT), plus the\nsession-bound `csrf_token` for state-changing requests.",
+        "operationId": "me_get",
+        "responses": {
+          "200": {
+            "description": "session probe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/identities": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/identities — identity bindings for the current user.",
+        "operationId": "me_identities_get",
+        "responses": {
+          "200": {
+            "description": "identity bindings",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/join-intents": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/join-intents — list the caller's active join intents.",
+        "operationId": "me_join_intents_get",
+        "responses": {
+          "200": {
+            "description": "join intents",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "POST /api/v1/me/join-intents — create a short-lived join intent (design §14.6).",
+        "operationId": "me_join_intents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinIntentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "join intent created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/join-intents/{intent_id}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/join-intents/{id} — poll an intent's status",
+        "description": "(`pending | user_online | moving | completed | failed | expired`, §21).",
+        "operationId": "me_join_intents_intent_id_get",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "intent status",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "DELETE /api/v1/me/join-intents/{id} — cancel a join intent.",
+        "operationId": "me_join_intents_intent_id_delete",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "cancelled"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/preferences": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/preferences — all namespaces for the current user.",
+        "operationId": "me_preferences_get",
+        "responses": {
+          "200": {
+            "description": "user preferences",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/preferences/{namespace}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/preferences/{namespace} — one namespaced preference.",
+        "operationId": "me_preferences_namespace_get",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "namespaced preferences",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "namespace not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/v1/me/preferences/{namespace} — upsert with optimistic concurrency.",
+        "operationId": "me_preferences_namespace_put",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "saved preferences",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "409": {
+            "description": "revision mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "DELETE /api/v1/me/preferences/{namespace} — delete a namespaced preference.",
+        "operationId": "me_preferences_namespace_delete",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "deleted"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/profile": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/profile — community profile (defaults when unset).",
+        "description": "Optional fields (contract supplement): `rks`/`stats` (Phira gateway),\n`online_status` (presence), `friends_count` (PPB social). Each is `null`\nwhen the source is unavailable; frontends render a placeholder (`—`).",
+        "operationId": "me_profile_get",
+        "responses": {
+          "200": {
+            "description": "community profile",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/push-endpoints": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/v1/me/push-endpoints — list the caller's registered push endpoints.",
+        "operationId": "me_push_endpoints_get",
+        "responses": {
+          "200": {
+            "description": "push endpoints",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "POST /api/v1/me/push-endpoints — register a push endpoint (subscription",
+        "description": "material encrypted at rest with the deployment key).",
+        "operationId": "me_push_endpoints_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushEndpointBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "registered",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/push-endpoints/{endpoint_id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "DELETE /api/v1/me/push-endpoints/{id} — remove a push endpoint.",
+        "operationId": "me_push_endpoints_endpoint_id_delete",
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "removed"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "GET /api/v1/notifications — inbox (paginated + unread).",
+        "operationId": "notifications_get",
+        "responses": {
+          "200": {
+            "description": "notification inbox",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/action": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "POST /api/v1/notifications/{id}/action — run a notification action (re-auth'd).",
+        "operationId": "notifications_id_action_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "action acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "reauth required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "POST /api/v1/notifications/{id}/dismiss — dismiss (hide from inbox).",
+        "operationId": "notifications_id_dismiss_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "dismissed"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/input": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "POST /api/v1/notifications/{id}/input — reply (contract §8: goes to room.chat_send).",
+        "operationId": "notifications_id_input_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "input sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "reauth required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "POST /api/v1/notifications/{id}/read — mark read.",
+        "operationId": "notifications_id_read_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "marked read"
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/announcements": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "GET /api/v1/public/announcements — public runtime content.",
+        "operationId": "public_announcements_get",
+        "responses": {
+          "200": {
+            "description": "announcements content",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/downloads": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "GET /api/v1/public/downloads — public runtime content.",
+        "operationId": "public_downloads_get",
+        "responses": {
+          "200": {
+            "description": "downloads content",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/meta": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "GET /api/v1/public/meta — capabilities / meta contract.",
+        "operationId": "public_meta_get",
+        "responses": {
+          "200": {
+            "description": "meta + capabilities",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/nodes": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "GET /api/v1/public/nodes — public runtime content.",
+        "operationId": "public_nodes_get",
+        "responses": {
+          "200": {
+            "description": "nodes content",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/site": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "GET /api/v1/public/site — public site config (merged with runtime content).",
+        "description": "`visit_count` (P-86): privacy-friendly aggregate. Baseline from config\n(`site.visit_count`), plus a server-side in-memory counter incremented on\neach fetch. No client fingerprint is used; defaults to 0 when unset.",
+        "operationId": "public_site_get",
+        "responses": {
+          "200": {
+            "description": "public site config",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/records": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/records — records by player.",
+        "operationId": "records_get",
+        "responses": {
+          "200": {
+            "description": "player records",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/records/list15/{chart_id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/records/list15/{chart_id} — chart top-15 records.",
+        "operationId": "records_list15_chart_id_get",
+        "parameters": [
+          {
+            "name": "chart_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "top-15 records",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/records/pool/{user_id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/records/pool/{user_id} — user record pool.",
+        "operationId": "records_pool_user_id_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "record pool",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/records/query/{chart_id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/records/query/{chart_id} — chart records query.",
+        "operationId": "records_query_chart_id_get",
+        "parameters": [
+          {
+            "name": "chart_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "chart records",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/records/{id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/records/{id} — single record detail.",
+        "operationId": "records_id_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "record detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replays/share/{token}": {
+      "get": {
+        "tags": [
+          "replays"
+        ],
+        "summary": "GET /api/v1/replays/share/{token} — resolve an opaque share token to the",
+        "description": "pinned `(round_uuid, player_phira_id)` (S-3).",
+        "operationId": "replays_share_token_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "resolved replay identity",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "invalid/expired/revoked token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replays/{round_uuid}": {
+      "get": {
+        "tags": [
+          "replays"
+        ],
+        "summary": "GET /api/v1/replays/{round_uuid}?player_id=... — summary + visibility",
+        "description": "(access-enforced for the pair).",
+        "operationId": "replays_round_uuid_get",
+        "parameters": [
+          {
+            "name": "round_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "replay detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replays/{round_uuid}/manifest": {
+      "get": {
+        "tags": [
+          "replays"
+        ],
+        "summary": "GET /api/v1/replays/{round_uuid}/manifest?player_id=... — frame counts /",
+        "description": "players / range (access-enforced for the pair).",
+        "operationId": "replays_round_uuid_manifest_get",
+        "parameters": [
+          {
+            "name": "round_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "replay manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayManifest"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rooms": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "GET /api/v1/rooms — list rooms (is_self enrichment when authenticated).",
+        "operationId": "rooms_get",
+        "responses": {
+          "200": {
+            "description": "room list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "pmp unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rooms/{room_id}": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "GET /api/v1/rooms/{room_id} — room detail (is_self enrichment).",
+        "operationId": "rooms_room_id_get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "room detail",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "room not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rooms/{room_id}/actions": {
+      "post": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "POST /api/v1/rooms/{room_id}/actions — contract §18 body form `{action, args}`.",
+        "operationId": "rooms_room_id_actions_post",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomActionBody2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "action result",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "202": {
+            "description": "long-running accepted",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rooms/{room_id}/chat": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "GET /api/v1/rooms/{room_id}/chat — room chat history.",
+        "operationId": "rooms_room_id_chat_get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "chat history",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "pmp unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "POST /api/v1/rooms/{room_id}/chat — send a room chat message as the caller.",
+        "description": "Client must not specify a trusted user_id (design §13.3).",
+        "operationId": "rooms_room_id_chat_post",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSendBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "chat sent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rooms/{room_id}/history": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "GET /api/v1/rooms/{room_id}/history — PMP room.history (rounds + scores).",
+        "operationId": "rooms_room_id_history_get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "room rounds + scores",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "pmp unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/users — search Phira users.",
+        "operationId": "users_get",
+        "responses": {
+          "200": {
+            "description": "user search results",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{phira_id}": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/users/{phira_id} — Phira user profile.",
+        "operationId": "users_phira_id_get",
+        "parameters": [
+          {
+            "name": "phira_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user profile",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{phira_id}/block": {
+      "post": {
+        "tags": [
+          "friends"
+        ],
+        "summary": "POST /api/v1/users/{phira_id}/block — block a user by Phira id.",
+        "operationId": "users_phira_id_block_post",
+        "parameters": [
+          {
+            "name": "phira_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "blocked"
+          },
+          "404": {
+            "description": "user not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{phira_id}/stats": {
+      "get": {
+        "tags": [
+          "phira"
+        ],
+        "summary": "GET /api/v1/users/{phira_id}/stats — Phira user stats (rks).",
+        "operationId": "users_phira_id_stats_get",
+        "parameters": [
+          {
+            "name": "phira_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "user stats",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "502": {
+            "description": "phira unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionBody": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminRoomActionBody": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {}
+        }
+      },
+      "BroadcastBody": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "room_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "nullable": true
+          },
+          "new_password": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatSendBody": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigContentBody": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateCouponBody": {
+        "type": "object",
+        "required": [
+          "action_type"
+        ],
+        "properties": {
+          "action_type": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "payload": {}
+        }
+      },
+      "CreateGroupBody": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateJobBody": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "args": {},
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRoomBody": {
+        "type": "object",
+        "required": [
+          "room_id"
+        ],
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "persistent_empty": {
+            "type": "boolean"
+          },
+          "room_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRunbookBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/RunbookDefinition"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "Serializable error body (`error` member).",
+        "required": [
+          "code",
+          "message",
+          "request_id",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {},
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "description": "Wrapper for the JSON `{ \"error\": ... }` envelope.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        }
+      },
+      "ExecuteActionBody": {
+        "type": "object",
+        "properties": {
+          "args": {}
+        }
+      },
+      "ExecuteCommandBody": {
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        }
+      },
+      "InputBody": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "JoinIntentBody": {
+        "type": "object",
+        "required": [
+          "room_id"
+        ],
+        "properties": {
+          "room_id": {
+            "type": "string"
+          },
+          "ttl_secs": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "LogInputBody": {
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "description": "`GET /api/v1/me` session-probe response (S-4).",
+        "required": [
+          "principal",
+          "permissions",
+          "capabilities",
+          "session",
+          "csrf_token"
+        ],
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "identities": {
+            "nullable": true
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phira_credential": {
+            "nullable": true
+          },
+          "principal": {},
+          "session": {},
+          "user": {
+            "nullable": true
+          }
+        }
+      },
+      "PaginationResponse": {
+        "type": "object",
+        "description": "Standard paginated response `{items, total, page, pageNum}`.",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PhiraLoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "client_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "device_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "return_to": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PluginCallBody": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {}
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PushEndpointBody": {
+        "type": "object",
+        "required": [
+          "device_id",
+          "channel",
+          "subscription"
+        ],
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionWire"
+          }
+        }
+      },
+      "ReauthRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "client_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "RenameGroupBody": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ReplaceMembersBody": {
+        "type": "object",
+        "required": [
+          "user_ids"
+        ],
+        "properties": {
+          "user_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "ReplacePermissionsBody": {
+        "type": "object",
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ReplayDetail": {
+        "type": "object",
+        "description": "Replay detail (summary + visibility).",
+        "required": [
+          "round_uuid",
+          "player_phira_id",
+          "visibility",
+          "touches",
+          "judges"
+        ],
+        "properties": {
+          "judges": {},
+          "player_phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "round_uuid": {
+            "type": "string"
+          },
+          "touches": {},
+          "visibility": {
+            "type": "string"
+          }
+        }
+      },
+      "ReplayManifest": {
+        "type": "object",
+        "description": "Replay manifest summary (per `(round_uuid, player_phira_id)` pair).",
+        "required": [
+          "round_uuid",
+          "player_phira_id",
+          "touches",
+          "judges"
+        ],
+        "properties": {
+          "judges": {},
+          "player_phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "round_uuid": {
+            "type": "string"
+          },
+          "touches": {}
+        }
+      },
+      "RollbackBody": {
+        "type": "object",
+        "required": [
+          "snapshot_id"
+        ],
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "RoomActionBody2": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {}
+        }
+      },
+      "RoomActionRequest": {
+        "type": "object",
+        "description": "Room action request `{action, args}`.",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {
+            "nullable": true
+          }
+        }
+      },
+      "RoomBatchBody": {
+        "type": "object",
+        "required": [
+          "action",
+          "room_ids"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {},
+          "room_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RoomCreationBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RootLoginRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "RunbookDefinition": {
+        "type": "object",
+        "description": "A runbook definition (stored as JSONB; snapshot on every run).",
+        "required": [
+          "name",
+          "steps"
+        ],
+        "properties": {
+          "args": {},
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunbookStep"
+            }
+          }
+        }
+      },
+      "RunbookStep": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Empty for a WAIT-only step (design §10.1 `wait: <secs>`)."
+          },
+          "wait": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`wait_secs` accepts both `wait_secs` and `wait` keys.",
+            "nullable": true,
+            "minimum": 0
+          },
+          "with": {}
+        }
+      },
+      "SendBody": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "payload": {},
+          "priority": {
+            "type": "string"
+          },
+          "target": {
+            "description": "`{ \"all\": true }` | `{ \"group_id\": \"<uuid>\" }` | `{ \"user_ids\": [...] }`"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "SendRequestBody": {
+        "type": "object",
+        "required": [
+          "phira_id"
+        ],
+        "properties": {
+          "phira_id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ServerActionBody": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {}
+        }
+      },
+      "SubscriptionWire": {
+        "type": "object",
+        "description": "Encrypted subscription wire shape (before encryption at rest).",
+        "required": [
+          "endpoint",
+          "p256dh",
+          "auth"
+        ],
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "p256dh": {
+            "type": "string"
+          }
+        }
+      },
+      "TranslateParams": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdatePreferencesBody": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "data": {}
+        }
+      },
+      "UserActionBody": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "args": {}
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Authentication / reauth / session"
+    },
+    {
+      "name": "me",
+      "description": "Session probe / profile / preferences / join intents"
+    },
+    {
+      "name": "friends",
+      "description": "Friends"
+    },
+    {
+      "name": "rooms",
+      "description": "Rooms (view / chat / actions / history)"
+    },
+    {
+      "name": "replays",
+      "description": "Replays ((round_uuid, player_phira_id) identity)"
+    },
+    {
+      "name": "notifications",
+      "description": "Notifications"
+    }
+  ]
+}

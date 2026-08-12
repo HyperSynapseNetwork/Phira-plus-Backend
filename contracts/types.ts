@@ -2118,7 +2118,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** GET /api/v1/rooms/{room_id}/chat — room chat history. */
+        get: operations["rooms_room_id_chat_get"];
         put?: never;
         /**
          * POST /api/v1/rooms/{room_id}/chat — send a room chat message as the caller.
@@ -6626,6 +6627,37 @@ export interface operations {
             };
             /** @description permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    rooms_room_id_chat_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description chat history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description pmp unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
