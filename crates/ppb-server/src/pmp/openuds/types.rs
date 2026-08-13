@@ -60,15 +60,6 @@ pub struct AuthenticatedFrame {
     pub server_version: String,
 }
 
-/// The `{"type":"auth_pending",...}` frame (approve mode).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthPendingFrame {
-    #[serde(rename = "type", default)]
-    pub frame_type: Option<String>,
-    #[serde(rename = "pending_id")]
-    pub pending_id: String,
-}
-
 /// The `{"type":"auth_error",...}` frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthErrorFrame {

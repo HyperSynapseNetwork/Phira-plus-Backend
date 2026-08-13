@@ -89,7 +89,7 @@ pub fn pmp_config_descriptor() -> Vec<ConfigFieldDescriptor> {
         field!("filtered_player_ids", "过滤玩家", "被过滤的玩家 ID 列表", "moderation", "text", "medium", "hot", false, 90),
         field!("openuds.enabled", "OpenUDS 启用", "是否启用 OpenUDS 管理接口", "openuds", "switch", "high", "restart", false, 100),
         field!("openuds.socket_path", "OpenUDS 套接字路径", "Unix Domain Socket 路径", "openuds", "text", "high", "restart", false, 101),
-        field!("openuds.auth_token", "OpenUDS 令牌", "token 认证令牌（approve 模式留空）", "openuds", "text", "critical", "restart", true, 102),
+        field!("openuds.auth_token", "OpenUDS 令牌", "token 认证令牌（留空则按 socket 文件权限直接放行）", "openuds", "text", "critical", "restart", true, 102),
     ]
 }
 

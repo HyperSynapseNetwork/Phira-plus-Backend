@@ -32,7 +32,7 @@
 - **统一认证（Auth）**：Phira 登录 → PPB JWT（`Secure+HttpOnly+SameSite=Lax` host-only cookie）→ Root 本地凭据（bcrypt，独立于 `users` 表）→ GitHub **绑定** OAuth（不建裸账号）→ 短期 `reauth_context` JWT（`X-Reauth-Token` 头，高危险 Action 二次鉴权）
 - **权限系统**：Permission Manifest（`/api/v1/admin/permissions/manifest`）+ User → Groups → Permissions 三级解析；`admin_scope` 自动映射全部非 Root-only 权限；`*:*` 仅 Root（API + DB CHECK 双重拒绝）
 - **Action Registry + Command Broker**：统一执行模型（`openuds | cli.execute | internal`），按 `queue_key` 串行执行，`command_runs` 全程记录；`host_allowed` 动作每次执行重查真实 host
-- **OpenUDS 集成**：token / approve 双模式认证，typed 命令封装（room/player/server/plugin），断线自动重连（指数退避 + 抖动），版本映射 + capability detection
+- **OpenUDS 集成**：token / direct 双模式认证（无 token 时按 socket 文件权限直接放行），typed 命令封装（room/player/server/plugin），断线自动重连（指数退避 + 抖动），版本映射 + capability detection
 - **实时通道**：PMP 事件 → PPB SSE 信封（`GET /api/v1/events`）；Live WS（`/ws/v1/rooms/{room_uuid}/live`）与 Replay WS（`/ws/v1/replays/{round_uuid}`）JSON 信封
 - **Phira 数据网关**：已确认公开数据子集（charts/records/users，typed 方法）TTL 缓存 + 速率限制；TopChart 聚合 worker（每小时快照）
 - **统一错误契约**：`{"error":{"code","message","request_id","details"}}`，code 全 UPPER_SNAKE_CASE；分页统一 `page`（1-based）/`pageNum`（≤100）

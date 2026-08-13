@@ -1,4 +1,4 @@
-//! OpenUDS client: connect, auth (token|approve), typed commands, subscribe,
+//! OpenUDS client: connect, auth (token|direct), typed commands, subscribe,
 //! subscribe_stream, events/streams, reconnect with exponential backoff + jitter.
 
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use tokio::net::UnixStream;
 use tokio::sync::{broadcast, oneshot, Notify, RwLock};
 
 use super::protocol::{self, ProtocolError};
-use super::types::{AuthPendingFrame, AuthenticatedFrame, EventFrame, ResponseFrame, StreamFrame};
+use super::types::{AuthenticatedFrame, EventFrame, ResponseFrame, StreamFrame};
 use crate::config::PmpConfig;
 use crate::error::{ApiError, ErrorCode};
 use crate::pmp::capabilities::active_capabilities;
@@ -24,8 +24,9 @@ use crate::pmp::capabilities::active_capabilities;
 pub enum OpenUdsAuth {
     /// `{"type":"authenticate","token":...}`.
     Token(String),
-    /// `{"type":"authenticate","client_name":...}` + operator `approve openuds <pending_id>`.
-    Approve { client_name: String },
+    /// No token: the Unix socket's filesystem permissions already isolate
+    /// access, so authenticate with an empty `authenticate` frame.
+    Direct,
 }
 
 /// Client configuration.
@@ -44,9 +45,7 @@ impl OpenUdsConfig {
     pub fn from_runtime(cfg: &PmpConfig, token: Option<String>) -> Self {
         let auth = match token {
             Some(t) if !t.is_empty() => OpenUdsAuth::Token(t),
-            _ => OpenUdsAuth::Approve {
-                client_name: cfg.client_name.clone(),
-            },
+            _ => OpenUdsAuth::Direct,
         };
         Self {
             path: cfg.openuds_path.clone(),
@@ -160,9 +159,7 @@ impl OpenUdsClient {
 
         let auth_frame = match &self.config.auth {
             OpenUdsAuth::Token(t) => json!({ "type": "authenticate", "token": t }),
-            OpenUdsAuth::Approve { client_name } => {
-                json!({ "type": "authenticate", "client_name": client_name })
-            }
+            OpenUdsAuth::Direct => json!({ "type": "authenticate" }),
         };
         protocol::write_frame_async(&mut writer, &auth_frame)
             .await
@@ -178,34 +175,6 @@ impl OpenUdsClient {
                 let auth: AuthenticatedFrame = serde_json::from_value(first)
                     .map_err(|e| OpenUdsError::Protocol(e.to_string()))?;
                 self.set_authenticated(auth).await;
-            }
-            Some("auth_pending") => {
-                let pending: AuthPendingFrame = serde_json::from_value(first)
-                    .map_err(|e| OpenUdsError::Protocol(e.to_string()))?;
-                tracing::warn!(
-                    pending_id = %pending.pending_id,
-                    "openuds approve-mode: run `approve openuds <pending_id>` (TTL 120s)"
-                );
-                // Wait for authenticated or auth_error (operator approves within 120s).
-                let next = protocol::read_frame_async(&mut reader)
-                    .await
-                    .map_err(|e| OpenUdsError::Protocol(e.to_string()))?;
-                match next.get("type").and_then(Value::as_str) {
-                    Some("authenticated") => {
-                        let auth: AuthenticatedFrame = serde_json::from_value(next)
-                            .map_err(|e| OpenUdsError::Protocol(e.to_string()))?;
-                        self.set_authenticated(auth).await;
-                    }
-                    Some("auth_error") => {
-                        return Err(OpenUdsError::AuthRequired(
-                            next.get("message")
-                                .and_then(Value::as_str)
-                                .unwrap_or("approval rejected")
-                                .to_string(),
-                        ));
-                    }
-                    _ => return Err(OpenUdsError::Protocol("unexpected auth frame".into())),
-                }
             }
             Some("auth_error") => {
                 let msg = first

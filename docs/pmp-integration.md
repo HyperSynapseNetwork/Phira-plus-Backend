@@ -7,7 +7,7 @@ PPB 通过 **OpenUDS（Unix domain socket）** 控制 [phira-mp-plus](https://gi
 - 帧：4 字节 LE 长度前缀 + UTF-8 JSON，最大 16 MiB（镜像 PMP `protocol.rs`）。
 - 认证：
   - **token 模式**：`{"type":"authenticate","token":...}` → `{"type":"authenticated","session_id","server_version"}`
-  - **approve 模式**：`{"type":"authenticate","client_name":...}` → `auth_pending` → 在 PMP 控制台 `approve openuds <id>`（TTL 120s）
+  - **direct 模式**（无 token）：`{"type":"authenticate"}` → `{"type":"authenticated","session_id","server_version"}`（Unix socket 文件权限隔离）
 - 认证后建立能力集（版本映射 + capability detection，见 `pmp/capabilities.rs`）。
 - 断线自动重连（指数退避 + 抖动，`pmp/openuds/client.rs`）；连接中断时 pending 命令失败。
 
