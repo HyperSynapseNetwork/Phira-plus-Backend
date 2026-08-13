@@ -390,7 +390,7 @@ pub async fn input(
         .ok_or_else(|| ApiError::not_found("user"))?;
     state
         .rate_limiter
-        .check(&format!("chat-send:{room_id}"), state.config.rate_limit.chat_send_per_minute)?;
+        .check(&format!("chat-send:{room_id}:{}", auth.sub), state.config.rate_limit.chat_send_per_minute)?;
     let result = state
         .rooms
         .chat_send(room_id, user.phira_id as i32, text)

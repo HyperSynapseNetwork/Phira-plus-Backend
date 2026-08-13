@@ -160,7 +160,7 @@ pub async fn send_chat(
     }
     state
         .rate_limiter
-        .check(&format!("chat-send:{room_id}"), state.config.rate_limit.chat_send_per_minute)?;
+        .check(&format!("chat-send:{room_id}:{}", auth.sub), state.config.rate_limit.chat_send_per_minute)?;
     let phira_id = caller_phira_id(&state, &auth).await?;
     let result = state
         .rooms
