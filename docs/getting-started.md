@@ -11,7 +11,31 @@
   - `phira.htadiy.com`（PPF，公开伴生站）
   - `panel-phira.htadiy.com`（Panel，管理控制台）
 
-## 方式 A：Docker Compose
+## 方式 A：一键安装（推荐）
+
+[`deploy/install.sh`](../deploy/install.sh) 是 Native Linux x86_64 的首选安装路径：幂等、自动下载并
+校验 sha256、自动生成配置与密钥（`ppctl init`）、自动配置本地 PostgreSQL（或使用外部
+`PPB_DATABASE_URL`）、安装 systemd 服务并轮询 `/healthz`。
+
+```bash
+# 在线安装（root；默认取最新 release，可用 PPB_VERSION 覆盖）
+curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | sudo bash
+```
+
+非交互部署（环境变量覆盖；secrets 仍自动生成）：
+
+```bash
+sudo PPB_NONINTERACTIVE=1 \
+  PPB_API_URL=https://api.example.com \
+  PPB_PPF_URL=https://phira.example.com \
+  PPB_PANEL_URL=https://panel.example.com \
+  PPB_DATABASE_URL=postgres://ppb:CHANGE_ME@127.0.0.1:5432/ppb \
+  bash deploy/install.sh
+```
+
+脚本结尾会打印首次 Root 一次性口令查看方式、反代模板位置与 `ppctl root reset-password` 用法。
+
+## 方式 B：Docker Compose
 
 ```bash
 cp deploy/docker-compose.yml docker-compose.yml
@@ -27,7 +51,7 @@ docker compose up -d
 
 反向代理：将 `deploy/nginx/nginx.conf` 或 `deploy/caddy/Caddyfile` 的域名/证书替换后启用；WebSocket `/ws/v1/...` 已配置。
 
-## 方式 B：Native Linux + systemd
+## 方式 C：Native Linux + systemd（手动）
 
 ```bash
 # 1) 准备目录与配置

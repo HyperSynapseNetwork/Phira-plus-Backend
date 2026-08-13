@@ -12,7 +12,36 @@ ppb-server ── OpenUDS (Unix socket) ──> PMP (phira-mp-plus)
 ppb-server ── PostgreSQL 16+ (独立库，sqlx 迁移)
 ```
 
-## 方式 A：Docker Compose
+## 方式 A：一键安装（推荐）
+
+脚本：[`deploy/install.sh`](../deploy/install.sh)
+
+```bash
+# 在线安装（root；默认取最新 release）
+curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | sudo bash
+
+# 指定版本 / 非交互：
+sudo PPB_VERSION=0.1.0 PPB_NONINTERACTIVE=1 \
+  PPB_API_URL=https://api.example.com \
+  PPB_DATABASE_URL=postgres://... bash deploy/install.sh
+```
+
+流程：前置检查（curl/sha256sum/systemctl/useradd/PostgreSQL 16+，仅 Linux x86_64）→ 下载
+`ppb-server` / `ppctl` / `SHA256SUMS` 并校验 sha256 → 安装到 `/usr/local/bin`（0755）→ 创建
+`ppb` 系统用户与 `/opt/ppb`、`/etc/ppb`、`/var/run/pmp` → `ppctl init --non-interactive` 生成
+`ppb.toml` + `ppb.env`（secrets 自动生成）→ 追加 `PPB_RUNTIME_CONFIG=/etc/ppb/ppb.toml` →
+数据库二选一（本地 PostgreSQL 自动建 `ppb` role+库，口令 `openssl rand` 生成；或外部
+`PPB_DATABASE_URL`）→ 安装 systemd unit + `enable --now` → 轮询 `/healthz` 直到
+`{"status":"ok"}`。
+
+要点：
+
+- **幂等**：重装保留既有 `/etc/ppb/ppb.toml` + `ppb.env`（不换密钥），只更新二进制与 unit。
+- **secrets 自动生成**：脚本绝不接受密码入参（与 `ppctl init` 哲学一致）。
+- 交互模式逐项提示 URL（回车用 `config/example.toml` 默认值）；非交互用 `PPB_NONINTERACTIVE=1`
+  + `PPB_*` 环境变量覆盖。
+
+## 方式 B：Docker Compose
 
 模板：[`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
 
@@ -32,7 +61,7 @@ docker compose up -d
 - PMP OpenUDS socket 从宿主机只读挂载到 `/var/run/pmp`（PMP 需与 PPB 同机运行）。
 - 健康检查：`/healthz`。
 
-## 方式 B：Native Linux + systemd
+## 方式 C：Native Linux + systemd（手动）
 
 模板：[`deploy/systemd/ppb.service`](../deploy/systemd/ppb.service) · [`deploy/systemd/ppb.env.example`](../deploy/systemd/ppb.env.example)
 

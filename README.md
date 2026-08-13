@@ -41,7 +41,7 @@
 
 | 分类 | 文档 |
 |------|------|
-| **快速开始** | [docs/getting-started.md](docs/getting-started.md)（Docker / Native 两条官方路径） |
+| **快速开始** | [docs/getting-started.md](docs/getting-started.md)（一键安装 / Docker / Native 手动三条路径） |
 | **配置** | [docs/configuration.md](docs/configuration.md)（TOML + `PPB_*` 环境变量表） |
 | **部署与运维** | [docs/deployment.md](docs/deployment.md)（Docker / Native + systemd / 反代模板 / 更新 / 故障排查） |
 | **PMP 集成** | [docs/pmp-integration.md](docs/pmp-integration.md)（OpenUDS 命令 / 事件 / 高频流 / 能力集） |
@@ -69,9 +69,34 @@
 > [!NOTE]
 > **关于本地构建**：Phase A 时本地 aarch64 工具链损坏，`cargo` 只作为 CI 验证门。本仓库代码已由 CI 全量验证（`cargo check + test + clippy`），若你的本机工具链可用，也可直接编译。
 
-### 下载发行版（推荐）
+### 一键安装（推荐）
 
-从 [Releases](https://github.com/HyperSynapseNetwork/Phira-plus-Backend/releases) 下载：
+Native Linux x86_64 一键安装器 [`deploy/install.sh`](deploy/install.sh)：幂等、自动下载并校验
+sha256、自动生成配置与密钥、自动配置 PostgreSQL、安装 systemd 服务并健康检查。
+
+```bash
+# 在线安装（root；版本默认取最新 release，可用 PPB_VERSION 覆盖）
+curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | sudo bash
+
+# 或下载脚本后交互执行
+curl -fsSL -o install.sh https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh
+sudo PPB_VERSION=0.1.0 bash install.sh
+```
+
+非交互部署用环境变量覆盖（secrets 仍自动生成，绝不接受命令行入参）：
+
+```bash
+sudo PPB_NONINTERACTIVE=1 \
+  PPB_API_URL=https://api.example.com \
+  PPB_DATABASE_URL=postgres://ppb:CHANGE_ME@127.0.0.1:5432/ppb \
+  bash deploy/install.sh
+```
+
+详见 [docs/deployment.md](docs/deployment.md)。
+
+### 下载发行版
+
+从 [Releases](https://github.com/HyperSynapseNetwork/Phira-plus-Backend/releases) 手动下载：
 - `ppb-server-linux-x86_64-musl` — 服务端主二进制（静态 musl，可部署到任意 Linux）
 - `ppctl-linux-x86_64-musl` — bootstrap / 恢复 CLI（`init` / `doctor` / `config check` / `root reset-password` / `update`）
 
