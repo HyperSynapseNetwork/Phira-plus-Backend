@@ -18,7 +18,11 @@ use crate::automation::routes::CreateRunbookBody;
 use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
 use crate::config::repo::ConfigSnapshot;
-use crate::config::routes::{ConfigValuesBody, RollbackBody};
+use crate::config::routes::{
+    ConfigDescriptorsResponse, ConfigDiffChange, ConfigDiffResponse, ConfigRawResponse,
+    ConfigRollbackResponse, ConfigSaveResponse, ConfigSnapshotsResponse, ConfigValidateResponse,
+    ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody,
+};
 use crate::error::{ErrorBody, ErrorEnvelope};
 use crate::jobs::routes::CreateJobBody;
 use crate::jobs::Job;
@@ -282,6 +286,16 @@ pub struct RoomActionRequest {
             ConfigFieldGroup,
             ConfigSnapshot,
             RollbackBody,
+            ConfigDescriptorsResponse,
+            ConfigValuesResponse,
+            ConfigValidationError,
+            ConfigValidateResponse,
+            ConfigDiffChange,
+            ConfigDiffResponse,
+            ConfigSaveResponse,
+            ConfigSnapshotsResponse,
+            ConfigRawResponse,
+            ConfigRollbackResponse,
             Job,
             AuditEvent,
             AuditListResponse,
