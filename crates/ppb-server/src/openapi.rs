@@ -24,7 +24,7 @@ use crate::config::routes::{
     ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody,
 };
 use crate::error::{ErrorBody, ErrorEnvelope};
-use crate::jobs::routes::CreateJobBody;
+use crate::jobs::routes::{CreateJobBody, JobListResponse};
 use crate::jobs::Job;
 use crate::audit::model::AuditEvent;
 use crate::audit::routes::AuditListResponse;
@@ -37,6 +37,7 @@ use crate::notifications::routes::{
     NotificationInboxResponse,
 };
 use crate::permissions::groups::{Group, GroupListItem, GroupListResponse};
+use crate::permissions::manifest::{PermissionDef, Risk as PermissionRisk};
 use crate::permissions::repo::GroupMember;
 use crate::permissions::routes::{
     CreateGroupBody, PatchGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
@@ -297,6 +298,7 @@ pub struct RoomActionRequest {
             ConfigRawResponse,
             ConfigRollbackResponse,
             Job,
+            JobListResponse,
             AuditEvent,
             AuditListResponse,
             UserPreference,
@@ -323,6 +325,8 @@ pub struct RoomActionRequest {
             GroupListItem,
             GroupListResponse,
             GroupMember,
+            PermissionDef,
+            PermissionRisk,
             UserActionBody,
             AdminUserItem,
             GroupRef,

@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -116,13 +116,30 @@ pub async fn complete_task(
     Ok(Json(json!({ "ok": true, "task_id": task_id })))
 }
 
-/// GET /api/v1/admin/jobs — recent jobs.
+#[derive(Debug, Deserialize)]
+pub struct JobListParams {
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
+}
+
+/// Paginated job list response (§22 `{items, total, page, pageNum}`).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct JobListResponse {
+    pub items: Vec<Job>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
+}
+
+/// GET /api/v1/admin/jobs — recent jobs (paginated).
 #[utoipa::path(
     get,
     path = "/api/v1/admin/jobs",
     operation_id = "admin_jobs_get",
     responses(
-        (status = 200, description = "job list", body = serde_json::Value),
+        (status = 200, description = "job list", body = JobListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -130,20 +147,38 @@ pub async fn complete_task(
 pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<Job>>, ApiError> {
+    Query(params): Query<JobListParams>,
+) -> Result<Json<JobListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "dashboard:view").await?;
     let db = state.require_db()?;
+    let page = params.page.unwrap_or(1).max(1);
+    let page_num = params.page_num.unwrap_or(50).clamp(1, 100);
+    let offset = (page - 1) * page_num;
+    let total: (i64,) = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM jobs")
+        .fetch_one(db)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "jobs count failed");
+            ApiError::internal()
+        })?;
     let jobs = sqlx::query_as::<_, Job>(
         "SELECT id, type, state, progress, stage, created_at, started_at, finished_at, error
-         FROM jobs ORDER BY created_at DESC LIMIT 200",
+         FROM jobs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
     )
+    .bind(page_num)
+    .bind(offset)
     .fetch_all(db)
     .await
     .map_err(|e| {
         tracing::error!(error = %e, "jobs query failed");
         ApiError::internal()
     })?;
-    Ok(Json(jobs))
+    Ok(Json(JobListResponse {
+        items: jobs,
+        total: total.0,
+        page,
+        page_num,
+    }))
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -195,7 +230,7 @@ pub async fn create(
     path = "/api/v1/admin/jobs/{job_id}",
     operation_id = "admin_jobs_job_id_get",
     responses(
-        (status = 200, description = "job detail", body = serde_json::Value),
+        (status = 200, description = "job detail", body = Job),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"

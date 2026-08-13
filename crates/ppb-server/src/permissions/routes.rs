@@ -40,7 +40,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     path = "/api/v1/admin/permissions/manifest",
     operation_id = "admin_permissions_manifest_get",
     responses(
-        (status = 200, description = "permission manifest", body = serde_json::Value),
+        (status = 200, description = "permission manifest", body = Vec<PermissionDef>),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"

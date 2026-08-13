@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 /// Risk level attached to a permission.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Risk {
     Low,
@@ -16,7 +16,7 @@ pub enum Risk {
 }
 
 /// One permission definition (matches contract §5 / design §8.2).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct PermissionDef {
     pub id: &'static str,
     pub group: &'static str,

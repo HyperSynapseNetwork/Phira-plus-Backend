@@ -107,8 +107,13 @@ pub struct UserSessionsResponse {
     pub items: Vec<SessionItem>,
 }
 
-/// User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans
-/// and banned_at null when PMP doesn't expose them).
+/// User security subview (§23 #5).
+///
+/// P-87 carve-out: `ip_history` is PMP `player.ip_history` payload (PMP is the
+/// multiplayer truth source, §13) and stays dynamic JSON rather than a PPB
+/// reverse-engineered schema. `ip_bans` / `banned_at` are always `null` — PMP
+/// exposes no IP-ban list or ban timestamp over OpenUDS, so PPB returns null
+/// rather than fabricating a value.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct UserSecurityResponse {
     pub phira_id: i64,
