@@ -129,9 +129,9 @@ curl http://127.0.0.1:8080/healthz # 健康检查 → {"status":"ok"}
 
 | 流程 | 触发 | 说明 |
 |---|---|---|
-| [Build](../.github/workflows/build.yml) | push/PR 到 main | `auto-patch`（patch+1 + `cargo generate-lockfile`）→ `check`（`cargo check --locked` + `cargo test` + `cargo clippy -D warnings`）→ `build`（linux-musl x86_64） |
+| [Build](../.github/workflows/build.yml) | push/PR 到 main | `auto-patch`（patch+1 + `cargo generate-lockfile`）→ `check`（`cargo check --locked` + `cargo test` + `cargo clippy -D warnings`）→ `build`（linux-musl x86_64 + aarch64） |
 | [Bump Version](../.github/workflows/bump-version.yml) | 手动 workflow_dispatch | minor/major 升级 + 打 tag `vA.B.C` |
-| [Release](../.github/workflows/release.yml) | `v*` tag | quality-gate → 构建矩阵 → smoke test → provenance（attest-build-provenance）+ CycloneDX SBOM（best-effort）→ GitHub Release（`ppb-server` / `ppctl` + `SHA256SUMS`） |
+| [Release](../.github/workflows/release.yml) | `v*` tag | quality-gate → 构建矩阵（x86_64 / aarch64 musl）→ smoke test → provenance（attest-build-provenance）+ CycloneDX SBOM（best-effort）→ GitHub Release（`ppb-server` / `ppctl` + `SHA256SUMS`） |
 
 > [!NOTE]
 > Release 产物可验证：`attest-build-provenance` 生成构建出处，`SHA256SUMS` 提供校验和。Rust 版本由 `rust-toolchain.toml` 固定（1.96.0）。

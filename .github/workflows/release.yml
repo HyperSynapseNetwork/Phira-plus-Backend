@@ -71,33 +71,52 @@ jobs:
 
   build:
     needs: [version, quality-gate]
-    runs-on: ubuntu-latest
-    env:
-      CC_x86_64_unknown_linux_musl: musl-gcc
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            server-name: ppb-server-linux-x86_64-musl
+            ppctl-name: ppctl-linux-x86_64-musl
+            env:
+              CC_x86_64_unknown_linux_musl: musl-gcc
+              CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            server-name: ppb-server-linux-aarch64-musl
+            ppctl-name: ppctl-linux-aarch64-musl
+            env:
+              CC_aarch64_unknown_linux_musl: musl-gcc
+              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+              # aarch64 GCC 默认用 outline atomics（LSE），链接引用 getauxval，
+              # 而 musl 无此符号 → 禁用它（与 PMP release 一致）。
+              CFLAGS: -mno-outline-atomics
+    runs-on: ${{ matrix.os }}
+    env: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: x86_64-unknown-linux-musl
+          target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-linux-musl
+          key: release-${{ matrix.target }}
           cache-on-failure: true
       - name: Install musl tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build release binary
-        run: cargo build --locked --release --target x86_64-unknown-linux-musl
-      - run: cp target/x86_64-unknown-linux-musl/release/ppb-server ppb-server-linux-x86_64-musl
-      - run: cp target/x86_64-unknown-linux-musl/release/ppctl ppctl-linux-x86_64-musl
-      - name: Smoke test
+        run: cargo build --locked --release --target ${{ matrix.target }}
+      - run: cp target/${{ matrix.target }}/release/ppb-server ${{ matrix.server-name }}
+      - run: cp target/${{ matrix.target }}/release/ppctl ${{ matrix.ppctl-name }}
+      - name: Smoke test (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
-          chmod +x ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl
-          ./ppb-server-linux-x86_64-musl --version
-          ./ppctl-linux-x86_64-musl config check || true
-      - name: Verify musl is statically linked
+          chmod +x ${{ matrix.server-name }} ${{ matrix.ppctl-name }}
+          ./${{ matrix.server-name }} --version
+          ./${{ matrix.ppctl-name }} config check || true
+      - name: Verify linux-musl is statically linked
         run: |
-          for f in ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl; do
+          for f in ${{ matrix.server-name }} ${{ matrix.ppctl-name }}; do
             if file "$f" | grep -qi static; then
               echo "$f: musl build confirmed static"
             else
@@ -106,21 +125,19 @@ jobs:
               exit 1
             fi
           done
-      - name: Generate provenance
+      - name: Generate provenance (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: |
-            ppb-server-linux-x86_64-musl
-            ppctl-linux-x86_64-musl
-      - name: Generate checksum (SHA-256)
-        run: sha256sum ppb-server-linux-x86_64-musl ppctl-linux-x86_64-musl > SHA256SUMS
+            ${{ matrix.server-name }}
+            ${{ matrix.ppctl-name }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ppb-server-linux-x86_64-musl
+          name: ppb-server-${{ matrix.target }}
           path: |
-            ppb-server-linux-x86_64-musl
-            ppctl-linux-x86_64-musl
-            SHA256SUMS
+            ${{ matrix.server-name }}
+            ${{ matrix.ppctl-name }}
           if-no-files-found: error
 
   release:
@@ -135,6 +152,9 @@ jobs:
         with:
           pattern: ppb-server-*
           merge-multiple: true
+      - name: Generate checksum (SHA-256)
+        run: |
+          sha256sum ppb-server-linux-*-musl ppctl-linux-*-musl > SHA256SUMS
       - name: Generate SBOM (CycloneDX, best-effort)
         run: |
           cargo install cargo-cyclonedx --locked || echo "cargo-cyclonedx install failed"
@@ -150,5 +170,7 @@ jobs:
           files: |
             ppb-server-linux-x86_64-musl
             ppctl-linux-x86_64-musl
+            ppb-server-linux-aarch64-musl
+            ppctl-linux-aarch64-musl
             SHA256SUMS
           prerelease: false
