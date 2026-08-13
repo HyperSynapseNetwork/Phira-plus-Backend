@@ -190,12 +190,15 @@ async fn ban_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
+    headers: HeaderMap,
     Json(body): Json<BanBody>,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:ban")
         .await?;
+    // §23 #10 Sensitive Action Policy: user ban always requires reauth.
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let result = state
         .player
         .ban(user_id as i32, body.reason.as_deref().unwrap_or("banned via Panel"))
@@ -222,11 +225,14 @@ async fn unban_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
+    headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "user:ban")
         .await?;
+    // §23 #10 Sensitive Action Policy: user unban always requires reauth.
+    check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
     let result = state
         .player
         .unban(user_id as i32)

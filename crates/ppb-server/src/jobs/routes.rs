@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
+use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -11,6 +12,8 @@ use uuid::Uuid;
 
 use super::Job;
 use crate::app::AppState;
+use crate::auth::reauth::ReauthRisk;
+use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
@@ -166,6 +169,7 @@ pub struct CreateJobBody {
 pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<CreateJobBody>,
 ) -> Result<Json<Value>, ApiError> {
     // Job types map to permissions.
@@ -176,6 +180,11 @@ pub async fn create(
         _ => return Err(ApiError::validation("unknown job type")),
     };
     state.permissions.require(&state.db, &auth, permission).await?;
+    // §23 #10 Sensitive Action Policy: pmp.update.apply always requires
+    // critical reauth (same semantics as the Action Registry entry).
+    if body.job_type == "pmp.update.apply" {
+        check_reauth_header(&state, &auth, &headers, ReauthRisk::Critical)?;
+    }
     let job = state.jobs.start(&body.job_type, body.args).await?;
     Ok(Json(json!({ "job": job })))
 }
