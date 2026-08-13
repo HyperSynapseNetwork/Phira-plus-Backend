@@ -120,8 +120,8 @@ impl JobRunner {
         if let Some(db) = &self.db {
             match &result {
                 Ok((stage, progress)) => {
-                    let _ = update_state(db, job_id, "succeeded", stage, Some(*progress), "").await;
-                    self.publish(job_id, "succeeded", stage, Some(*progress));
+                    let _ = update_state(db, job_id, "succeeded", stage, *progress, "").await;
+                    self.publish(job_id, "succeeded", stage, *progress);
                 }
                 Err(e) => {
                     // §23 #7: terminal stage is `failed` or `timeout`, not a
@@ -141,13 +141,13 @@ impl JobRunner {
         job_type: &str,
         args: &Value,
         cancel: &Arc<AtomicBool>,
-    ) -> Result<(String, f32), String> {
+    ) -> Result<(String, Option<f32>), String> {
         match job_type {
             "pmp.update.check" => {
                 let cmd = args.get("command").and_then(Value::as_str).unwrap_or("update check");
                 self.tick_stage(job_id, "checking", cancel).await?;
                 let result = crate::pmp::cli::cli_execute(&self.openuds, cmd).await;
-                result.map(|_| ("checked".to_string(), 1.0f32)).map_err(|e| e.to_string())
+                result.map(|_| ("checked".to_string(), Some(1.0f32))).map_err(|e| e.to_string())
             }
             "pmp.update.apply" => {
                 // §23 #7: honest stage — no fake download/verify/apply progress;
@@ -162,18 +162,20 @@ impl JobRunner {
                 )
                 .await;
                 match result {
-                    Ok(Ok(_)) => Ok(("completed".to_string(), 1.0f32)),
+                    // §23 #7: success terminal reports progress = null, not a
+                    // fake 1.0 (no real PMP progress exists).
+                    Ok(Ok(_)) => Ok(("completed".to_string(), None)),
                     Ok(Err(e)) => Err(format!("failed: {e}")),
                     Err(_) => Err("timeout".to_string()),
                 }
             }
             "ppf.build" => {
                 self.tick_stage(job_id, "building", cancel).await?;
-                Ok(("built".to_string(), 1.0f32))
+                Ok(("built".to_string(), Some(1.0f32)))
             }
             "backup" => {
                 self.tick_stage(job_id, "backing-up", cancel).await?;
-                Ok(("backup-complete".to_string(), 1.0f32))
+                Ok(("backup-complete".to_string(), Some(1.0f32)))
             }
             other => Err(format!("unknown job type: {other}")),
         }

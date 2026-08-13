@@ -259,12 +259,14 @@ pub async fn action(
                 .ok_or_else(|| ApiError::validation("join_room requires target.room_id"))?;
             // §23 #9: presence first. online → force_move → completed;
             // offline → create JoinIntent and stay pending (moves on user.online).
+            // Presence uses the player.info `online` field — a player who is
+            // online but idling in the lobby (no room_id) still counts as online.
             let online = state
                 .player
                 .info(user.phira_id as i32)
                 .await
                 .ok()
-                .and_then(|p| p.get("room_id").and_then(Value::as_str).map(|s| !s.is_empty()))
+                .and_then(|p| p.get("online").and_then(Value::as_bool))
                 .unwrap_or(false);
             if online {
                 state
