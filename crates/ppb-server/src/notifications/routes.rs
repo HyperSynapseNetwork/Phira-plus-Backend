@@ -1,8 +1,9 @@
 //! `/api/v1/notifications/*` — PPF Notification Center (contract §8, §20).
 //!
 //! Wires the existing notification domain (notifications/mod.rs) to the HTTP
-//! layer. Action/input re-authenticate every call (§8). All responses are
-//! snake_case; inbox is `{items,total,page,pageNum,unread}`.
+//! layer. Action/input are re-checked per call via session + CSRF + resource
+//! policy (§23 #8 — no High reauth). All responses are snake_case; inbox is
+//! `{items,total,page,pageNum,unread}`.
 
 use std::sync::Arc;
 
