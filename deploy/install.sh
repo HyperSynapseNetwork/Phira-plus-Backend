@@ -21,6 +21,7 @@
 #   PPB_API_URL / PPB_PPF_URL / PPB_PANEL_URL / PPB_DOCS_URL  站点 URL 覆盖
 #   PPB_OPENUDS_PATH   PMP OpenUDS socket 路径
 #   PPB_DATABASE_URL   外部 PostgreSQL（提供则跳过本地 PG 自动配置）
+#   PPB_LISTEN_PORT    监听端口（默认自动选择空闲端口，8080 优先）
 
 set -euo pipefail
 
@@ -93,8 +94,8 @@ download_and_verify() {
   local version=$1 tmp=$2
   local base="https://github.com/${GITHUB_REPO}/releases/download/v${version}"
   log "下载 v${version} 产物 → ${tmp}"
-  curl -fsSL "$base/${BIN_SERVER}" -o "$tmp/${BIN_SERVER}"
-  curl -fsSL "$base/${BIN_PPCTL}" -o "$tmp/${BIN_PPCTL}"
+  curl -fL --progress-bar "$base/${BIN_SERVER}" -o "$tmp/${BIN_SERVER}"
+  curl -fL --progress-bar "$base/${BIN_PPCTL}" -o "$tmp/${BIN_PPCTL}"
   curl -fsSL "$base/${SUM_FILE}" -o "$tmp/${SUM_FILE}"
 
   log "校验 sha256（仅校验本次下载的 x86_64 产物）"
@@ -331,27 +332,73 @@ ensure_user_and_dirs() {
   install -d "$RUN_DIR"
 }
 
+# ── 监听端口 ────────────────────────────────────────────────────
+
+LISTEN_PORT=""   # 运行时监听端口（自动选择空闲端口，或 PPB_LISTEN_PORT 覆盖）
+
+# 判断端口是否空闲（本地 127.0.0.1 无监听即为空闲）。
+port_free() {
+  local p=$1
+  ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null
+}
+
+# 选定监听端口：显式覆盖 → 沿用既有配置 → 8080（被占用则向后找第一个空闲端口）。
+pick_listen_port() {
+  if [ -n "${PPB_LISTEN_PORT:-}" ]; then
+    LISTEN_PORT="$PPB_LISTEN_PORT"
+    log "监听端口：${LISTEN_PORT}（PPB_LISTEN_PORT 显式指定）"
+    return
+  fi
+  if [ -f "${CONFIG_DIR}/ppb.toml" ]; then
+    local existing
+    existing=$(sed -n 's/^[[:space:]]*listen_addr[[:space:]]*=[[:space:]]*"[^:]*:\([0-9][0-9]*\)".*/\1/p' "${CONFIG_DIR}/ppb.toml" | head -n1)
+    if [ -n "$existing" ]; then
+      LISTEN_PORT="$existing"
+      log "监听端口：${LISTEN_PORT}（沿用既有配置）"
+      return
+    fi
+  fi
+  local p
+  for p in 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091 8092 8093 8094 8095; do
+    if port_free "$p"; then
+      LISTEN_PORT="$p"
+      log "监听端口：${p}（自动选择空闲端口）"
+      return
+    fi
+  done
+  die "端口 8080–8095 均被占用；请用 PPB_LISTEN_PORT 指定空闲端口"
+}
+
+# 幂等：把 ppb.toml 的 listen_addr 端口改写为选定端口。
+apply_listen_port() {
+  if ! grep -q '^[[:space:]]*listen_addr[[:space:]]*=' "${CONFIG_DIR}/ppb.toml"; then
+    return
+  fi
+  sed -i "s/^\([[:space:]]*listen_addr[[:space:]]*=[[:space:]]*\"\)[^:]*:[0-9][0-9]*\"/\10.0.0.0:${LISTEN_PORT}\"/" "${CONFIG_DIR}/ppb.toml"
+}
+
 generate_config() {
   # 幂等：已有配置则保留既有密钥（重装不换 secret）。
   if [ -f "${CONFIG_DIR}/ppb.toml" ] && [ -f "${CONFIG_DIR}/ppb.env" ]; then
     log "已存在 ${CONFIG_DIR}/ppb.toml + ppb.env，跳过 ppctl init（保留既有密钥）"
-    return
-  fi
-  log "ppctl init 生成配置 + 自动生成密钥（secrets 绝不接受命令行入参）"
-  /usr/local/bin/ppctl init --non-interactive \
-    --output-dir "$CONFIG_DIR" \
-    --api-url "$API_URL" \
-    --ppf-url "$PPF_URL" \
-    --panel-url "$PANEL_URL" \
-    --docs-url "$DOCS_URL" \
-    --openuds-path "$OPENUDS_PATH" \
-    --database-url "$DATABASE_URL"
+  else
+    log "ppctl init 生成配置 + 自动生成密钥（secrets 绝不接受命令行入参）"
+    /usr/local/bin/ppctl init --non-interactive \
+      --output-dir "$CONFIG_DIR" \
+      --api-url "$API_URL" \
+      --ppf-url "$PPF_URL" \
+      --panel-url "$PANEL_URL" \
+      --docs-url "$DOCS_URL" \
+      --openuds-path "$OPENUDS_PATH" \
+      --database-url "$DATABASE_URL"
 
-  # 关键：systemd 部署必须显式指定运行时配置（见 docs/deployment.md 的 NOTE）。
-  if ! grep -q '^PPB_RUNTIME_CONFIG=' "${CONFIG_DIR}/ppb.env"; then
-    printf '\n# systemd 部署显式指定运行时配置（PPB_RUNTIME_CONFIG 优先于 ./config/ppb.toml）。\nPPB_RUNTIME_CONFIG=%s/ppb.toml\n' "$CONFIG_DIR" >> "${CONFIG_DIR}/ppb.env"
+    # 关键：systemd 部署必须显式指定运行时配置（见 docs/deployment.md 的 NOTE）。
+    if ! grep -q '^PPB_RUNTIME_CONFIG=' "${CONFIG_DIR}/ppb.env"; then
+      printf '\n# systemd 部署显式指定运行时配置（PPB_RUNTIME_CONFIG 优先于 ./config/ppb.toml）。\nPPB_RUNTIME_CONFIG=%s/ppb.toml\n' "$CONFIG_DIR" >> "${CONFIG_DIR}/ppb.env"
+    fi
+    chmod 0600 "${CONFIG_DIR}/ppb.env"
   fi
-  chmod 0600 "${CONFIG_DIR}/ppb.env"
+  apply_listen_port
 }
 
 install_systemd_unit() {
@@ -369,10 +416,10 @@ install_systemd_unit() {
 }
 
 health_check() {
-  log "等待服务健康检查 http://127.0.0.1:8080/healthz"
+  log "等待服务健康检查 http://127.0.0.1:${LISTEN_PORT}/healthz"
   local i
   for i in $(seq 1 30); do
-    if curl -fsS http://127.0.0.1:8080/healthz 2>/dev/null | grep -q '"status":"ok"'; then
+    if curl -fsS "http://127.0.0.1:${LISTEN_PORT}/healthz" 2>/dev/null | grep -q '"status":"ok"'; then
       log "健康检查通过：{\"status\":\"ok\"}"
       return 0
     fi
@@ -411,6 +458,7 @@ main() {
   ensure_user_and_dirs
   resolve_urls
   resolve_database_url
+  pick_listen_port
   generate_config
   install_systemd_unit "$tmp"
   health_check
