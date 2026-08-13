@@ -269,7 +269,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/commands — recent command runs. */
+        /**
+         * GET /api/v1/admin/commands — recent command runs (paginated, §18.10).
+         * @description Returns the same `CommandRun` shape as `POST /admin/commands/execute`.
+         */
         get: operations["admin_commands_get"];
         put?: never;
         post?: never;
@@ -290,8 +293,9 @@ export interface paths {
         put?: never;
         /**
          * POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).
-         * @description Requires an elevated reauth context and is fully audited with the **final**
-         *     result (success / failure / timeout) — never a pre-recorded success.
+         * @description Returns the recorded `CommandRun` (the same shape as history), not the raw
+         *     PMP value. Fully audited with the **final** result (success / failure) —
+         *     never a pre-recorded success.
          */
         post: operations["admin_commands_execute_post"];
         delete?: never;
@@ -2364,6 +2368,42 @@ export interface components {
         ChatSendBody: {
             content: string;
         };
+        CommandRun: {
+            /** @description Action id (`pmp.cli.execute` for console runs). */
+            action: string;
+            /** @description Raw PMP CLI text (empty for typed action runs). */
+            command: string;
+            /**
+             * Format: uuid
+             * @description Stable run id (the `command_runs.id` primary key).
+             */
+            command_id: string;
+            /** @description Error message (null when absent). */
+            error?: string | null;
+            /**
+             * Format: date-time
+             * @description When the run finished.
+             */
+            executed_at?: string | null;
+            /** @description Result output (null when absent). */
+            output?: string | null;
+            /** @description Principal (user id) that initiated the run. */
+            principal: string;
+            /** @description `personal` | `server`. */
+            scope: string;
+            /** @description `queued` | `running` | `succeeded` | `failed` | `cancelled`. */
+            status: string;
+        };
+        /** @description Paginated command history response (§22 `{items, total, page, pageNum}`). */
+        CommandRunListResponse: {
+            items: components["schemas"]["CommandRun"][];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+            /** Format: int64 */
+            total: number;
+        };
         /** @description §22 typed descriptors response `{ version, groups }`. */
         ConfigDescriptorsResponse: {
             groups: components["schemas"]["ConfigFieldGroup"][];
@@ -3551,7 +3591,14 @@ export interface operations {
     };
     admin_commands_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 1-based page index */
+                page?: number | null;
+                /** @description page size (1..=100) */
+                pageNum?: number | null;
+                /** @description personal | server */
+                scope?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3564,7 +3611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CommandRunListResponse"];
                 };
             };
             /** @description permission denied */
@@ -3597,7 +3644,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CommandRun"];
                 };
             };
             /** @description permission denied */

@@ -671,14 +671,51 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/commands — recent command runs.",
+        "summary": "GET /api/v1/admin/commands — recent command runs (paginated, §18.10).",
+        "description": "Returns the same `CommandRun` shape as `POST /admin/commands/execute`.",
         "operationId": "admin_commands_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page index",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "pageNum",
+            "in": "query",
+            "description": "page size (1..=100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "personal | server",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "command runs",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CommandRunListResponse"
+                }
               }
             }
           },
@@ -701,7 +738,7 @@
           "admin"
         ],
         "summary": "POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).",
-        "description": "Requires an elevated reauth context and is fully audited with the **final**\nresult (success / failure / timeout) — never a pre-recorded success.",
+        "description": "Returns the recorded `CommandRun` (the same shape as history), not the raw\nPMP value. Fully audited with the **final** result (success / failure) —\nnever a pre-recorded success.",
         "operationId": "admin_commands_execute_post",
         "requestBody": {
           "content": {
@@ -718,7 +755,9 @@
             "description": "command result",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CommandRun"
+                }
               }
             }
           },
@@ -5622,6 +5661,90 @@
         "properties": {
           "content": {
             "type": "string"
+          }
+        }
+      },
+      "CommandRun": {
+        "type": "object",
+        "required": [
+          "command_id",
+          "command",
+          "action",
+          "status",
+          "principal",
+          "scope"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action id (`pmp.cli.execute` for console runs)."
+          },
+          "command": {
+            "type": "string",
+            "description": "Raw PMP CLI text (empty for typed action runs)."
+          },
+          "command_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable run id (the `command_runs.id` primary key)."
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (null when absent).",
+            "nullable": true
+          },
+          "executed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the run finished.",
+            "nullable": true
+          },
+          "output": {
+            "type": "string",
+            "description": "Result output (null when absent).",
+            "nullable": true
+          },
+          "principal": {
+            "type": "string",
+            "description": "Principal (user id) that initiated the run."
+          },
+          "scope": {
+            "type": "string",
+            "description": "`personal` | `server`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`queued` | `running` | `succeeded` | `failed` | `cancelled`."
+          }
+        }
+      },
+      "CommandRunListResponse": {
+        "type": "object",
+        "description": "Paginated command history response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommandRun"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
