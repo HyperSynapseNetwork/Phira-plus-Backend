@@ -395,16 +395,13 @@ fn run_config_check(args: &[String]) -> ExitCode {
 // ── root reset-password ────────────────────────────────────────
 
 fn run_root_reset() -> ExitCode {
-    let secrets = match Secrets::from_env() {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("ppctl root reset-password: {e}");
+    // 重置口令只连数据库，不碰 JWT/凭据密钥，故只读 PPB_DATABASE_URL。
+    let url = match env::var("PPB_DATABASE_URL") {
+        Ok(u) if !u.is_empty() => u,
+        _ => {
+            eprintln!("ppctl root reset-password: PPB_DATABASE_URL required");
             return ExitCode::FAILURE;
         }
-    };
-    let Some(url) = secrets.database_url.as_deref() else {
-        eprintln!("ppctl root reset-password: PPB_DATABASE_URL required");
-        return ExitCode::FAILURE;
     };
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
@@ -414,7 +411,7 @@ fn run_root_reset() -> ExitCode {
         }
     };
     rt.block_on(async {
-        let pool = match sqlx::postgres::PgPoolOptions::new().connect(url).await {
+        let pool = match sqlx::postgres::PgPoolOptions::new().connect(&url).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("ppctl root reset-password: db connect: {e}");
