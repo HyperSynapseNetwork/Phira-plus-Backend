@@ -136,30 +136,120 @@ resolve_urls() {
 
 # ── PostgreSQL ──────────────────────────────────────────────────
 
-local_postgres_ok() {
-  command -v psql >/dev/null 2>&1 || return 1
+# 全局探测结果：
+PG_PSQL=""       # 可用 psql 二进制绝对路径
+PG_METHOD=""     # 管理员连接方式：sudo / su / tcp
+PG_VERSION=0     # 服务端主版本号（如 16、17；0=未知）
+PG_PORT=5432     # 服务端监听端口（SHOW port 自动探测，失败回退 5432）
+
+# 返回可用的 psql 路径（PATH 优先，其次 Debian 的 /usr/lib/postgresql/*/bin/psql）。
+find_psql() {
+  if command -v psql >/dev/null 2>&1; then
+    command -v psql
+    return 0
+  fi
+  local p
+  for p in /usr/lib/postgresql/*/bin/psql; do
+    if [ -x "$p" ]; then printf '%s' "$p"; return 0; fi
+  done
+  return 1
+}
+
+# 通过已探测到的管理员连接执行 psql（其余参数透传；SQL 可从 stdin 传入）。
+pg_run() {
+  case "$PG_METHOD" in
+    su)  su postgres -c "$PG_PSQL $(printf '%q ' "$@")" ;;
+    tcp) "$PG_PSQL" -U postgres -h 127.0.0.1 -w "$@" ;;
+    *)   sudo -u postgres "$PG_PSQL" "$@" ;;
+  esac
+}
+
+# 分步检测本地 PostgreSQL。返回码：
+#   0 = 已安装且可用（PG_PSQL/PG_METHOD/PG_VERSION 已填充）
+#   1 = 已安装但无法以 postgres 连接
+#   2 = 未检测到 PostgreSQL
+detect_pg() {
+  PG_VERSION=0
+  PG_METHOD=""
+  PG_PSQL=""
+  PG_PORT=5432
+  log "检测本地 PostgreSQL..."
+
+  # 1) 确认 PostgreSQL 是否存在（服务 / 客户端 / Debian 版本目录任一命中即视为已安装）。
+  local present=0
+  if systemctl is-active --quiet postgresql 2>/dev/null; then
+    present=1
+  elif command -v pg_isready >/dev/null 2>&1; then
+    present=1
+  elif command -v psql >/dev/null 2>&1; then
+    present=1
+  elif ls /usr/lib/postgresql/*/bin/psql >/dev/null 2>&1; then
+    present=1
+  fi
+  [ "$present" -eq 1 ] || return 2
+
+  PG_PSQL=$(find_psql) || return 1
+
+  # 2) 探测可连接方式（依次：sudo -u postgres → su postgres -c → psql -U postgres -h 127.0.0.1）。
+  local m
+  for m in sudo su tcp; do
+    PG_METHOD="$m"
+    pg_run -tAc 'SELECT 1' >/dev/null 2>&1 && break
+    PG_METHOD=""
+  done
+  [ -n "$PG_METHOD" ] || return 1
+  log "本地 PostgreSQL 可连接（方式：${PG_METHOD}）"
+
+  # 3) 服务端主版本号。
   local ver
-  ver=$(psql --version 2>/dev/null | sed -n 's/.* \([0-9][0-9]*\)\..*/\1/p')
-  [ -n "$ver" ] && [ "$ver" -ge 16 ] 2>/dev/null || return 1
-  sudo -u postgres psql -tAc 'SELECT 1' >/dev/null 2>&1 || return 1
+  ver=$(pg_run -tAc 'SHOW server_version_num' 2>/dev/null | tr -d '[:space:]')
+  case "$ver" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  PG_VERSION=$((ver / 10000))
+  log "本地 PostgreSQL 服务端版本：${PG_VERSION}"
+
+  # 4) 服务端监听端口（自动寻找，不回退到硬编码）。
+  local port
+  port=$(pg_run -tAc 'SHOW port' 2>/dev/null | tr -d '[:space:]')
+  case "$port" in
+    ''|*[!0-9]*) port=5432 ;;
+  esac
+  PG_PORT=$port
+  log "本地 PostgreSQL 端口：${PG_PORT}"
   return 0
 }
 
-resolve_database_url() {
-  # (b) 外部数据库：直接用 PPB_DATABASE_URL。
-  if [ -n "${PPB_DATABASE_URL:-}" ]; then
-    log "使用外部 PPB_DATABASE_URL"
-    DATABASE_URL="$PPB_DATABASE_URL"
-    return
+# 交互模式下提示输入完整连接串；非交互模式 die。
+ask_database_url() {
+  local url=""
+  while [ -z "$url" ]; do
+    printf '请输入完整 PostgreSQL 连接串（示例：postgres://ppb:pass@127.0.0.1:5432/ppb）: '
+    url=$(read_line) || die "未读到输入（无交互终端）；请改用 PPB_DATABASE_URL=... 传入"
+    case "$url" in
+      postgres://*|postgresql://*) ;;
+      *) warn "连接串需以 postgres:// 或 postgresql:// 开头"; url=""; ;;
+    esac
+  done
+  DATABASE_URL="$url"
+}
+
+# 本地 PostgreSQL 不可用时：交互模式询问，非交互/无终端模式直接 die。
+prompt_or_die() {
+  local reason=$1
+  if [ "${PPB_NONINTERACTIVE:-0}" = "1" ] || [ ! -e /dev/tty ]; then
+    die "${reason}；请设置 PPB_DATABASE_URL=postgres://user:pass@host:port/db 后重试"
   fi
-  # (a) 本地 PostgreSQL：自动建 role `ppb` + 库 `ppb`（口令自动生成）。
-  if ! local_postgres_ok; then
-    die "未提供 PPB_DATABASE_URL，且未检测到本地 PostgreSQL 16+（可访问的 postgres 用户）"
-  fi
-  log "检测到本地 PostgreSQL，自动创建 role ppb + 数据库 ppb"
+  warn "$reason"
+  ask_database_url
+}
+
+# 本地 PostgreSQL 可用时：自动建 role `ppb` + 库 `ppb`（口令自动生成）。
+auto_configure_local_pg() {
   local db_password
   db_password=$(openssl rand -base64 24 | tr '+/' '-_')
-  sudo -u postgres psql -v ON_ERROR_STOP=1 >/dev/null <<SQL
+  log "创建/更新 role ppb（口令 openssl rand 自动生成）"
+  pg_run -v ON_ERROR_STOP=1 >/dev/null <<SQL
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ppb') THEN
@@ -170,10 +260,41 @@ BEGIN
 END
 \$\$;
 SQL
-  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'ppb'" | grep -q 1; then
-    sudo -u postgres createdb -O ppb ppb
+  if ! pg_run -tAc "SELECT 1 FROM pg_database WHERE datname = 'ppb'" | grep -q 1; then
+    log "创建数据库 ppb（owner=ppb）"
+    pg_run -c "CREATE DATABASE ppb OWNER ppb" >/dev/null
+  else
+    log "数据库 ppb 已存在，跳过创建"
   fi
-  DATABASE_URL="postgres://ppb:${db_password}@127.0.0.1:5432/ppb"
+  DATABASE_URL="postgres://ppb:${db_password}@127.0.0.1:${PG_PORT}/ppb"
+  log "已生成连接串 postgres://ppb:***@127.0.0.1:${PG_PORT}/ppb"
+}
+
+resolve_database_url() {
+  # (b) 外部数据库：直接用 PPB_DATABASE_URL。
+  if [ -n "${PPB_DATABASE_URL:-}" ]; then
+    log "使用外部 PPB_DATABASE_URL"
+    DATABASE_URL="$PPB_DATABASE_URL"
+    return
+  fi
+
+  # (a) 本地 PostgreSQL：分步检测，结果决定自动配置 / 交互询问 / 报错。
+  local rc
+  detect_pg; rc=$?
+  case $rc in
+    0)
+      if [ "$PG_VERSION" -lt 16 ]; then
+        die "检测到 PostgreSQL ${PG_VERSION}（<16），PPB 需要 16+，请升级后再试"
+      fi
+      auto_configure_local_pg
+      ;;
+    2)
+      prompt_or_die "未检测到本地 PostgreSQL"
+      ;;
+    1)
+      prompt_or_die "检测到本地 PostgreSQL，但无法以 postgres 用户连接（服务未运行或认证拒绝）"
+      ;;
+  esac
 }
 
 # ── 安装 ────────────────────────────────────────────────────────
