@@ -28,7 +28,9 @@ pub struct PhiraLoginResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PhiraMe {
     pub id: i64,
+    #[serde(rename = "name")]
     pub username: String,
+    #[serde(default)]
     pub avatar: String,
 }
 
