@@ -12,11 +12,12 @@ use axum::routing::get;
 use axum::{Json, Router};
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern, TranslatedError};
+use super::{history_lines_of, parse_log_line, LogEntry};
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
@@ -36,15 +37,33 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[derive(Debug, Deserialize)]
 pub struct LogParams {
     pub limit: Option<u64>,
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
 }
 
-/// GET /api/v1/admin/logs — recent PMP log history.
+/// Paginated structured log list response (§22 `{items, total, page, pageNum}`).
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct LogListResponse {
+    pub items: Vec<LogEntry>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
+}
+
+/// GET /api/v1/admin/logs — recent PMP log history, structured + paginated.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/logs",
     operation_id = "admin_logs_get",
+    params(
+        ("page" = Option<i64>, Query, description = "1-based page index"),
+        ("pageNum" = Option<i64>, Query, description = "page size (1..=100)"),
+        ("limit" = Option<u64>, Query, description = "raw PMP history window (max 2000)"),
+    ),
     responses(
-        (status = 200, description = "log history", body = serde_json::Value),
+        (status = 200, description = "log history (paginated)", body = LogListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -53,14 +72,29 @@ pub async fn history(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Query(params): Query<LogParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<LogListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
+    let page = params.page.unwrap_or(1).max(1);
+    let page_num = params.page_num.unwrap_or(20);
+    if !(1..=100).contains(&page_num) {
+        return Err(ApiError::validation("pageNum must be between 1 and 100"));
+    }
+    // PMP history is a ring buffer with no offset; pull a bounded window and
+    // paginate in-memory (total = number of recent lines available).
+    let window = params.limit.unwrap_or(2000).clamp(1, 2000);
     let result = state
         .openuds
-        .command("logs.history", json!({ "limit": params.limit.unwrap_or(200) }))
+        .command("logs.history", json!({ "limit": window }))
         .await
         .map_err(map_err)?;
-    Ok(Json(result))
+    let entries: Vec<LogEntry> = history_lines_of(&result)
+        .iter()
+        .map(|line| parse_log_line(line))
+        .collect();
+    let total = entries.len() as i64;
+    let offset = ((page - 1) * page_num) as usize;
+    let items = entries.into_iter().skip(offset).take(page_num as usize).collect();
+    Ok(Json(LogListResponse { items, total, page, page_num }))
 }
 
 async fn input(

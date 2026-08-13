@@ -29,8 +29,9 @@ use crate::jobs::Job;
 use crate::audit::model::AuditEvent;
 use crate::audit::routes::AuditListResponse;
 use crate::preferences::UserPreference;
-use crate::logs::routes::{LogInputBody, TranslateParams, TranslateResponse};
+use crate::logs::routes::{LogInputBody, LogListResponse, TranslateParams, TranslateResponse};
 use crate::logs::translator::TranslatedError;
+use crate::logs::LogEntry;
 use crate::notifications::push::SubscriptionWire;
 use crate::notifications::routes::{
     ActionBody as NotificationActionBody, AppNotificationWire, InputBody,
@@ -303,6 +304,8 @@ pub struct RoomActionRequest {
             AuditListResponse,
             UserPreference,
             LogInputBody,
+            LogEntry,
+            LogListResponse,
             TranslateParams,
             TranslateResponse,
             TranslatedError,
