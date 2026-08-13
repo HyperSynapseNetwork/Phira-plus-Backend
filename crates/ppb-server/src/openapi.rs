@@ -12,7 +12,7 @@ use crate::admin::notifications::{
     NotificationDeliveryItem, NotificationDeliveryResponse, NotificationSendResponse, SendBody,
 };
 use crate::admin::plugins::PluginCallBody;
-use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody};
+use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody, ServerGatesResponse};
 use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthRequest, RootLoginRequest};
 use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
 use crate::app::{JoinIntentBody, PreferencesListResponse, PushEndpointBody};
@@ -180,6 +180,7 @@ pub struct RoomActionRequest {
         crate::admin::plugins::call,
         crate::admin::server::server_stats,
         crate::admin::server::runtime_status,
+        crate::admin::server::gates,
         crate::admin::server::config_reload,
         crate::admin::server::server_actions,
         crate::admin::server::room_creation,
@@ -354,6 +355,7 @@ pub struct RoomActionRequest {
             PmpStatus,
             ServerStatusResponse,
             ServerStatsResponse,
+            ServerGatesResponse,
             SendRequestBody,
             NotificationActionBody,
             InputBody,

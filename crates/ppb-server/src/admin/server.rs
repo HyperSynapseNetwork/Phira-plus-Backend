@@ -21,6 +21,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/server/stats", get(server_stats))
         .route("/server/runtime", get(runtime_status))
+        .route("/server/gates", get(gates))
         .route("/server/actions", post(server_actions))
         .route("/server/config-reload", post(config_reload))
         .route("/server/roomcreation", post(room_creation))
@@ -90,6 +91,51 @@ pub async fn runtime_status(
     state.permissions.require(&state.db, &auth, "server:view").await?;
     let result = state.openuds.command("runtime.status", json!({})).await.map_err(map_err)?;
     Ok(Json(result))
+}
+
+/// Typed server gates (§23 #2 real gate read): `{connections, room_creation}`.
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ServerGatesResponse {
+    pub connections: bool,
+    pub room_creation: bool,
+}
+
+/// GET /api/v1/admin/server/gates — read connection-acceptance + room-creation gates.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/server/gates",
+    operation_id = "admin_server_gates_get",
+    responses(
+        (status = 200, description = "server gates", body = ServerGatesResponse),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn gates(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ServerGatesResponse>, ApiError> {
+    state.permissions.require(&state.db, &auth, "server:view").await?;
+    let connections = read_cli_gate(&state, "connections").await?;
+    let room_creation = read_cli_gate(&state, "roomcreation").await?;
+    Ok(Json(ServerGatesResponse { connections, room_creation }))
+}
+
+/// Read a boolean gate via PMP CLI (PMP has no typed read for these two gates).
+/// The no-arg form prints current state; `已关闭` → false, otherwise true
+/// (PMP defaults both gates to enabled).
+async fn read_cli_gate(state: &Arc<AppState>, command: &str) -> Result<bool, ApiError> {
+    let v = state
+        .openuds
+        .command("cli.execute", json!({ "command": command }))
+        .await
+        .map_err(map_err)?;
+    let output = v
+        .get("output")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n"))
+        .unwrap_or_else(|| v.to_string());
+    Ok(!output.contains("已关闭"))
 }
 
 /// POST /api/v1/admin/server/config-reload — hot reload PMP config.
