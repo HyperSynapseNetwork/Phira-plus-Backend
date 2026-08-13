@@ -132,8 +132,19 @@ impl RoomService {
         Ok(host)
     }
 
-    pub async fn list(&self) -> Result<Value, OpenUdsError> {
-        self.cmd("room.list", json!({})).await
+    /// `room.list` flattened into `(rooms, total)`.
+    ///
+    /// PMP returns `{rooms: [...], total: N}`; a bare array and `{results: [...]}`
+    /// are tolerated as legacy passthrough shapes. `total` falls back to the
+    /// array length when PMP omits it.
+    pub async fn list(&self) -> Result<(Vec<Value>, i64), OpenUdsError> {
+        let result = self.cmd("room.list", json!({})).await?;
+        let rooms = room_array(&result);
+        let total = result
+            .get("total")
+            .and_then(Value::as_i64)
+            .unwrap_or(rooms.len() as i64);
+        Ok((rooms, total))
     }
 
     pub async fn history(&self, room_id: &str) -> Result<Value, OpenUdsError> {
@@ -206,4 +217,18 @@ impl RoomService {
     pub async fn whitelist_remove(&self, room_id: &str, user_id: i32) -> Result<Value, OpenUdsError> {
         self.cmd("room.whitelist_remove", json!({ "room_id": room_id, "user_id": user_id })).await
     }
+}
+
+/// Extract the room array from a `room.list` payload: a bare array,
+/// `{rooms: [...]}` or `{results: [...]}`. Empty when none matches.
+fn room_array(result: &Value) -> Vec<Value> {
+    if let Some(arr) = result.as_array() {
+        return arr.clone();
+    }
+    for key in ["rooms", "results"] {
+        if let Some(arr) = result.get(key).and_then(Value::as_array) {
+            return arr.clone();
+        }
+    }
+    Vec::new()
 }

@@ -3,12 +3,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -55,7 +55,7 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
     path = "/api/v1/rooms",
     operation_id = "rooms_get",
     responses(
-        (status = 200, description = "room list", body = serde_json::Value),
+        (status = 200, description = "room list", body = RoomListResponse),
         (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
     ),
     tag = "rooms"
@@ -63,11 +63,18 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 pub async fn list_rooms(
     auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
-    let mut result = state.rooms.list().await.map_err(ApiError::from)?;
+    Query(params): Query<RoomListParams>,
+) -> Result<Json<RoomListResponse>, ApiError> {
+    let (page, page_num) = resolve_page(params.page, params.page_num)?;
+    let (rooms, total) = state.rooms.list().await.map_err(ApiError::from)?;
     let my_phira = caller_phira_id_opt(&state, auth.0).await?;
-    enrich_room_list_is_self(&mut result, my_phira);
-    Ok(Json(result))
+    let items = paginate_room_items(rooms, page, page_num, my_phira);
+    Ok(Json(RoomListResponse {
+        items,
+        total,
+        page,
+        page_num,
+    }))
 }
 
 /// GET /api/v1/rooms/{room_id} — room detail (is_self enrichment).
@@ -333,7 +340,7 @@ async fn execute_room_action(
     path = "/api/v1/admin/rooms",
     operation_id = "admin_rooms_get",
     responses(
-        (status = 200, description = "room list", body = serde_json::Value),
+        (status = 200, description = "room list", body = RoomListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -341,10 +348,38 @@ async fn execute_room_action(
 pub async fn admin_list_rooms(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
+    Query(params): Query<RoomListParams>,
+) -> Result<Json<RoomListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:view").await?;
-    let result = state.rooms.list().await.map_err(ApiError::from)?;
-    Ok(Json(result))
+    let (page, page_num) = resolve_page(params.page, params.page_num)?;
+    let (rooms, total) = state.rooms.list().await.map_err(ApiError::from)?;
+    let items = paginate_room_items(rooms, page, page_num, None);
+    Ok(Json(RoomListResponse {
+        items,
+        total,
+        page,
+        page_num,
+    }))
+}
+
+/// Query params for room list endpoints (contract §22: `page` 1-based,
+/// `pageNum` ≤ 100; rooms default to 50 per page).
+#[derive(Debug, Deserialize)]
+pub struct RoomListParams {
+    #[serde(default)]
+    pub page: Option<i64>,
+    #[serde(default, rename = "pageNum")]
+    pub page_num: Option<i64>,
+}
+
+/// Paginated room list response (§22 `{items, total, page, pageNum}`).
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct RoomListResponse {
+    pub items: Vec<Value>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -719,27 +754,30 @@ fn enrich_room_is_self(value: &mut Value, my_phira: Option<i64>) {
     }
 }
 
-/// Apply `is_self` enrichment to a room list payload (rooms/results array or bare array).
-fn enrich_room_list_is_self(value: &mut Value, my_phira: Option<i64>) {
-    let Some(my_phira) = my_phira else { return };
-    let key = if value.get("rooms").is_some() {
-        "rooms"
-    } else if value.get("results").is_some() {
-        "results"
-    } else {
-        ""
-    };
-    if !key.is_empty() {
-        if let Some(arr) = value.get_mut(key).and_then(Value::as_array_mut) {
-            for room in arr {
-                enrich_room_is_self(room, Some(my_phira));
-            }
-        }
-    } else if let Some(arr) = value.as_array_mut() {
-        for room in arr {
-            enrich_room_is_self(room, Some(my_phira));
-        }
+/// Resolve room-list pagination: `page` (1-based) and `pageNum` (≤100, default 50).
+fn resolve_page(page: Option<i64>, page_num: Option<i64>) -> Result<(i64, i64), ApiError> {
+    let page = page.unwrap_or(1).max(1);
+    let page_num = page_num.unwrap_or(50);
+    if !(1..=100).contains(&page_num) {
+        return Err(ApiError::validation("pageNum must be between 1 and 100"));
     }
+    Ok((page, page_num))
+}
+
+/// Slice the in-memory room list to the requested page, applying optional
+/// `is_self` enrichment to each item.
+fn paginate_room_items(
+    rooms: Vec<Value>,
+    page: i64,
+    page_num: i64,
+    my_phira: Option<i64>,
+) -> Vec<Value> {
+    let start = ((page - 1) * page_num) as usize;
+    let mut items: Vec<Value> = rooms.into_iter().skip(start).take(page_num as usize).collect();
+    for room in &mut items {
+        enrich_room_is_self(room, my_phira);
+    }
+    items
 }
 
 /// Re-verify the caller is the room's real host at execution time.

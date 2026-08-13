@@ -50,6 +50,7 @@ use crate::preferences::routes::UpdatePreferencesBody;
 use crate::social::routes::SendRequestBody;
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
+    RoomListResponse,
 };
 use crate::users::model::{
     AdminUserItem, GroupRef, SessionItem, UserDetailResponse, UserListResponse,
@@ -356,6 +357,7 @@ pub struct RoomActionRequest {
             CreateRoomBody,
             AdminRoomActionBody,
             RoomBatchBody,
+            RoomListResponse,
             JoinIntentBody,
             PushEndpointBody,
             PreferencesListResponse,
