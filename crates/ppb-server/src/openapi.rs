@@ -16,6 +16,7 @@ use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody, Se
 use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthRequest, RootLoginRequest};
 use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
 use crate::app::{JoinIntentBody, PreferencesListResponse, PushEndpointBody};
+use crate::commands::model::{CommandRun, CommandRunListResponse};
 use crate::automation::routes::CreateRunbookBody;
 use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
@@ -326,6 +327,8 @@ pub struct RoomActionRequest {
             BroadcastBody,
             ExecuteActionBody,
             ExecuteCommandBody,
+            CommandRun,
+            CommandRunListResponse,
             CreateRunbookBody,
             RunbookDefinition,
             RunbookStep,

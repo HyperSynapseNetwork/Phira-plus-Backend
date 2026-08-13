@@ -60,16 +60,95 @@ pub async fn mark_finished(
     Ok(())
 }
 
-pub async fn list_recent(db: &sqlx::PgPool, limit: i64) -> Result<Vec<CommandRun>, ApiError> {
-    sqlx::query_as::<_, CommandRun>(
-        "SELECT id, action, actor, resource_key, arguments_redacted, status, started_at,
-                finished_at, result_summary, error_code
-         FROM command_runs ORDER BY started_at DESC NULLS LAST LIMIT $1",
+/// Insert a raw console command run (design §18.10). Unlike typed actions, a
+/// console run carries the raw `command` text and a `scope` discriminator.
+pub async fn insert_console_run(
+    db: &sqlx::PgPool,
+    id: Uuid,
+    actor: &str,
+    command: &str,
+    scope: &str,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        "INSERT INTO command_runs (id, action, actor, command, scope, resource_key)
+         VALUES ($1, 'pmp.cli.execute', $2, $3, $4, 'server')",
     )
-    .bind(limit)
-    .fetch_all(db)
+    .bind(id)
+    .bind(actor)
+    .bind(command)
+    .bind(scope)
+    .execute(db)
     .await
-    .map_err(db_err)
+    .map_err(db_err)?;
+    Ok(())
+}
+
+/// Paginated command history. `scope` filters by the stored discriminator
+/// (`personal` | `server`); `None` returns all runs.
+pub async fn list_recent(
+    db: &sqlx::PgPool,
+    scope: Option<&str>,
+    page: i64,
+    page_num: i64,
+) -> Result<(Vec<CommandRun>, i64), ApiError> {
+    let offset = (page - 1) * page_num;
+    let scope_filter: Option<&str> = match scope {
+        Some("personal") | Some("server") => scope,
+        _ => None,
+    };
+
+    let (total,): (i64,) = match scope_filter {
+        Some(s) => {
+            sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM command_runs WHERE scope = $1")
+                .bind(s)
+                .fetch_one(db)
+                .await
+                .map_err(db_err)?
+        }
+        None => {
+            sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM command_runs")
+                .fetch_one(db)
+                .await
+                .map_err(db_err)?
+        }
+    };
+
+    let rows = match scope_filter {
+        Some(s) => {
+            sqlx::query_as::<_, CommandRun>(
+                "SELECT id AS command_id, command, action, status,
+                        NULLIF(result_summary, '') AS output, NULLIF(error_code, '') AS error,
+                        finished_at AS executed_at, actor AS principal, scope
+                 FROM command_runs
+                 WHERE scope = $1
+                 ORDER BY finished_at DESC NULLS LAST
+                 LIMIT $2 OFFSET $3",
+            )
+            .bind(s)
+            .bind(page_num)
+            .bind(offset)
+            .fetch_all(db)
+            .await
+            .map_err(db_err)?
+        }
+        None => {
+            sqlx::query_as::<_, CommandRun>(
+                "SELECT id AS command_id, command, action, status,
+                        NULLIF(result_summary, '') AS output, NULLIF(error_code, '') AS error,
+                        finished_at AS executed_at, actor AS principal, scope
+                 FROM command_runs
+                 ORDER BY finished_at DESC NULLS LAST
+                 LIMIT $1 OFFSET $2",
+            )
+            .bind(page_num)
+            .bind(offset)
+            .fetch_all(db)
+            .await
+            .map_err(db_err)?
+        }
+    };
+
+    Ok((rows, total))
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {

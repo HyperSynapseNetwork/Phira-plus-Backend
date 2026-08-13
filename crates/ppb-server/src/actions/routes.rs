@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -19,6 +19,7 @@ use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
+use crate::commands::model::{CommandRun, CommandRunListResponse};
 use crate::commands::repo as command_repo;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
@@ -194,13 +195,29 @@ pub async fn execute_action(
     }
 }
 
-/// GET /api/v1/admin/commands — recent command runs.
+#[derive(Debug, Deserialize)]
+pub struct CommandListParams {
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
+    /// `personal` | `server`.
+    pub scope: Option<String>,
+}
+
+/// GET /api/v1/admin/commands — recent command runs (paginated, §18.10).
+///
+/// Returns the same `CommandRun` shape as `POST /admin/commands/execute`.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/commands",
     operation_id = "admin_commands_get",
+    params(
+        ("page" = Option<i64>, Query, description = "1-based page index"),
+        ("pageNum" = Option<i64>, Query, description = "page size (1..=100)"),
+        ("scope" = Option<String>, Query, description = "personal | server"),
+    ),
     responses(
-        (status = 200, description = "command runs", body = serde_json::Value),
+        (status = 200, description = "command runs", body = CommandRunListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -208,14 +225,23 @@ pub async fn execute_action(
 pub async fn list_commands(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<crate::commands::model::CommandRun>>, ApiError> {
+    Query(params): Query<CommandListParams>,
+) -> Result<Json<CommandRunListResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "dashboard:view")
         .await?;
     let db = state.require_db()?;
-    let runs = command_repo::list_recent(db, 100).await?;
-    Ok(Json(runs))
+    let page = params.page.unwrap_or(1).max(1);
+    let page_num = params.page_num.unwrap_or(50).clamp(1, 100);
+    let (runs, total) =
+        command_repo::list_recent(db, params.scope.as_deref(), page, page_num).await?;
+    Ok(Json(CommandRunListResponse {
+        items: runs,
+        total,
+        page,
+        page_num,
+    }))
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -224,15 +250,17 @@ pub struct ExecuteCommandBody {
 }
 
 /// POST /api/v1/admin/commands/execute — raw PMP console command (contract §17).
-/// Requires an elevated reauth context and is fully audited with the **final**
-/// result (success / failure / timeout) — never a pre-recorded success.
+///
+/// Returns the recorded `CommandRun` (the same shape as history), not the raw
+/// PMP value. Fully audited with the **final** result (success / failure) —
+/// never a pre-recorded success.
 #[utoipa::path(
     post,
     path = "/api/v1/admin/commands/execute",
     operation_id = "admin_commands_execute_post",
     request_body = ExecuteCommandBody,
     responses(
-        (status = 200, description = "command result", body = serde_json::Value),
+        (status = 200, description = "command result", body = CommandRun),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -242,7 +270,7 @@ pub async fn execute_command(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<ExecuteCommandBody>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<CommandRun>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     state
         .rate_limiter
@@ -250,33 +278,65 @@ pub async fn execute_command(
     // Gate 0 A3: raw console requires an elevated reauth context.
     check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
 
+    let db = state.require_db()?;
+    let command_id = Uuid::new_v4();
+    let actor = auth.sub.to_string();
+    command_repo::insert_console_run(db, command_id, &actor, &body.command, "server").await?;
+
     // No outer timeout: `cli.execute` is unbounded at the OpenUDS layer. A PPB
     // 30s timeout would only stop waiting while PMP keeps running in the
     // background — a fake failure. Wait for PMP's real terminal result.
-    let (result, result_status, error_code) =
+    let (status, output, error) =
         match crate::pmp::cli::cli_execute(&state.openuds, &body.command).await {
-            Ok(v) => (Ok(v), "succeeded", String::new()),
-            Err(e) => (Err(ApiError::from(e)), "failed", "cli_execute_error".to_string()),
+            Ok(v) => ("succeeded".to_string(), Some(output_string(&v)), None),
+            Err(e) => ("failed".to_string(), None, Some(e.to_string())),
         };
+    command_repo::mark_finished(
+        db,
+        command_id,
+        &status,
+        output.as_deref().unwrap_or(""),
+        error.as_deref().unwrap_or(""),
+    )
+    .await?;
 
-    // Full audit with the terminal outcome (success / failure / timeout).
-    if let Some(db) = &state.db {
-        let _ = crate::audit::service::record_principal(
-            db,
-            &auth,
-            "pmp.cli.execute",
-            "pmp",
-            "console",
-            serde_json::json!({ "command": "[REDACTED input]" }),
-            result_status,
-            &error_code,
-            "",
-            &ip_from_headers(&headers),
-            &user_agent_from_headers(&headers),
-        )
-        .await;
+    // Full audit with the terminal outcome (success / failure).
+    let audit_error = if error.is_some() { "cli_execute_error" } else { "" };
+    let _ = crate::audit::service::record_principal(
+        db,
+        &auth,
+        "pmp.cli.execute",
+        "pmp",
+        "console",
+        serde_json::json!({ "command": "[REDACTED input]" }),
+        &status,
+        audit_error,
+        "",
+        &ip_from_headers(&headers),
+        &user_agent_from_headers(&headers),
+    )
+    .await;
+
+    Ok(Json(CommandRun {
+        command_id,
+        command: body.command,
+        action: "pmp.cli.execute".to_string(),
+        status,
+        output,
+        error,
+        executed_at: Some(chrono::Utc::now()),
+        principal: actor,
+        scope: "server".to_string(),
+    }))
+}
+
+/// Stringify a PMP CLI result: bare string responses are returned verbatim,
+/// structured values as compact JSON.
+fn output_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
     }
-    Ok(Json(result?))
 }
 
 /// Verify the caller is the room's real host at execution time (design §8.5).
