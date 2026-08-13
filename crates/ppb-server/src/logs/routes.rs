@@ -80,7 +80,7 @@ pub async fn history(
     State(state): State<Arc<AppState>>,
     Query(params): Query<LogParams>,
 ) -> Result<Json<LogListResponse>, ApiError> {
-    state.permissions.require(&state.db, &auth, "server:view").await?;
+    state.permissions.require(&state.db, &auth, "logs:view").await?;
     let page = params.page.unwrap_or(1).max(1);
     let page_num = params.page_num.unwrap_or(20);
     if !(1..=100).contains(&page_num) {
@@ -205,7 +205,7 @@ async fn stream(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    state.permissions.require(&state.db, &auth, "server:view").await?;
+    state.permissions.require(&state.db, &auth, "logs:view").await?;
     if !state.openuds.state().await.connected {
         return Err(ApiError::new(
             crate::error::ErrorCode::PmpUnavailable,
@@ -267,7 +267,7 @@ pub async fn translate_endpoint(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
-    state.permissions.require(&state.db, &auth, "server:view").await?;
+    state.permissions.require(&state.db, &auth, "logs:view").await?;
     let code = params.code();
     let translated = translate(&code).or_else(|| translate_pattern(&code));
     Ok(Json(TranslateResponse { code, translated }))
@@ -310,7 +310,7 @@ pub async fn translate_post(
     State(state): State<Arc<AppState>>,
     Json(body): Json<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
-    state.permissions.require(&state.db, &auth, "server:view").await?;
+    state.permissions.require(&state.db, &auth, "logs:view").await?;
     let code = body.code();
     let translated = translate(&code).or_else(|| translate_pattern(&code));
     Ok(Json(TranslateResponse { code, translated }))

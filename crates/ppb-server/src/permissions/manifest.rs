@@ -80,6 +80,8 @@ pub fn permission_manifest() -> &'static [PermissionDef] {
         perm!("broadcast:user", "broadcast", "用户广播", "broadcast.user 系统消息", false, Risk::Medium),
         // pmp
         perm!("pmp:cli", "pmp", "PMP 控制台", "原始 cli.execute 控制台", false, Risk::High),
+        // logs
+        perm!("logs:view", "logs", "查看日志", "查看 PMP 日志与控制台输出", false, Risk::Low),
         // notification
         perm!("notification:send_system", "notification", "系统通知", "向用户发送系统通知", false, Risk::Medium),
         // coupon
