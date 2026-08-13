@@ -130,7 +130,7 @@ read_line() {
 ask() {
   local prompt_text=$1 default=$2
   local val
-  printf '%s [%s]: ' "$prompt_text" "$default"
+  printf '%s [%s]: ' "$prompt_text" "$default" >&2
   val=$(read_line) || val=""
   if [ -z "$val" ]; then val="$default"; fi
   printf '%s' "$val"
@@ -303,8 +303,8 @@ resolve_database_url() {
   fi
 
   # (a) 本地 PostgreSQL：分步检测，结果决定自动配置 / 交互询问 / 报错。
-  local rc
-  detect_pg; rc=$?
+  local rc=0
+  detect_pg || rc=$?
   case $rc in
     0)
       if [ "$PG_VERSION" -lt 16 ]; then
@@ -457,7 +457,7 @@ main() {
 
   local tmp
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap '[ -z "${tmp:-}" ] || rm -rf "$tmp"' EXIT
 
   download_and_verify "$PPB_VERSION" "$tmp"
   install_binaries "$tmp"
