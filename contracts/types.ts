@@ -618,7 +618,12 @@ export interface paths {
         /** GET /api/v1/admin/jobs — recent jobs (paginated). */
         get: operations["admin_jobs_get"];
         put?: never;
-        /** POST /api/v1/admin/jobs — start a new job. */
+        /**
+         * POST /api/v1/admin/jobs — start a new job.
+         * @description The Job Policy Registry is the single source of permission / reauth /
+         *     executor. Clients supply only a job type — never CLI text (`args.command`
+         *     is no longer accepted).
+         */
         post: operations["admin_jobs_post"];
         delete?: never;
         options?: never;
@@ -686,7 +691,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job. */
+        /**
+         * POST /api/v1/admin/jobs/{job_id}/cancel — cancel a queued job.
+         * @description Permission is checked per job type (not `dashboard:view`). A job that has
+         *     already been dispatched cannot be cancelled (returns 409).
+         */
         post: operations["admin_jobs_job_id_cancel_post"];
         delete?: never;
         options?: never;
@@ -703,7 +712,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job. */
+        /**
+         * POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job.
+         * @description Re-runs the exact same permission + reauth gate as Create (per the job
+         *     type's Policy Registry entry) — never a blanket `server:update`.
+         */
         post: operations["admin_jobs_job_id_retry_post"];
         delete?: never;
         options?: never;
@@ -2468,7 +2481,6 @@ export interface components {
             name: string;
         };
         CreateJobBody: {
-            args?: unknown;
             type: string;
         };
         CreateRoomBody: {
@@ -4395,6 +4407,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            /** @description cannot cancel dispatched/finished job */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     admin_jobs_job_id_retry_post: {
@@ -4419,6 +4440,15 @@ export interface operations {
             };
             /** @description permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description job not retryable */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

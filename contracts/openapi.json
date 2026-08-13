@@ -1505,6 +1505,7 @@
           "admin"
         ],
         "summary": "POST /api/v1/admin/jobs — start a new job.",
+        "description": "The Job Policy Registry is the single source of permission / reauth /\nexecutor. Clients supply only a job type — never CLI text (`args.command`\nis no longer accepted).",
         "operationId": "admin_jobs_post",
         "requestBody": {
           "content": {
@@ -1654,7 +1655,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job.",
+        "summary": "POST /api/v1/admin/jobs/{job_id}/cancel — cancel a queued job.",
+        "description": "Permission is checked per job type (not `dashboard:view`). A job that has\nalready been dispatched cannot be cancelled (returns 409).",
         "operationId": "admin_jobs_job_id_cancel_post",
         "parameters": [
           {
@@ -1685,6 +1687,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "cannot cancel dispatched/finished job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -1695,6 +1707,7 @@
           "admin"
         ],
         "summary": "POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job.",
+        "description": "Re-runs the exact same permission + reauth gate as Create (per the job\ntype's Policy Registry entry) — never a blanket `server:update`.",
         "operationId": "admin_jobs_job_id_retry_post",
         "parameters": [
           {
@@ -1718,6 +1731,16 @@
           },
           "403": {
             "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "job not retryable",
             "content": {
               "application/json": {
                 "schema": {
@@ -5910,7 +5933,6 @@
           "type"
         ],
         "properties": {
-          "args": {},
           "type": {
             "type": "string"
           }
