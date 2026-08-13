@@ -364,7 +364,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/public", crate::public::routes::routes())
         .nest("/auth", crate::auth::routes::routes())
         .nest("/admin", crate::admin::routes::routes())
-        .nest("/rooms", crate::rooms::routes::routes())
+        .merge(crate::rooms::routes::routes())
         .merge(crate::phira::routes::routes())
         .merge(crate::replay::routes::routes())
         .merge(crate::social::routes::routes())
