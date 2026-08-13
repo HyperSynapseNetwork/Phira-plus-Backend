@@ -1474,14 +1474,16 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/jobs — recent jobs.",
+        "summary": "GET /api/v1/admin/jobs — recent jobs (paginated).",
         "operationId": "admin_jobs_get",
         "responses": {
           "200": {
             "description": "job list",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/JobListResponse"
+                }
               }
             }
           },
@@ -1627,7 +1629,9 @@
             "description": "job detail",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
               }
             }
           },
@@ -1943,7 +1947,12 @@
             "description": "permission manifest",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionDef"
+                  }
+                }
               }
             }
           },
@@ -6152,6 +6161,36 @@
           }
         }
       },
+      "JobListResponse": {
+        "type": "object",
+        "description": "Paginated job list response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "JoinIntentBody": {
         "type": "object",
         "required": [
@@ -6296,6 +6335,38 @@
           "name": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "PermissionDef": {
+        "type": "object",
+        "description": "One permission definition (matches contract §5 / design §8.2).",
+        "required": [
+          "id",
+          "group",
+          "label",
+          "description",
+          "root_only",
+          "risk"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/Risk"
+          },
+          "root_only": {
+            "type": "boolean"
           }
         }
       },
@@ -6498,6 +6569,16 @@
           },
           "touches": {}
         }
+      },
+      "Risk": {
+        "type": "string",
+        "description": "Risk level attached to a permission.",
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ]
       },
       "RollbackBody": {
         "type": "object",
@@ -7002,7 +7083,7 @@
       },
       "UserSecurityResponse": {
         "type": "object",
-        "description": "User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans\nand banned_at null when PMP doesn't expose them).",
+        "description": "User security subview (§23 #5).\n\nP-87 carve-out: `ip_history` is PMP `player.ip_history` payload (PMP is the\nmultiplayer truth source, §13) and stays dynamic JSON rather than a PPB\nreverse-engineered schema. `ip_bans` / `banned_at` are always `null` — PMP\nexposes no IP-ban list or ban timestamp over OpenUDS, so PPB returns null\nrather than fabricating a value.",
         "required": [
           "phira_id",
           "ban_state",

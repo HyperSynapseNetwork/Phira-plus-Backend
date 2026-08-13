@@ -611,7 +611,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/jobs — recent jobs. */
+        /** GET /api/v1/admin/jobs — recent jobs (paginated). */
         get: operations["admin_jobs_get"];
         put?: never;
         /** POST /api/v1/admin/jobs — start a new job. */
@@ -2552,6 +2552,16 @@ export interface components {
             state: string;
             type: string;
         };
+        /** @description Paginated job list response (§22 `{items, total, page, pageNum}`). */
+        JobListResponse: {
+            items: components["schemas"]["Job"][];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+            /** Format: int64 */
+            total: number;
+        };
         JoinIntentBody: {
             room_id: string;
             /** Format: int64 */
@@ -2598,6 +2608,15 @@ export interface components {
             description?: string | null;
             is_default?: boolean | null;
             name?: string | null;
+        };
+        /** @description One permission definition (matches contract §5 / design §8.2). */
+        PermissionDef: {
+            description: string;
+            group: string;
+            id: string;
+            label: string;
+            risk: components["schemas"]["Risk"];
+            root_only: boolean;
         };
         PhiraLoginRequest: {
             client_type?: string | null;
@@ -2656,6 +2675,11 @@ export interface components {
             round_uuid: string;
             touches: unknown;
         };
+        /**
+         * @description Risk level attached to a permission.
+         * @enum {string}
+         */
+        Risk: "low" | "medium" | "high" | "critical";
         RollbackBody: {
             /** Format: uuid */
             snapshot_id: string;
@@ -2835,8 +2859,13 @@ export interface components {
             user_id: string;
         };
         /**
-         * @description User security subview (§23 #5: ban_state/reason/ip_history typed; ip_bans
-         *     and banned_at null when PMP doesn't expose them).
+         * @description User security subview (§23 #5).
+         *
+         *     P-87 carve-out: `ip_history` is PMP `player.ip_history` payload (PMP is the
+         *     multiplayer truth source, §13) and stays dynamic JSON rather than a PPB
+         *     reverse-engineered schema. `ip_bans` / `banned_at` are always `null` — PMP
+         *     exposes no IP-ban list or ban timestamp over OpenUDS, so PPB returns null
+         *     rather than fabricating a value.
          */
         UserSecurityResponse: {
             ban_reason?: string | null;
@@ -4115,7 +4144,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JobListResponse"];
                 };
             };
             /** @description permission denied */
@@ -4239,7 +4268,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Job"];
                 };
             };
             /** @description permission denied */
@@ -4516,7 +4545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PermissionDef"][];
                 };
             };
             /** @description permission denied */
