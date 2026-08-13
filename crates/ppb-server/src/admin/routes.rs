@@ -29,8 +29,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/server", get(server_status))
         // Alias: Panel `fetchPermissionManifest` calls `/admin/permissions`.
         .route("/permissions", get(crate::permissions::routes::manifest))
-        // Alias: Panel `fetchRunbookRuns` calls `/admin/runbook-runs`.
-        .route("/runbook-runs", get(crate::automation::routes::runs))
         .route("/auth/reauth", post(crate::auth::routes::phira_reauth))
         .merge(crate::audit::routes::routes())
         .merge(crate::config::routes::routes())
