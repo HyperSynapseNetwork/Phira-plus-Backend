@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern, TranslatedError};
-use super::{history_lines_of, parse_log_line, LogEntry};
+use super::{history_lines_of, parse_log_frames, parse_log_line, LogEntry};
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
@@ -227,12 +227,22 @@ async fn stream(
     let stream = BroadcastStream::new(rx)
         .filter_map(|r| std::future::ready(r.ok()))
         .filter_map(|f| std::future::ready((f.stream == "logs").then_some(f)))
-        .map(|f| {
-            Ok::<_, Infallible>(
-                Event::default()
-                    .event("log")
-                    .data(serde_json::to_string(&f.frames).unwrap_or_else(|_| "{}".to_string())),
-            )
+        .flat_map(|f| {
+            let events = parse_log_frames(&f.frames)
+                .into_iter()
+                .map(|line| parse_log_line(&line))
+                .map(|entry| {
+                    Ok::<_, Infallible>(
+                        Event::default()
+                            .event("log")
+                            .data(
+                                serde_json::to_string(&entry)
+                                    .unwrap_or_else(|_| "{}".to_string()),
+                            ),
+                    )
+                })
+                .collect::<Vec<_>>();
+            futures_util::stream::iter(events)
         });
 
     Ok(Sse::new(stream).keep_alive(
