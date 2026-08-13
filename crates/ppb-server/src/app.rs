@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, HeaderValue};
+use axum::http::Method;
 use axum::middleware::from_fn_with_state;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -430,7 +431,14 @@ fn build_cors(state: &Arc<AppState>) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
         .allow_credentials(state.config.cors.credentials)
-        .allow_methods(AllowMethods::any())
+        .allow_methods(AllowMethods::list([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ]))
         .allow_headers(AllowHeaders::list(headers))
 }
 
