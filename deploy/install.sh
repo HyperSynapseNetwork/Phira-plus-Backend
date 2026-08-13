@@ -108,17 +108,31 @@ download_and_verify() {
 
 # ── 交互提示 ────────────────────────────────────────────────────
 
+# 读取一行交互输入：优先从 /dev/tty（`curl | sudo bash` 下 stdin 是管道而非终端），
+# 无控制终端时退回 stdin；读不到（EOF）返回非 0，否则打印读到的行。
+read_line() {
+  local line
+  if [ -e /dev/tty ]; then
+    read -r line </dev/tty || return 1
+  else
+    read -r line || return 1
+  fi
+  printf '%s' "$line"
+}
+
 ask() {
   local prompt_text=$1 default=$2
   local val
   printf '%s [%s]: ' "$prompt_text" "$default"
-  read -r val
+  val=$(read_line) || val=""
   if [ -z "$val" ]; then val="$default"; fi
   printf '%s' "$val"
 }
 
 resolve_urls() {
-  if [ "${PPB_NONINTERACTIVE:-0}" = "1" ]; then
+  # 非交互（显式 PPB_NONINTERACTIVE=1，或无控制终端）→ 直接用环境变量 / 默认值。
+  if [ "${PPB_NONINTERACTIVE:-0}" = "1" ] || [ ! -e /dev/tty ]; then
+    [ "${PPB_NONINTERACTIVE:-0}" = "1" ] || warn "未检测到交互终端，使用默认 URL（可用 PPB_* 环境变量覆盖）"
     API_URL="${PPB_API_URL:-$DEFAULT_API_URL}"
     PPF_URL="${PPB_PPF_URL:-$DEFAULT_PPF_URL}"
     PANEL_URL="${PPB_PANEL_URL:-$DEFAULT_PANEL_URL}"
@@ -126,7 +140,10 @@ resolve_urls() {
     OPENUDS_PATH="${PPB_OPENUDS_PATH:-$DEFAULT_OPENUDS_PATH}"
     return
   fi
-  log "交互模式：逐项回车可跳过（使用默认值）"
+  log "────────────────────────────────────────────────────────"
+  log "进入交互配置：接下来会逐项询问（共 5 项）。"
+  log "直接按【回车】= 接受方括号内的默认值，无需手动输入。"
+  log "────────────────────────────────────────────────────────"
   API_URL=$(ask "API URL（PPB）" "$DEFAULT_API_URL")
   PPF_URL=$(ask "PPF URL（公开伴生站）" "$DEFAULT_PPF_URL")
   PANEL_URL=$(ask "Panel URL（管理控制台）" "$DEFAULT_PANEL_URL")
