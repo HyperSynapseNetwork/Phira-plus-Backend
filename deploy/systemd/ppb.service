@@ -14,18 +14,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ppb
-Group=ppb
 WorkingDirectory=/opt/ppb
 EnvironmentFile=/etc/ppb/ppb.env
 ExecStart=/usr/local/bin/ppb-server --config /etc/ppb/ppb.toml
 Restart=on-failure
 RestartSec=3
-# 安全加固
+# 安全加固（服务以 root 运行；ProtectSystem=full 仅锁 /usr /boot /etc，/opt 与 /run 可写）
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/run/pmp
+ProtectSystem=full
 PrivateTmp=true
 # PMP OpenUDS socket 目录
 RuntimeDirectory=pmp
