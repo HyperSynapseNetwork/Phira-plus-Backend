@@ -1007,7 +1007,9 @@ export interface paths {
         put?: never;
         /**
          * POST /api/v1/admin/server/actions — unified server operation dispatch
-         * @description (contract §17). config_reload / shutdown / roomcreation / connections.
+         * @description (contract §17). Action IDs mirror the Action Registry (§23 #2):
+         *     `server.config_reload` / `server.shutdown` / `server.roomcreation` /
+         *     `server.connections`.
          */
         post: operations["admin_server_actions_post"];
         delete?: never;
@@ -2328,6 +2330,22 @@ export interface components {
         ChatSendBody: {
             content: string;
         };
+        /** @description §22 typed descriptors response `{ version, groups }`. */
+        ConfigDescriptorsResponse: {
+            groups: components["schemas"]["ConfigFieldGroup"][];
+            /** Format: int64 */
+            version: number;
+        };
+        /** @description One field-level diff entry `{ path, old, new }`. */
+        ConfigDiffChange: {
+            new: unknown;
+            old: unknown;
+            path: string;
+        };
+        /** @description §22 typed diff response `{ changes }`. */
+        ConfigDiffResponse: {
+            changes: components["schemas"]["ConfigDiffChange"][];
+        };
         /**
          * @description A PMP config field descriptor (Panel renders grouped forms). Schema-freeze
          *     (§22): descriptor carries type/widget/min/max/risk/permission/reload
@@ -2359,6 +2377,23 @@ export interface components {
             key: string;
             label: string;
         };
+        /** @description Typed raw-config response `{ content }`. */
+        ConfigRawResponse: {
+            content: string;
+        };
+        /** @description Typed rollback response `{ ok, restored, health }`. */
+        ConfigRollbackResponse: {
+            health: unknown;
+            ok: boolean;
+            /** Format: uuid */
+            restored: string;
+        };
+        /** @description §22 typed save response `{ ok, snapshot_id }`. */
+        ConfigSaveResponse: {
+            ok: boolean;
+            /** Format: uuid */
+            snapshot_id: string;
+        };
         ConfigSnapshot: {
             content: string;
             /** Format: date-time */
@@ -2372,6 +2407,20 @@ export interface components {
             restored_at?: string | null;
             scope: string;
         };
+        /** @description §22 typed snapshots response `{ items }`. */
+        ConfigSnapshotsResponse: {
+            items: components["schemas"]["ConfigSnapshot"][];
+        };
+        /** @description §22 typed validate response `{ ok, errors }`. */
+        ConfigValidateResponse: {
+            errors: components["schemas"]["ConfigValidationError"][];
+            ok: boolean;
+        };
+        /** @description One field validation error `{ path, message }`. */
+        ConfigValidationError: {
+            message: string;
+            path: string;
+        };
         /**
          * @description Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB
          *     validates/generates YAML/saves.
@@ -2379,6 +2428,14 @@ export interface components {
         ConfigValuesBody: {
             note?: string;
             values: unknown;
+        };
+        /** @description §22 typed values response `{ version, values }` (flat `{path: value}`). */
+        ConfigValuesResponse: {
+            values: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            version: number;
         };
         CreateCouponBody: {
             action_type: string;
@@ -2700,18 +2757,28 @@ export interface components {
             endpoint: string;
             p256dh: string;
         };
+        /**
+         * @description §23 P-91 translate request: Panel sends `{ code }`; `{ error_code }` is
+         *     accepted and normalized to `code` for backward compatibility.
+         */
         TranslateParams: {
-            code: string;
+            code?: string | null;
+            error_code?: string | null;
         };
         /** @description Typed translation response (§23 `{code, translated}`). */
         TranslateResponse: {
             code: string;
             translated?: components["schemas"]["TranslatedError"] | null;
         };
+        /**
+         * @description §23 P-91 translated error payload: `{ title, explanation, module, severity,
+         *     suggestion? }` — `explanation` (not `description`), `suggestion` optional.
+         */
         TranslatedError: {
-            description: string;
+            explanation: string;
             module: string;
             severity: string;
+            suggestion?: string | null;
             title: string;
         };
         UpdatePreferencesBody: {
@@ -3428,7 +3495,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigDescriptorsResponse"];
                 };
             };
             /** @description permission denied */
@@ -3461,7 +3528,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigDiffResponse"];
                 };
             };
             /** @description permission denied */
@@ -3548,7 +3615,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigRawResponse"];
                 };
             };
             /** @description permission denied */
@@ -3581,7 +3648,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigRollbackResponse"];
                 };
             };
             /** @description permission denied */
@@ -3614,7 +3681,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigSaveResponse"];
                 };
             };
             /** @description permission denied */
@@ -3643,7 +3710,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigSnapshotsResponse"];
                 };
             };
             /** @description permission denied */
@@ -3676,7 +3743,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigValidateResponse"];
                 };
             };
             /** @description permission denied */
@@ -3705,7 +3772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigValuesResponse"];
                 };
             };
             /** @description permission denied */

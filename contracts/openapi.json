@@ -748,7 +748,9 @@
             "description": "form descriptors",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDescriptorsResponse"
+                }
               }
             }
           },
@@ -787,7 +789,9 @@
             "description": "field-level diff",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDiffResponse"
+                }
               }
             }
           },
@@ -874,7 +878,9 @@
             "description": "raw config YAML",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigRawResponse"
+                }
               }
             }
           },
@@ -913,7 +919,9 @@
             "description": "rolled back + health",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigRollbackResponse"
+                }
               }
             }
           },
@@ -953,7 +961,9 @@
             "description": "saved + snapshot id",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSaveResponse"
+                }
               }
             }
           },
@@ -982,7 +992,9 @@
             "description": "snapshot list",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSnapshotsResponse"
+                }
               }
             }
           },
@@ -1021,7 +1033,9 @@
             "description": "validation result",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigValidateResponse"
+                }
               }
             }
           },
@@ -1050,7 +1064,9 @@
             "description": "current config values",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigValuesResponse"
+                }
               }
             }
           },
@@ -2484,7 +2500,7 @@
           "admin"
         ],
         "summary": "POST /api/v1/admin/server/actions — unified server operation dispatch",
-        "description": "(contract §17). config_reload / shutdown / roomcreation / connections.",
+        "description": "(contract §17). Action IDs mirror the Action Registry (§23 #2):\n`server.config_reload` / `server.shutdown` / `server.roomcreation` /\n`server.connections`.",
         "operationId": "admin_server_actions_post",
         "requestBody": {
           "content": {
@@ -5471,6 +5487,57 @@
           }
         }
       },
+      "ConfigDescriptorsResponse": {
+        "type": "object",
+        "description": "§22 typed descriptors response `{ version, groups }`.",
+        "required": [
+          "version",
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldGroup"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ConfigDiffChange": {
+        "type": "object",
+        "description": "One field-level diff entry `{ path, old, new }`.",
+        "required": [
+          "path",
+          "old",
+          "new"
+        ],
+        "properties": {
+          "new": {},
+          "old": {},
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigDiffResponse": {
+        "type": "object",
+        "description": "§22 typed diff response `{ changes }`.",
+        "required": [
+          "changes"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigDiffChange"
+            }
+          }
+        }
+      },
       "ConfigFieldDescriptor": {
         "type": "object",
         "description": "A PMP config field descriptor (Panel renders grouped forms). Schema-freeze\n(§22): descriptor carries type/widget/min/max/risk/permission/reload\nsemantics/sensitive/default.",
@@ -5559,6 +5626,54 @@
           }
         }
       },
+      "ConfigRawResponse": {
+        "type": "object",
+        "description": "Typed raw-config response `{ content }`.",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigRollbackResponse": {
+        "type": "object",
+        "description": "Typed rollback response `{ ok, restored, health }`.",
+        "required": [
+          "ok",
+          "restored",
+          "health"
+        ],
+        "properties": {
+          "health": {},
+          "ok": {
+            "type": "boolean"
+          },
+          "restored": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ConfigSaveResponse": {
+        "type": "object",
+        "description": "§22 typed save response `{ ok, snapshot_id }`.",
+        "required": [
+          "ok",
+          "snapshot_id"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ConfigSnapshot": {
         "type": "object",
         "required": [
@@ -5598,6 +5713,56 @@
           }
         }
       },
+      "ConfigSnapshotsResponse": {
+        "type": "object",
+        "description": "§22 typed snapshots response `{ items }`.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigSnapshot"
+            }
+          }
+        }
+      },
+      "ConfigValidateResponse": {
+        "type": "object",
+        "description": "§22 typed validate response `{ ok, errors }`.",
+        "required": [
+          "ok",
+          "errors"
+        ],
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigValidationError"
+            }
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ConfigValidationError": {
+        "type": "object",
+        "description": "One field validation error `{ path, message }`.",
+        "required": [
+          "path",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
       "ConfigValuesBody": {
         "type": "object",
         "description": "Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB\nvalidates/generates YAML/saves.",
@@ -5609,6 +5774,24 @@
             "type": "string"
           },
           "values": {}
+        }
+      },
+      "ConfigValuesResponse": {
+        "type": "object",
+        "description": "§22 typed values response `{ version, values }` (flat `{path: value}`).",
+        "required": [
+          "version",
+          "values"
+        ],
+        "properties": {
+          "values": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
         }
       },
       "CreateCouponBody": {
@@ -6610,12 +6793,15 @@
       },
       "TranslateParams": {
         "type": "object",
-        "required": [
-          "code"
-        ],
+        "description": "§23 P-91 translate request: Panel sends `{ code }`; `{ error_code }` is\naccepted and normalized to `code` for backward compatibility.",
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
+          },
+          "error_code": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -6641,14 +6827,15 @@
       },
       "TranslatedError": {
         "type": "object",
+        "description": "§23 P-91 translated error payload: `{ title, explanation, module, severity,\nsuggestion? }` — `explanation` (not `description`), `suggestion` optional.",
         "required": [
           "title",
-          "description",
+          "explanation",
           "module",
           "severity"
         ],
         "properties": {
-          "description": {
+          "explanation": {
             "type": "string"
           },
           "module": {
@@ -6656,6 +6843,10 @@
           },
           "severity": {
             "type": "string"
+          },
+          "suggestion": {
+            "type": "string",
+            "nullable": true
           },
           "title": {
             "type": "string"
