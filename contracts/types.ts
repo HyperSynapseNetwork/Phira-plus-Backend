@@ -2766,6 +2766,12 @@ export interface components {
             round_uuid: string;
             touches: unknown;
         };
+        /** @description Resolved share token `{round_uuid, player_phira_id}` (S-3). */
+        ResolveShareResponse: {
+            /** Format: int64 */
+            player_phira_id: number;
+            round_uuid: string;
+        };
         /**
          * @description Risk level attached to a permission.
          * @enum {string}
@@ -7049,7 +7055,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ResolveShareResponse"];
                 };
             };
             /** @description invalid/expired/revoked token */

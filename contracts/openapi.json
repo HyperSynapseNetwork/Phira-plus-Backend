@@ -4850,7 +4850,9 @@
             "description": "resolved replay identity",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveShareResponse"
+                }
               }
             }
           },
@@ -6859,6 +6861,23 @@
             "type": "string"
           },
           "touches": {}
+        }
+      },
+      "ResolveShareResponse": {
+        "type": "object",
+        "description": "Resolved share token `{round_uuid, player_phira_id}` (S-3).",
+        "required": [
+          "round_uuid",
+          "player_phira_id"
+        ],
+        "properties": {
+          "player_phira_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "round_uuid": {
+            "type": "string"
+          }
         }
       },
       "Risk": {
