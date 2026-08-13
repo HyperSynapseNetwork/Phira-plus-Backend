@@ -384,7 +384,9 @@ pub struct RoomListResponse {
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateRoomBody {
-    pub room_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub max_users: Option<i64>,
     #[serde(default)]
     pub endpoint: Option<String>,
     #[serde(default)]
@@ -392,6 +394,10 @@ pub struct CreateRoomBody {
 }
 
 /// POST /api/v1/admin/rooms — create a room.
+///
+/// `name` becomes PMP's `room_id`. `max_users` is accepted for contract
+/// compatibility but is NOT forwarded: PMP `room.create` has no per-room
+/// capacity — the server-wide `max_users_per_room` config applies.
 #[utoipa::path(
     post,
     path = "/api/v1/admin/rooms",
@@ -411,7 +417,7 @@ pub async fn admin_create_room(
     state.permissions.require(&state.db, &auth, "room:manage").await?;
     let result = state
         .rooms
-        .create(&body.room_id, body.endpoint.as_deref(), body.persistent_empty)
+        .create(&body.name, body.endpoint.as_deref(), body.persistent_empty)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(result))
