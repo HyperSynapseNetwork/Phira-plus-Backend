@@ -1793,6 +1793,36 @@
               "nullable": true,
               "minimum": 0
             }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "description": "filter by log level (error/warn/info/debug/trace), case-insensitive",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "case-insensitive substring match on message",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "log_id",
+            "in": "query",
+            "description": "focus: return the entry with this log_id (content hash)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
           }
         ],
         "responses": {

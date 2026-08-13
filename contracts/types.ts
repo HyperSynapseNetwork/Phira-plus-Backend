@@ -4467,6 +4467,12 @@ export interface operations {
                 pageNum?: number | null;
                 /** @description raw PMP history window (max 2000) */
                 limit?: number | null;
+                /** @description filter by log level (error/warn/info/debug/trace), case-insensitive */
+                level?: string | null;
+                /** @description case-insensitive substring match on message */
+                search?: string | null;
+                /** @description focus: return the entry with this log_id (content hash) */
+                log_id?: string | null;
             };
             header?: never;
             path?: never;
