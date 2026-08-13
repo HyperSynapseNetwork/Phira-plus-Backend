@@ -13,6 +13,7 @@ pub async fn create_group(
     db: &sqlx::PgPool,
     name: &str,
     description: &str,
+    is_default: Option<bool>,
 ) -> Result<Group, ApiError> {
     if name.trim().is_empty() {
         return Err(ApiError::validation("group name required"));
@@ -34,6 +35,17 @@ pub async fn create_group(
         }
         db_err(e)
     })?;
+
+    // §23 #4 semantics: only one default group globally. Creating a new default
+    // clears the old default (mirrors set_default_group / PATCH).
+    if is_default == Some(true) {
+        sqlx::query("UPDATE groups SET is_default = (id = $1)")
+            .bind(group.id)
+            .execute(db)
+            .await
+            .map_err(db_err)?;
+        return get_group(db, group.id).await;
+    }
     Ok(group)
 }
 

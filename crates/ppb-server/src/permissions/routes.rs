@@ -107,6 +107,9 @@ pub struct CreateGroupBody {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// Create as the (single) default group — clears any existing default (§23 #4).
+    #[serde(default)]
+    pub is_default: Option<bool>,
 }
 
 /// POST /api/v1/admin/groups — create a user group.
@@ -124,14 +127,19 @@ pub struct CreateGroupBody {
 pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<CreateGroupBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "group:create")
         .await?;
+    // §23 #10: creating a new default group requires reauth (same as PATCH/set-default).
+    if body.is_default == Some(true) {
+        check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
+    }
     let db = state.require_db()?;
-    let group = repo::create_group(db, &body.name, &body.description).await?;
+    let group = repo::create_group(db, &body.name, &body.description, body.is_default).await?;
     Ok(Json(serde_json::to_value(&group).unwrap_or(serde_json::Value::Null)))
 }
 
