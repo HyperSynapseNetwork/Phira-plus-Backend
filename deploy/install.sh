@@ -48,7 +48,7 @@ die() { printf '\033[1;31m[ppb][error]\033[0m %s\n' "$*" >&2; exit 1; }
 # ── 前置检查 ────────────────────────────────────────────────────
 
 assert_root() {
-  [ "$(id -u)" -eq 0 ] || die "请以 root 运行（sudo bash install.sh）"
+  [ "$(id -u)" -eq 0 ] || die "仅支持 root 部署；非 root 不支持（请用 sudo 运行）"
 }
 
 assert_arch() {
@@ -61,7 +61,7 @@ assert_arch() {
 
 check_prereqs() {
   local missing=0
-  for cmd in curl sha256sum systemctl useradd openssl; do
+  for cmd in curl sha256sum systemctl openssl; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       warn "缺少前置命令：$cmd"
       missing=1
@@ -186,13 +186,11 @@ install_binaries() {
 }
 
 ensure_user_and_dirs() {
-  if ! id ppb >/dev/null 2>&1; then
-    log "创建系统用户 ppb"
-    useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin ppb
-  fi
-  install -d -o ppb -g ppb "$DATA_DIR"
-  install -d -o ppb -g ppb "$CONFIG_DIR"
-  install -d -o ppb -g ppb "$RUN_DIR"
+  # 直接以 root 运行，不创建 ppb 系统用户（见 docs/deployment.md）。
+  log "创建目录 ${DATA_DIR} / ${CONFIG_DIR} / ${RUN_DIR}（root 拥有）"
+  install -d "$DATA_DIR"
+  install -d "$CONFIG_DIR"
+  install -d "$RUN_DIR"
 }
 
 generate_config() {
