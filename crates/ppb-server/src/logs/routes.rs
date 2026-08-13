@@ -199,13 +199,29 @@ pub async fn translate_endpoint(
     Query(params): Query<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
-    let translated = translate(&params.code).or_else(|| translate_pattern(&params.code));
-    Ok(Json(TranslateResponse { code: params.code, translated }))
+    let code = params.code();
+    let translated = translate(&code).or_else(|| translate_pattern(&code));
+    Ok(Json(TranslateResponse { code, translated }))
 }
 
+/// §23 P-91 translate request: Panel sends `{ code }`; `{ error_code }` is
+/// accepted and normalized to `code` for backward compatibility.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct TranslateParams {
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub error_code: Option<String>,
+}
+
+impl TranslateParams {
+    /// Normalize `code` / `error_code` into a single code string.
+    pub fn code(&self) -> String {
+        self.code
+            .clone()
+            .or_else(|| self.error_code.clone())
+            .unwrap_or_default()
+    }
 }
 
 /// POST /api/v1/admin/logs/translate — body-based error translation (contract §17).
@@ -226,8 +242,9 @@ pub async fn translate_post(
     Json(body): Json<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
-    let translated = translate(&body.code).or_else(|| translate_pattern(&body.code));
-    Ok(Json(TranslateResponse { code: body.code, translated }))
+    let code = body.code();
+    let translated = translate(&code).or_else(|| translate_pattern(&code));
+    Ok(Json(TranslateResponse { code, translated }))
 }
 
 fn map_err(e: OpenUdsError) -> ApiError {
