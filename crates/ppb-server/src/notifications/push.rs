@@ -230,7 +230,7 @@ fn app_push_present(endpoints: &[PushEndpointRow]) -> bool {
         .any(|ep| matches!(ep.channel.as_str(), "fcm" | "wns"))
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, utoipa::ToSchema)]
 pub struct PushSummary {
     pub delivered: u32,
     pub not_configured: u32,

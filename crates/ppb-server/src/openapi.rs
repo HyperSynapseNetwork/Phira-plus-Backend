@@ -8,7 +8,9 @@ use serde::Serialize;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::admin::coupons::CreateCouponBody;
-use crate::admin::notifications::SendBody;
+use crate::admin::notifications::{
+    NotificationDeliveryItem, NotificationDeliveryResponse, NotificationSendResponse, SendBody,
+};
 use crate::admin::plugins::PluginCallBody;
 use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody};
 use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthRequest, RootLoginRequest};
@@ -32,7 +34,7 @@ use crate::preferences::UserPreference;
 use crate::logs::routes::{LogInputBody, LogListResponse, TranslateParams, TranslateResponse};
 use crate::logs::translator::TranslatedError;
 use crate::logs::LogEntry;
-use crate::notifications::push::SubscriptionWire;
+use crate::notifications::push::{PushSummary, SubscriptionWire};
 use crate::notifications::routes::{
     ActionBody as NotificationActionBody, AppNotificationWire, InputBody,
     NotificationInboxResponse,
@@ -345,6 +347,10 @@ pub struct RoomActionRequest {
             PushEndpointBody,
             PreferencesListResponse,
             SubscriptionWire,
+            PushSummary,
+            NotificationSendResponse,
+            NotificationDeliveryItem,
+            NotificationDeliveryResponse,
             PmpStatus,
             ServerStatusResponse,
             ServerStatsResponse,

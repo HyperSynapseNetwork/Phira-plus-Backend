@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -13,6 +13,7 @@ use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::notifications::push::PushSummary;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -37,6 +38,30 @@ pub struct SendBody {
     pub payload: Value,
 }
 
+/// Typed `POST /admin/notifications/send` response `{event_id, recipients, push}`.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct NotificationSendResponse {
+    pub event_id: Uuid,
+    pub recipients: u64,
+    pub push: PushSummary,
+}
+
+/// One delivery row `{event_id, type, created_at, delivered}`.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct NotificationDeliveryItem {
+    pub event_id: Uuid,
+    #[serde(rename = "type")]
+    pub notification_type: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub delivered: i64,
+}
+
+/// Typed `GET /admin/notifications/delivery` response `{items}`.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct NotificationDeliveryResponse {
+    pub items: Vec<NotificationDeliveryItem>,
+}
+
 /// POST /api/v1/admin/notifications/send — create an event + fan out inbox rows.
 #[utoipa::path(
     post,
@@ -44,7 +69,7 @@ pub struct SendBody {
     operation_id = "admin_notifications_send_post",
     request_body = SendBody,
     responses(
-        (status = 200, description = "event created + push summary", body = serde_json::Value),
+        (status = 200, description = "event created + push summary", body = NotificationSendResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "notifications"
@@ -53,7 +78,7 @@ pub async fn send(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     Json(body): Json<SendBody>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<NotificationSendResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "notification:send_system")
@@ -80,7 +105,7 @@ pub async fn send(
     .await?;
     // Fan out push (in-app rows already created above); per-endpoint failures
     // are non-fatal and summarized.
-    let mut push_summary = crate::notifications::push::PushSummary::default();
+    let mut push_summary = PushSummary::default();
     for uid in &recipients {
         let r = state
             .push
@@ -92,11 +117,11 @@ pub async fn send(
             push_summary.failed += s.failed;
         }
     }
-    Ok(Json(json!({
-        "event_id": event.id,
-        "recipients": recipients.len(),
-        "push": push_summary,
-    })))
+    Ok(Json(NotificationSendResponse {
+        event_id: event.id,
+        recipients: recipients.len() as u64,
+        push: push_summary,
+    }))
 }
 
 /// GET /api/v1/admin/notifications/delivery — recent events + delivered counts.
@@ -105,7 +130,7 @@ pub async fn send(
     path = "/api/v1/admin/notifications/delivery",
     operation_id = "admin_notifications_delivery_get",
     responses(
-        (status = 200, description = "delivery summary", body = serde_json::Value),
+        (status = 200, description = "delivery summary", body = NotificationDeliveryResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -113,7 +138,7 @@ pub async fn send(
 pub async fn delivery(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<NotificationDeliveryResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "notification:send_system")
@@ -130,13 +155,16 @@ pub async fn delivery(
     .fetch_all(db)
     .await
     .map_err(db_err)?;
-    let items: Vec<Value> = rows
+    let items: Vec<NotificationDeliveryItem> = rows
         .into_iter()
-        .map(|(id, typ, created_at, delivered)| {
-            json!({ "event_id": id, "type": typ, "created_at": created_at, "delivered": delivered })
+        .map(|(id, typ, created_at, delivered)| NotificationDeliveryItem {
+            event_id: id,
+            notification_type: typ,
+            created_at,
+            delivered,
         })
         .collect();
-    Ok(Json(json!({ "items": items })))
+    Ok(Json(NotificationDeliveryResponse { items }))
 }
 
 async fn resolve_recipients(db: &sqlx::PgPool, target: &Value) -> Result<Vec<Uuid>, ApiError> {
