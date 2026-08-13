@@ -40,6 +40,12 @@ pub struct LogParams {
     pub page: Option<i64>,
     #[serde(rename = "pageNum")]
     pub page_num: Option<i64>,
+    /// Filter by log level (`error`/`warn`/`info`/`debug`/`trace`), case-insensitive.
+    pub level: Option<String>,
+    /// Case-insensitive substring match on `message`.
+    pub search: Option<String>,
+    /// Focus: return the entry with this `log_id` (content hash).
+    pub log_id: Option<String>,
 }
 
 /// Paginated structured log list response (§22 `{items, total, page, pageNum}`).
@@ -61,6 +67,9 @@ pub struct LogListResponse {
         ("page" = Option<i64>, Query, description = "1-based page index"),
         ("pageNum" = Option<i64>, Query, description = "page size (1..=100)"),
         ("limit" = Option<u64>, Query, description = "raw PMP history window (max 2000)"),
+        ("level" = Option<String>, Query, description = "filter by log level (error/warn/info/debug/trace), case-insensitive"),
+        ("search" = Option<String>, Query, description = "case-insensitive substring match on message"),
+        ("log_id" = Option<String>, Query, description = "focus: return the entry with this log_id (content hash)"),
     ),
     responses(
         (status = 200, description = "log history (paginated)", body = LogListResponse),
@@ -91,10 +100,34 @@ pub async fn history(
         .iter()
         .map(|line| parse_log_line(line))
         .collect();
+    // Apply `level` / `search` / `log_id` filters before pagination so that a
+    // focused query (`log_id` + `pageNum:1`) lands on the matching entry.
+    let entries = apply_log_filters(entries, &params);
     let total = entries.len() as i64;
     let offset = ((page - 1) * page_num) as usize;
     let items = entries.into_iter().skip(offset).take(page_num as usize).collect();
     Ok(Json(LogListResponse { items, total, page, page_num }))
+}
+
+/// Apply optional `level` / `search` / `log_id` filters (AND-combined).
+///
+/// `log_id` focus is a filter, not a page jump: `log_id` is a stable content
+/// hash with no backing sequence, so the matching entry (if present in the
+/// window) is returned as the only item and `pageNum:1` hits it.
+fn apply_log_filters(entries: Vec<LogEntry>, params: &LogParams) -> Vec<LogEntry> {
+    let level = params.level.as_deref().filter(|s| !s.is_empty());
+    let search = params.search.as_deref().filter(|s| !s.is_empty());
+    let log_id = params.log_id.as_deref().filter(|s| !s.is_empty());
+    entries
+        .into_iter()
+        .filter(|e| level.map_or(true, |lvl| e.level.eq_ignore_ascii_case(lvl)))
+        .filter(|e| {
+            search.map_or(true, |q| {
+                e.message.to_lowercase().contains(&q.to_lowercase())
+            })
+        })
+        .filter(|e| log_id.map_or(true, |id| e.log_id.eq_ignore_ascii_case(id)))
+        .collect()
 }
 
 async fn input(
@@ -283,4 +316,68 @@ pub async fn translate_post(
 
 fn map_err(e: OpenUdsError) -> ApiError {
     ApiError::from(e)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(level: &str, message: &str) -> LogEntry {
+        let mut e = parse_log_line(message);
+        e.level = level.to_string();
+        e
+    }
+
+    #[test]
+    fn filters_by_level() {
+        let params = LogParams {
+            limit: None,
+            page: None,
+            page_num: None,
+            level: Some("error".into()),
+            search: None,
+            log_id: None,
+        };
+        let out = apply_log_filters(
+            vec![entry("info", "ok"), entry("error", "boom")],
+            &params,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].level, "error");
+    }
+
+    #[test]
+    fn filters_by_search_case_insensitive() {
+        let params = LogParams {
+            limit: None,
+            page: None,
+            page_num: None,
+            level: None,
+            search: Some("ROOM".into()),
+            log_id: None,
+        };
+        let out = apply_log_filters(
+            vec![entry("info", "created room ABC"), entry("info", "other")],
+            &params,
+        );
+        assert_eq!(out.len(), 1);
+        assert!(out[0].message.contains("room"));
+    }
+
+    #[test]
+    fn filters_by_log_id_focus() {
+        let other = parse_log_line("first line");
+        let b = parse_log_line("second line");
+        let params = LogParams {
+            limit: None,
+            page: None,
+            page_num: None,
+            level: None,
+            search: None,
+            log_id: Some(b.log_id.clone()),
+        };
+        let out = apply_log_filters(vec![other, b.clone()], &params);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].log_id, b.log_id);
+    }
 }

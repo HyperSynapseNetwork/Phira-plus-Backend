@@ -146,6 +146,11 @@ fn normalize_level(s: &str) -> String {
 }
 
 /// Stable, short content hash used as the `log_id` (locate a specific line).
+///
+/// TODO(sequence): PMP ingest exposes no stable per-line sequence number, so
+/// `log_id` is a content hash (first 8 bytes of SHA256) rather than a monotonic
+/// sequence. Log focus is therefore implemented as a filter, not a page jump; a
+/// real sequence would allow exact page positioning across ring-buffer windows.
 fn log_id_for(line: &str) -> String {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(line.as_bytes());
