@@ -18,6 +18,7 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("room.force_move", "room:move", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         ActionDescriptor::new("room.start", "room:start", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
         ActionDescriptor::new("room.cancel_start", "room:start", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
+        ActionDescriptor::new("room.ready", "room:start", Executor::OpenUds, Risk::Low, true, false, false, "room:{room_id}", false),
         ActionDescriptor::new("room.close", "room:manage", Executor::OpenUds, Risk::High, true, false, false, "room:{room_id}", false),
         // ── Room config (host_allowed) ────────────────────────────
         ActionDescriptor::new("room.set_chart", "room:config", Executor::OpenUds, Risk::Medium, true, false, true, "room:{room_id}", false),
@@ -60,6 +61,13 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         // Raw Console requires reauth (same semantics as Automation/Runbook, §22).
         ActionDescriptor::new("pmp.cli.execute", "pmp:cli", Executor::CliRaw, Risk::High, true, true, false, "server", false),
         ActionDescriptor::new("pmp.update.apply", "server:update", Executor::CliExecute, Risk::Critical, true, true, false, "server", true),
+        ActionDescriptor::new("pmp.update.check", "server:update", Executor::CliExecute, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("pmp.update.cancel", "server:update", Executor::CliExecute, Risk::High, true, false, false, "server", false),
+        ActionDescriptor::new("pmp.update.force", "server:update", Executor::CliExecute, Risk::Critical, true, true, false, "server", true),
+        // ── PPB-internal capabilities (no PMP command, §13) ───────
+        // Session revocation is PPB identity/session territory; the Internal
+        // executor is wired in a later phase (currently returns "not implemented").
+        ActionDescriptor::new("user.revoke_sessions", "user:kick", Executor::Internal, Risk::High, true, false, false, "user:{user_id}", false),
     ]
 }
 
@@ -139,9 +147,10 @@ mod tests {
         let reg = ActionRegistry::new();
         for id in [
             "player.ban", "player.unban", "player.kick", "player.ban_ip", "player.unban_ip",
-            "room.ban", "room.unban", "room.lock",
+            "room.ban", "room.unban", "room.lock", "room.ready",
             "server.config_reload", "server.roomcreation", "server.shutdown", "server.connections",
-            "pmp.cli.execute", "pmp.update.apply",
+            "pmp.cli.execute", "pmp.update.apply", "pmp.update.check", "pmp.update.cancel",
+            "pmp.update.force", "user.revoke_sessions",
         ] {
             assert!(reg.get(id).is_some(), "missing canonical action {id}");
         }
@@ -157,7 +166,7 @@ mod tests {
         let reg = ActionRegistry::new();
         for id in [
             "player.ban", "player.unban", "player.ban_ip", "player.unban_ip",
-            "server.shutdown", "pmp.cli.execute", "pmp.update.apply",
+            "server.shutdown", "pmp.cli.execute", "pmp.update.apply", "pmp.update.force",
         ] {
             let a = reg.get(id).unwrap();
             assert!(a.reauth, "sensitive action {id} must require reauth");

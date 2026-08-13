@@ -14,10 +14,8 @@
 #   2. central Action-ID definition files (basename contains `action`,
 #      e.g. Panel `config/action-ids.ts`).
 #
-# Every dotted ID found must exist in the Registry. IDs in `KNOWN_LEGACY`
-# (Panel IDs declared before the Registry was canonical — §23 #2/#3) are
-# reported as WARN with their canonical target; any other unknown ID is FAIL
-# and makes the script exit non-zero.
+# Any dotted ID found that is NOT in the Registry is a FAIL and makes the
+# script exit non-zero (contract §23 #2: frontends must not invent Action IDs).
 #
 # Examples:
 #   scripts/check-action-ids.sh crates/ppb-server/src/actions/registry.rs ../ppf/src
@@ -52,32 +50,6 @@ if not registry_ids:
     print("ERROR: no Action IDs extracted from registry source", file=sys.stderr)
     sys.exit(2)
 
-# Panel IDs declared before the Registry was canonical (§23 #2/#3). These are
-# tracked as WARN (not FAIL) so the gate can be adopted before Panel finishes
-# migrating; each entry maps legacy -> canonical (None = pending Main decision).
-KNOWN_LEGACY = {
-    # §23 #2: user.* -> player.*
-    "user.ban": "player.ban",
-    "user.unban": "player.unban",
-    "user.kick": "player.kick",
-    "user.ban_ip": "player.ban_ip",
-    "user.unban_ip": "player.unban_ip",
-    # §23 #2: room.blacklist_* -> room.ban / room.unban
-    "room.blacklist_ban": "room.ban",
-    "room.blacklist_unban": "room.unban",
-    # Server action naming unified to the Registry (§23 #2).
-    "server.set_connections": "server.connections",
-    "server.set_room_creation": "server.roomcreation",
-    "server.update_apply": "pmp.update.apply",
-    # Panel-declared, no canonical Registry ID yet (pending Main decision).
-    "room.create": None,
-    "room.ready": None,
-    "server.update_check": None,
-    "server.update_cancel": None,
-    "server.update_force": None,
-    "user.revoke_sessions": None,
-}
-
 # 2) scan frontend source.
 action_field = re.compile(r"\baction\b\s*[:=]\s*['\"]([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)['\"]")
 json_action = re.compile(r"['\"]action['\"]\s*:\s*['\"]([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)['\"]")
@@ -109,21 +81,11 @@ for dirpath, dirnames, filenames in os.walk(src_dir):
                     found.setdefault(m.group(1), set()).add((str(f), line_of(m.start())))
 
 fails = []
-warns = []
 for aid, locs in sorted(found.items()):
-    if aid in registry_ids:
-        continue
-    if aid in KNOWN_LEGACY:
-        target = KNOWN_LEGACY[aid]
-        note = f"migrate to `{target}`" if target else "no canonical Registry ID yet (pending Main)"
+    if aid not in registry_ids:
         for f, ln in sorted(locs):
-            warns.append(f"{f}:{ln}: action id `{aid}` — {note}")
-        continue
-    for f, ln in sorted(locs):
-        fails.append(f"{f}:{ln}: action id `{aid}` not in PPB Action Registry")
+            fails.append(f"{f}:{ln}: action id `{aid}` not in PPB Action Registry")
 
-for w in warns:
-    print("WARN " + w)
 if fails:
     print("ACTION ID CONSISTENCY FAIL:")
     for fl in fails:
@@ -131,6 +93,6 @@ if fails:
     print(f"checked {len(found)} action ids, {len(fails)} locations unknown")
     sys.exit(1)
 else:
-    print(f"action ids OK: {len(found)} used, {len(warns)} legacy (WARN), all resolved in PPB Action Registry")
+    print(f"action ids OK: {len(found)} used, all in PPB Action Registry")
     sys.exit(0)
 PYEOF
