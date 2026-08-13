@@ -378,7 +378,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/config/raw — raw PMP config YAML. */
+        /**
+         * GET /api/v1/admin/config/raw — raw PMP config YAML (plain text).
+         * @description Contract: the Panel consumer reads the raw YAML as a `text/plain` string
+         *     (`fetchConfigRaw(): Promise<string>`), not a JSON envelope.
+         */
         get: operations["admin_config_raw_get"];
         put?: never;
         post?: never;
@@ -714,7 +718,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/logs — recent PMP log history. */
+        /** GET /api/v1/admin/logs — recent PMP log history, structured + paginated. */
         get: operations["admin_logs_get"];
         put?: never;
         post?: never;
@@ -2377,10 +2381,6 @@ export interface components {
             key: string;
             label: string;
         };
-        /** @description Typed raw-config response `{ content }`. */
-        ConfigRawResponse: {
-            content: string;
-        };
         /** @description Typed rollback response `{ ok, restored, health }`. */
         ConfigRollbackResponse: {
             health: unknown;
@@ -2446,6 +2446,8 @@ export interface components {
         };
         CreateGroupBody: {
             description?: string;
+            /** @description Create as the (single) default group — clears any existing default (§23 #4). */
+            is_default?: boolean | null;
             name: string;
         };
         CreateJobBody: {
@@ -2567,8 +2569,38 @@ export interface components {
             /** Format: int64 */
             ttl_secs?: number | null;
         };
+        /**
+         * @description Structured log entry (contract §23 #3 / Panel §18.11).
+         *
+         *     PMP is the logs source of truth (§13); PPB does not hard-code PMP's internal
+         *     payload — each raw line is best-effort structured into this stable shape.
+         *     `service` is `"pmp"` for entries sourced from `logs.history`.
+         */
+        LogEntry: {
+            command_id?: string | null;
+            error_code?: string | null;
+            event?: string | null;
+            level: string;
+            log_id: string;
+            message: string;
+            request_id?: string | null;
+            room_uuid?: string | null;
+            service: string;
+            timestamp: string;
+            user_id?: string | null;
+        };
         LogInputBody: {
             command: string;
+        };
+        /** @description Paginated structured log list response (§22 `{items, total, page, pageNum}`). */
+        LogListResponse: {
+            items: components["schemas"]["LogEntry"][];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+            /** Format: int64 */
+            total: number;
         };
         /** @description `GET /api/v1/me` session-probe response (S-4). */
         MeResponse: {
@@ -2581,6 +2613,20 @@ export interface components {
             session: unknown;
             user?: unknown;
         };
+        /** @description One delivery row `{event_id, type, created_at, delivered}`. */
+        NotificationDeliveryItem: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            delivered: number;
+            /** Format: uuid */
+            event_id: string;
+            type: string;
+        };
+        /** @description Typed `GET /admin/notifications/delivery` response `{items}`. */
+        NotificationDeliveryResponse: {
+            items: components["schemas"]["NotificationDeliveryItem"][];
+        };
         /** @description Inbox response (§22 `{items, total, page, pageNum, unread}`). */
         NotificationInboxResponse: {
             items: components["schemas"]["AppNotificationWire"][];
@@ -2592,6 +2638,14 @@ export interface components {
             total: number;
             /** Format: int64 */
             unread: number;
+        };
+        /** @description Typed `POST /admin/notifications/send` response `{event_id, recipients, push}`. */
+        NotificationSendResponse: {
+            /** Format: uuid */
+            event_id: string;
+            push: components["schemas"]["PushSummary"];
+            /** Format: int64 */
+            recipients: number;
         };
         /** @description Standard paginated response `{items, total, page, pageNum}`. */
         PaginationResponse: {
@@ -2645,6 +2699,14 @@ export interface components {
             device_id: string;
             platform?: string;
             subscription: components["schemas"]["SubscriptionWire"];
+        };
+        PushSummary: {
+            /** Format: int32 */
+            delivered: number;
+            /** Format: int32 */
+            failed: number;
+            /** Format: int32 */
+            not_configured: number;
         };
         ReauthRequest: {
             client_type?: string | null;
@@ -3644,7 +3706,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigRawResponse"];
+                    "text/plain": string;
                 };
             };
             /** @description permission denied */
@@ -4346,20 +4408,27 @@ export interface operations {
     };
     admin_logs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 1-based page index */
+                page?: number | null;
+                /** @description page size (1..=100) */
+                pageNum?: number | null;
+                /** @description raw PMP history window (max 2000) */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description log history */
+            /** @description log history (paginated) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LogListResponse"];
                 };
             };
             /** @description permission denied */
@@ -4483,7 +4552,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationDeliveryResponse"];
                 };
             };
             /** @description permission denied */
@@ -4516,7 +4585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationSendResponse"];
                 };
             };
             /** @description permission denied */

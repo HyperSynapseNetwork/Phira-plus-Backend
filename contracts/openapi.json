@@ -871,15 +871,16 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/config/raw — raw PMP config YAML.",
+        "summary": "GET /api/v1/admin/config/raw — raw PMP config YAML (plain text).",
+        "description": "Contract: the Panel consumer reads the raw YAML as a `text/plain` string\n(`fetchConfigRaw(): Promise<string>`), not a JSON envelope.",
         "operationId": "admin_config_raw_get",
         "responses": {
           "200": {
             "description": "raw config YAML",
             "content": {
-              "application/json": {
+              "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigRawResponse"
+                  "type": "string"
                 }
               }
             }
@@ -1733,14 +1734,52 @@
         "tags": [
           "admin"
         ],
-        "summary": "GET /api/v1/admin/logs — recent PMP log history.",
+        "summary": "GET /api/v1/admin/logs — recent PMP log history, structured + paginated.",
         "operationId": "admin_logs_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page index",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "pageNum",
+            "in": "query",
+            "description": "page size (1..=100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "raw PMP history window (max 2000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "log history",
+            "description": "log history (paginated)",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LogListResponse"
+                }
               }
             }
           },
@@ -1879,7 +1918,9 @@
             "description": "delivery summary",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDeliveryResponse"
+                }
               }
             }
           },
@@ -1918,7 +1959,9 @@
             "description": "event created + push summary",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSendResponse"
+                }
               }
             }
           },
@@ -5635,18 +5678,6 @@
           }
         }
       },
-      "ConfigRawResponse": {
-        "type": "object",
-        "description": "Typed raw-config response `{ content }`.",
-        "required": [
-          "content"
-        ],
-        "properties": {
-          "content": {
-            "type": "string"
-          }
-        }
-      },
       "ConfigRollbackResponse": {
         "type": "object",
         "description": "Typed rollback response `{ ok, restored, health }`.",
@@ -5831,6 +5862,11 @@
         "properties": {
           "description": {
             "type": "string"
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "Create as the (single) default group — clears any existing default (§23 #4).",
+            "nullable": true
           },
           "name": {
             "type": "string"
@@ -6207,6 +6243,58 @@
           }
         }
       },
+      "LogEntry": {
+        "type": "object",
+        "description": "Structured log entry (contract §23 #3 / Panel §18.11).\n\nPMP is the logs source of truth (§13); PPB does not hard-code PMP's internal\npayload — each raw line is best-effort structured into this stable shape.\n`service` is `\"pmp\"` for entries sourced from `logs.history`.",
+        "required": [
+          "log_id",
+          "timestamp",
+          "service",
+          "level",
+          "message"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "error_code": {
+            "type": "string",
+            "nullable": true
+          },
+          "event": {
+            "type": "string",
+            "nullable": true
+          },
+          "level": {
+            "type": "string"
+          },
+          "log_id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "room_uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "service": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "LogInputBody": {
         "type": "object",
         "required": [
@@ -6215,6 +6303,36 @@
         "properties": {
           "command": {
             "type": "string"
+          }
+        }
+      },
+      "LogListResponse": {
+        "type": "object",
+        "description": "Paginated structured log list response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -6257,6 +6375,48 @@
           }
         }
       },
+      "NotificationDeliveryItem": {
+        "type": "object",
+        "description": "One delivery row `{event_id, type, created_at, delivered}`.",
+        "required": [
+          "event_id",
+          "type",
+          "created_at",
+          "delivered"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "delivered": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "NotificationDeliveryResponse": {
+        "type": "object",
+        "description": "Typed `GET /admin/notifications/delivery` response `{items}`.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationDeliveryItem"
+            }
+          }
+        }
+      },
       "NotificationInboxResponse": {
         "type": "object",
         "description": "Inbox response (§22 `{items, total, page, pageNum, unread}`).",
@@ -6289,6 +6449,29 @@
           "unread": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "NotificationSendResponse": {
+        "type": "object",
+        "description": "Typed `POST /admin/notifications/send` response `{event_id, recipients, push}`.",
+        "required": [
+          "event_id",
+          "recipients",
+          "push"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "push": {
+            "$ref": "#/components/schemas/PushSummary"
+          },
+          "recipients": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },
@@ -6469,6 +6652,31 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/SubscriptionWire"
+          }
+        }
+      },
+      "PushSummary": {
+        "type": "object",
+        "required": [
+          "delivered",
+          "not_configured",
+          "failed"
+        ],
+        "properties": {
+          "delivered": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "not_configured": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
