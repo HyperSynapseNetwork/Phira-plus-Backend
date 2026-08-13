@@ -10,10 +10,16 @@
 #
 # 用法：
 #   curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | sudo bash
-#   或：
-#   sudo PPB_VERSION=0.1.0 PPB_NONINTERACTIVE=1 \
-#     PPB_API_URL=https://api.example.com \
-#     PPB_DATABASE_URL=postgres://... bash deploy/install.sh
+#
+# 需要传入环境变量时（如 PPB_DATABASE_URL），注意：`curl ... | sudo bash` 会因 sudo 的
+# env_reset 丢掉 PPB_* 环境变量（只传给 curl，不传给 sudo bash）。推荐两种正确姿势：
+#   1) sudo -E 保留环境：
+#        PPB_DATABASE_URL=postgres://... sudo -E bash -c \
+#          'curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | bash'
+#   2) 先落盘再用 sudo env 显式传入：
+#        curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh -o /tmp/install.sh
+#        sudo env PPB_DATABASE_URL=postgres://... PPB_NONINTERACTIVE=1 bash /tmp/install.sh
+#   （也可：curl -fsSL ... | sudo env PPB_DATABASE_URL=postgres://... bash）
 #
 # 环境变量：
 #   PPB_VERSION        指定版本（默认取最新 release）

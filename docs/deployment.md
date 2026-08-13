@@ -26,13 +26,21 @@ sudo PPB_VERSION=0.1.0 PPB_NONINTERACTIVE=1 \
   PPB_DATABASE_URL=postgres://... bash deploy/install.sh
 ```
 
-流程：前置检查（curl/sha256sum/systemctl/useradd/PostgreSQL 16+，仅 Linux x86_64）→ 下载
+> [!WARNING]
+> 需要传环境变量时不要用 `PPB_DATABASE_URL=... curl ... | sudo bash`：`sudo` 默认
+> `env_reset`，变量只到 `curl`，不会传给 `sudo bash`。改用 `sudo -E bash -c 'curl ... | bash'`
+> 或先 `curl -o /tmp/install.sh ...` 再 `sudo env PPB_DATABASE_URL=... bash /tmp/install.sh`。
+
+流程：前置检查（curl/sha256sum/systemctl/openssl，仅 Linux x86_64 + root）→ 下载
 `ppb-server` / `ppctl` / `SHA256SUMS` 并校验 sha256 → 安装到 `/usr/local/bin`（0755）→ 创建
-`ppb` 系统用户与 `/opt/ppb`、`/etc/ppb`、`/var/run/pmp` → `ppctl init --non-interactive` 生成
-`ppb.toml` + `ppb.env`（secrets 自动生成）→ 追加 `PPB_RUNTIME_CONFIG=/etc/ppb/ppb.toml` →
-数据库二选一（本地 PostgreSQL 自动建 `ppb` role+库，口令 `openssl rand` 生成；或外部
-`PPB_DATABASE_URL`）→ 安装 systemd unit + `enable --now` → 轮询 `/healthz` 直到
-`{"status":"ok"}`。
+`/opt/ppb`、`/etc/ppb`、`/var/run/pmp`（root 运行，不建 `ppb` 系统用户）→
+`ppctl init --non-interactive` 生成 `ppb.toml` + `ppb.env`（secrets 自动生成）→ 追加
+`PPB_RUNTIME_CONFIG=/etc/ppb/ppb.toml` → 数据库三选一：本地 PostgreSQL 分步检测（服务/客户端
+存在 → 依次试 `sudo -u postgres psql`、`su postgres -c psql`、`psql -U postgres -h 127.0.0.1`
+连接 → 版本 <16 报「检测到 PostgreSQL X（<16），PPB 需要 16+，请升级」，否则自动建 `ppb`
+role+库，口令 `openssl rand` 生成）；或外部 `PPB_DATABASE_URL`；本地不可用时交互模式提示输入
+完整 `postgres://` 连接串、非交互模式报错要求 `PPB_DATABASE_URL`）→ 安装 systemd unit +
+`enable --now` → 轮询 `/healthz` 直到 `{"status":"ok"}`。
 
 要点：
 
@@ -66,7 +74,7 @@ docker compose up -d
 模板：[`deploy/systemd/ppb.service`](../deploy/systemd/ppb.service) · [`deploy/systemd/ppb.env.example`](../deploy/systemd/ppb.env.example)
 
 ```bash
-sudo install -d -o ppb -g ppb /opt/ppb /etc/ppb /var/run/pmp
+sudo install -d /opt/ppb /etc/ppb /var/run/pmp
 sudo install -m 0644 config/example.toml /etc/ppb/ppb.toml
 sudo install -m 0600 deploy/systemd/ppb.env.example /etc/ppb/ppb.env   # 填入真实值
 sudo cp target/x86_64-unknown-linux-musl/release/ppb-server /usr/local/bin/ppb-server
@@ -76,7 +84,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now ppb
 
 要点：
 
-- unit 以 `ppb` 用户运行，`ProtectSystem=strict` + `ReadWritePaths=/var/run/pmp`。
+- unit 以 root 运行，`ProtectSystem=full`（仅锁 `/usr` `/boot` `/etc`，`/opt` 与 `/run` 可写）。
 - 环境变量经 `EnvironmentFile=/etc/ppb/ppb.env` 注入，勿把密码写进 unit。
 - **配置路径**：unit 的 `ExecStart` 带 `--config /etc/ppb/ppb.toml`，但当前二进制解析的是 `PPB_RUNTIME_CONFIG` 环境变量 / `config/ppb.toml`（见 [getting-started.md](./getting-started.md) 的 NOTE）。请在 `ppb.env` 中显式设置 `PPB_RUNTIME_CONFIG=/etc/ppb/ppb.toml`，否则会回退到内置默认值。
 

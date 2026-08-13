@@ -33,6 +33,21 @@ sudo PPB_NONINTERACTIVE=1 \
   bash deploy/install.sh
 ```
 
+> [!WARNING]
+> 需要传入环境变量时不要用 `PPB_DATABASE_URL=... curl ... | sudo bash`：`sudo` 默认
+> `env_reset`，变量只传给 `curl`，不会传给 `sudo bash`，脚本会报「未提供 PPB_DATABASE_URL」。
+> 改用下列任一种：
+>
+> ```bash
+> # 1) sudo -E 保留当前环境，再在 root 下执行管道
+> PPB_DATABASE_URL=postgres://... sudo -E bash -c \
+>   'curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh | bash'
+>
+> # 2) 先落盘，再 sudo env 显式传入
+> curl -fsSL https://raw.githubusercontent.com/HyperSynapseNetwork/Phira-plus-Backend/main/deploy/install.sh -o /tmp/install.sh
+> sudo env PPB_DATABASE_URL=postgres://... PPB_NONINTERACTIVE=1 bash /tmp/install.sh
+> ```
+
 脚本结尾会打印首次 Root 一次性口令查看方式、反代模板位置与 `ppctl root reset-password` 用法。
 
 ## 方式 B：Docker Compose
@@ -54,8 +69,8 @@ docker compose up -d
 ## 方式 C：Native Linux + systemd（手动）
 
 ```bash
-# 1) 准备目录与配置
-sudo install -d -o ppb -g ppb /opt/ppb /etc/ppb /var/run/pmp
+# 1) 准备目录与配置（root 运行，无需 ppb 用户）
+sudo install -d /opt/ppb /etc/ppb /var/run/pmp
 sudo install -m 0644 config/example.toml /etc/ppb/ppb.toml
 # 编辑 /etc/ppb/ppb.toml：listen_addr、public_url、pmp.openuds_path、phira.base_url 等
 
