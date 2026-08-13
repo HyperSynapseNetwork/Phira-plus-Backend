@@ -288,8 +288,24 @@ impl OpenUdsClient {
 
     // ── Public API ─────────────────────────────────────────────
 
-    /// Send a command and await the typed response envelope.
+    /// Send a command and await the typed response envelope using the default
+    /// `request_timeout_ms` budget.
     pub async fn command(&self, command: &str, params: Value) -> Result<Value, OpenUdsError> {
+        self.command_with_timeout(command, params, None).await
+    }
+
+    /// Send a command with an explicit timeout override.
+    ///
+    /// * `None` — use the configured `request_timeout_ms` (default 10s).
+    /// * `Some(0)` — no timeout (long-running commands such as `pmp.update.*`,
+    ///   `cli.execute` and `persist.*`; the caller is responsible for bounding).
+    /// * `Some(ms)` — a per-command budget in milliseconds.
+    pub async fn command_with_timeout(
+        &self,
+        command: &str,
+        params: Value,
+        timeout_ms: Option<u64>,
+    ) -> Result<Value, OpenUdsError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
         let frame = json!({
             "type": "command",
@@ -316,14 +332,31 @@ impl OpenUdsClient {
             }
         }
 
-        let timeout = Duration::from_millis(self.config.request_timeout_ms);
-        let resp = tokio::time::timeout(timeout, rx)
-            .await
-            .map_err(|_| {
-                self.pending.lock().unwrap().remove(&id);
-                OpenUdsError::Timeout(self.config.request_timeout_ms)
-            })?
-            .map_err(|_| OpenUdsError::Unavailable("openuds connection closed".into()))?;
+        let resp = match timeout_ms {
+            // 0 = unlimited (no client-side timeout).
+            Some(0) => rx
+                .await
+                .map_err(|_| OpenUdsError::Unavailable("openuds connection closed".into()))?,
+            Some(ms) => {
+                tokio::time::timeout(Duration::from_millis(ms), rx)
+                    .await
+                    .map_err(|_| {
+                        self.pending.lock().unwrap().remove(&id);
+                        OpenUdsError::Timeout(ms)
+                    })?
+                    .map_err(|_| OpenUdsError::Unavailable("openuds connection closed".into()))?
+            }
+            None => {
+                let default_ms = self.config.request_timeout_ms;
+                tokio::time::timeout(Duration::from_millis(default_ms), rx)
+                    .await
+                    .map_err(|_| {
+                        self.pending.lock().unwrap().remove(&id);
+                        OpenUdsError::Timeout(default_ms)
+                    })?
+                    .map_err(|_| OpenUdsError::Unavailable("openuds connection closed".into()))?
+            }
+        };
 
         if resp.ok {
             Ok(resp.data.unwrap_or(Value::Null))

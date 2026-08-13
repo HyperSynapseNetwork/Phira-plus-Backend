@@ -26,7 +26,11 @@ pub async fn fetch_batches(
     if let Some(p) = player_id {
         params["player_id"] = json!(p);
     }
-    openuds.command(&format!("persist.{stream}"), params).await
+    // Persist queries page large batches (up to MAX_PAGE) and can exceed the
+    // 10s default; give them a generous per-command budget.
+    openuds
+        .command_with_timeout(&format!("persist.{stream}"), params, Some(60_000))
+        .await
 }
 
 /// Normalize the persist response to a `Vec<Value>` of batch objects

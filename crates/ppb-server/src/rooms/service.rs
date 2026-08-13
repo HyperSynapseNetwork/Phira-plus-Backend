@@ -24,6 +24,16 @@ impl RoomService {
         self.openuds.command(command, params).await
     }
 
+    /// Command with a per-command timeout override (`Some(0)` = unlimited).
+    async fn cmd_timeout(
+        &self,
+        command: &str,
+        params: Value,
+        timeout_ms: Option<u64>,
+    ) -> Result<Value, OpenUdsError> {
+        self.openuds.command_with_timeout(command, params, timeout_ms).await
+    }
+
     // ── Room lifecycle ───────────────────────────────────────────
 
     pub async fn create(
@@ -127,7 +137,8 @@ impl RoomService {
     }
 
     pub async fn history(&self, room_id: &str) -> Result<Value, OpenUdsError> {
-        self.cmd("room.history", json!({ "room_id": room_id })).await
+        // room.history aggregates rounds + scores and can exceed the 10s default.
+        self.cmd_timeout("room.history", json!({ "room_id": room_id }), Some(60_000)).await
     }
 
     pub async fn chat_history(&self, room_id: &str, limit: Option<u64>) -> Result<Value, OpenUdsError> {
