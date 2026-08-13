@@ -120,13 +120,13 @@ fn apply_log_filters(entries: Vec<LogEntry>, params: &LogParams) -> Vec<LogEntry
     let log_id = params.log_id.as_deref().filter(|s| !s.is_empty());
     entries
         .into_iter()
-        .filter(|e| level.map_or(true, |lvl| e.level.eq_ignore_ascii_case(lvl)))
+        .filter(|e| level.is_none_or(|lvl| e.level.eq_ignore_ascii_case(lvl)))
         .filter(|e| {
-            search.map_or(true, |q| {
+            search.is_none_or(|q| {
                 e.message.to_lowercase().contains(&q.to_lowercase())
             })
         })
-        .filter(|e| log_id.map_or(true, |id| e.log_id.eq_ignore_ascii_case(id)))
+        .filter(|e| log_id.is_none_or(|id| e.log_id.eq_ignore_ascii_case(id)))
         .collect()
 }
 
