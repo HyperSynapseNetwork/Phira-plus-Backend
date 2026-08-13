@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use super::Job;
 use crate::app::AppState;
-use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
@@ -29,6 +28,9 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// POST /api/v1/admin/jobs/{job_id}/retry — re-queue a failed/cancelled job.
+///
+/// Re-runs the exact same permission + reauth gate as Create (per the job
+/// type's Policy Registry entry) — never a blanket `server:update`.
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs/{job_id}/retry",
@@ -36,15 +38,27 @@ pub fn routes() -> Router<Arc<AppState>> {
     responses(
         (status = 200, description = "job re-queued", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
+        (status = 409, description = "job not retryable", body = ErrorEnvelope),
     ),
     tag = "admin"
 )]
 pub async fn retry_job(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(job_id): Path<Uuid>,
 ) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "server:update").await?;
+    let descriptor = state.jobs.descriptor(job_id).await?;
+    state
+        .permissions
+        .require(&state.db, &auth, descriptor.permission)
+        .await?;
+    if let Some(risk) = descriptor.reauth {
+        check_reauth_header(&state, &auth, &headers, risk)?;
+    }
+    if !descriptor.retryable {
+        return Err(ApiError::new(ErrorCode::Conflict, "job type is not retryable"));
+    }
     state.jobs.retry(job_id).await?;
     Ok(Json(json!({ "ok": true, "job_id": job_id })))
 }
@@ -185,11 +199,13 @@ pub async fn list(
 pub struct CreateJobBody {
     #[serde(rename = "type")]
     pub job_type: String,
-    #[serde(default)]
-    pub args: Value,
 }
 
 /// POST /api/v1/admin/jobs — start a new job.
+///
+/// The Job Policy Registry is the single source of permission / reauth /
+/// executor. Clients supply only a job type — never CLI text (`args.command`
+/// is no longer accepted).
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs",
@@ -207,20 +223,18 @@ pub async fn create(
     headers: HeaderMap,
     Json(body): Json<CreateJobBody>,
 ) -> Result<Json<Value>, ApiError> {
-    // Job types map to permissions.
-    let permission = match body.job_type.as_str() {
-        "pmp.update.check" | "pmp.update.apply" => "server:update",
-        "ppf.build" => "server:manage",
-        "backup" => "server:manage",
-        _ => return Err(ApiError::validation("unknown job type")),
-    };
-    state.permissions.require(&state.db, &auth, permission).await?;
-    // §23 #10 Sensitive Action Policy: pmp.update.apply always requires
-    // critical reauth (same semantics as the Action Registry entry).
-    if body.job_type == "pmp.update.apply" {
-        check_reauth_header(&state, &auth, &headers, ReauthRisk::Critical)?;
+    let descriptor = state
+        .job_registry
+        .get(&body.job_type)
+        .ok_or_else(|| ApiError::validation("unknown job type"))?;
+    state
+        .permissions
+        .require(&state.db, &auth, descriptor.permission)
+        .await?;
+    if let Some(risk) = descriptor.reauth {
+        check_reauth_header(&state, &auth, &headers, risk)?;
     }
-    let job = state.jobs.start(&body.job_type, body.args).await?;
+    let job = state.jobs.start(&body.job_type).await?;
     Ok(Json(json!({ "job": job })))
 }
 
@@ -257,7 +271,10 @@ pub async fn get_job(
     Ok(Json(job))
 }
 
-/// POST /api/v1/admin/jobs/{job_id}/cancel — cancel a running job.
+/// POST /api/v1/admin/jobs/{job_id}/cancel — cancel a queued job.
+///
+/// Permission is checked per job type (not `dashboard:view`). A job that has
+/// already been dispatched cannot be cancelled (returns 409).
 #[utoipa::path(
     post,
     path = "/api/v1/admin/jobs/{job_id}/cancel",
@@ -265,6 +282,7 @@ pub async fn get_job(
     responses(
         (status = 200, description = "cancelled", body = serde_json::Value),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
+        (status = 409, description = "cannot cancel dispatched/finished job", body = ErrorEnvelope),
     ),
     tag = "admin"
 )]
@@ -273,7 +291,11 @@ pub async fn cancel(
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<Uuid>,
 ) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "dashboard:view").await?;
+    let descriptor = state.jobs.descriptor(job_id).await?;
+    state
+        .permissions
+        .require(&state.db, &auth, descriptor.permission)
+        .await?;
     state.jobs.cancel(job_id).await?;
     Ok(Json(json!({ "cancelled": job_id })))
 }

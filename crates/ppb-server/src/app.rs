@@ -26,6 +26,7 @@ use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::CommandBroker;
 use crate::config::deployment::Secrets;
 use crate::config::RuntimeConfig;
+use crate::jobs::registry::JobRegistry;
 use crate::jobs::runner::JobRunner;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
@@ -67,6 +68,7 @@ pub struct AppState {
     pub rooms: RoomService,
     pub player: PlayerService,
     pub jobs: JobRunner,
+    pub job_registry: Arc<JobRegistry>,
     pub join_intents: JoinIntentStore,
     pub push: Arc<PushService>,
     pub phira_gateway: Arc<PhiraGateway>,
@@ -155,7 +157,13 @@ pub async fn build_state(
     let metrics = crate::metrics::Metrics::new(); // returns Arc<Metrics>
     let rooms = RoomService::new(Arc::clone(&openuds));
     let player = PlayerService::new(Arc::clone(&openuds));
-    let jobs = JobRunner::new(db.clone(), events.clone(), Arc::clone(&openuds));
+    let job_registry = Arc::new(JobRegistry::new());
+    let jobs = JobRunner::new(
+        db.clone(),
+        events.clone(),
+        Arc::clone(&openuds),
+        Arc::clone(&job_registry),
+    );
     let join_intents = JoinIntentStore::new();
     let notifications_config = runtime.notifications.clone();
     let push = Arc::new(PushService::new(&notifications_config, credential_cipher.clone()));
@@ -187,6 +195,7 @@ pub async fn build_state(
         rooms,
         player,
         jobs,
+        job_registry,
         join_intents,
         push,
         phira_gateway,
@@ -938,7 +947,13 @@ impl AppState {
         ));
         let rooms = RoomService::new(Arc::clone(&openuds));
         let player = PlayerService::new(Arc::clone(&openuds));
-        let jobs = JobRunner::new(None, EventBus::new(16, 8), Arc::clone(&openuds));
+        let job_registry = Arc::new(JobRegistry::new());
+        let jobs = JobRunner::new(
+            None,
+            EventBus::new(16, 8),
+            Arc::clone(&openuds),
+            Arc::clone(&job_registry),
+        );
         let join_intents = JoinIntentStore::new();
         let push = Arc::new(PushService::new(
             &config.notifications,
@@ -973,6 +988,7 @@ impl AppState {
             rooms,
             player,
             jobs,
+            job_registry,
             join_intents,
             push,
             phira_gateway,

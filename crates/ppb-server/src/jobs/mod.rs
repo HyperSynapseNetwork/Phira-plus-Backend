@@ -1,5 +1,6 @@
 //! Long-running Job domain (design §9.4). Model + repo + runner + routes.
 
+pub mod registry;
 pub mod routes;
 pub mod runner;
 
@@ -28,12 +29,14 @@ pub struct Job {
 pub async fn create(
     db: &sqlx::PgPool,
     job_type: &str,
+    resource_key: &str,
 ) -> Result<Job, ApiError> {
     sqlx::query_as::<_, Job>(
-        "INSERT INTO jobs (type) VALUES ($1)
+        "INSERT INTO jobs (type, resource_key) VALUES ($1, $2)
          RETURNING id, type, state, progress, stage, created_at, started_at, finished_at, error",
     )
     .bind(job_type)
+    .bind(resource_key)
     .fetch_one(db)
     .await
     .map_err(db_err)
@@ -52,7 +55,7 @@ pub async fn update_state(
          SET state = $2, stage = $3, progress = COALESCE($4, progress),
              error = $5,
              started_at = CASE WHEN $2 = 'running' AND started_at IS NULL THEN now() ELSE started_at END,
-             finished_at = CASE WHEN $2 IN ('succeeded','failed','cancelled') THEN now() ELSE finished_at END
+             finished_at = CASE WHEN $2 IN ('succeeded','failed','cancelled','not_implemented') THEN now() ELSE finished_at END
          WHERE id = $1",
     )
     .bind(id)
