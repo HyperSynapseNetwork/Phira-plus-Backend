@@ -764,8 +764,8 @@ fn resolve_page(page: Option<i64>, page_num: Option<i64>) -> Result<(i64, i64), 
     Ok((page, page_num))
 }
 
-/// Slice the in-memory room list to the requested page, applying optional
-/// `is_self` enrichment to each item.
+/// Slice the in-memory room list to the requested page, applying contract field
+/// normalization and optional `is_self` enrichment to each item.
 fn paginate_room_items(
     rooms: Vec<Value>,
     page: i64,
@@ -775,9 +775,63 @@ fn paginate_room_items(
     let start = ((page - 1) * page_num) as usize;
     let mut items: Vec<Value> = rooms.into_iter().skip(start).take(page_num as usize).collect();
     for room in &mut items {
+        normalize_room(room);
         enrich_room_is_self(room, my_phira);
     }
     items
+}
+
+/// Map a PMP room object onto the `AdminRoom` wire contract (idempotent):
+/// `room_id`→`room_uuid`, `players`/`player_count`/`users`→`members`,
+/// `monitor_count`/`monitors`→`spectators`, `host.user_id`/`host.id`→`host_id`.
+/// Any unmapped PMP field is preserved with its original name.
+fn normalize_room(room: &mut Value) {
+    let Value::Object(map) = room else { return };
+
+    if !map.contains_key("room_uuid") {
+        if let Some(room_id) = map.get("room_id").cloned() {
+            map.insert("room_uuid".to_string(), room_id);
+        }
+    }
+
+    if !map.contains_key("members") {
+        let members = map
+            .get("players")
+            .and_then(count_value)
+            .or_else(|| map.get("player_count").and_then(count_value))
+            .or_else(|| map.get("users").and_then(count_value));
+        if let Some(members) = members {
+            map.insert("members".to_string(), json!(members));
+        }
+    }
+
+    if !map.contains_key("spectators") {
+        let spectators = map
+            .get("monitor_count")
+            .and_then(count_value)
+            .or_else(|| map.get("monitors").and_then(count_value));
+        if let Some(spectators) = spectators {
+            map.insert("spectators".to_string(), json!(spectators));
+        }
+    }
+
+    if !map.contains_key("host_id") {
+        if let Some(host) = map.get("host") {
+            let host_id = host.get("user_id").or_else(|| host.get("id")).cloned();
+            if let Some(host_id) = host_id {
+                map.insert("host_id".to_string(), host_id);
+            }
+        }
+    }
+}
+
+/// A member/spectator count that PMP may send as a number or as an array.
+fn count_value(value: &Value) -> Option<i64> {
+    match value {
+        Value::Array(arr) => Some(arr.len() as i64),
+        Value::Number(n) => n.as_i64(),
+        _ => None,
+    }
 }
 
 /// Re-verify the caller is the room's real host at execution time.
