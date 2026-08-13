@@ -3,8 +3,6 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use std::time::Duration;
-
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -175,20 +173,14 @@ pub async fn submit_input(
     // Gate 0 A3: raw console requires an elevated reauth context.
     check_reauth_header(&state, &auth, &headers, ReauthRisk::High)?;
 
-    let (result, result_status, error_code) = match tokio::time::timeout(
-        Duration::from_secs(30),
-        crate::pmp::cli::cli_execute(&state.openuds, &body.command),
-    )
-    .await
-    {
-        Ok(Ok(v)) => (Ok(v), "succeeded", String::new()),
-        Ok(Err(e)) => (Err(ApiError::from(e)), "failed", "cli_execute_error".to_string()),
-        Err(_) => (
-            Err(ApiError::new(ErrorCode::PmpUnavailable, "command timed out")),
-            "timeout",
-            "timeout".to_string(),
-        ),
-    };
+    // No outer timeout: `cli.execute` is unbounded at the OpenUDS layer. A PPB
+    // 30s timeout would only stop waiting while PMP keeps running in the
+    // background — a fake failure. Wait for PMP's real terminal result.
+    let (result, result_status, error_code) =
+        match crate::pmp::cli::cli_execute(&state.openuds, &body.command).await {
+            Ok(v) => (Ok(v), "succeeded", String::new()),
+            Err(e) => (Err(ApiError::from(e)), "failed", "cli_execute_error".to_string()),
+        };
     if let Some(db) = &state.db {
         let _ = crate::audit::service::record_principal(
             db,
