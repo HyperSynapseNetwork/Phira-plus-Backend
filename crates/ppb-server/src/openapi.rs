@@ -106,6 +106,14 @@ pub struct ReplayDetail {
     pub judges: serde_json::Value,
 }
 
+/// Resolved share token `{round_uuid, player_phira_id}` (S-3).
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolveShareResponse {
+    pub round_uuid: String,
+    pub player_phira_id: i64,
+}
+
 /// Room action request `{action, args}`.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -278,6 +286,7 @@ pub struct RoomActionRequest {
             PaginationResponse,
             ReplayManifest,
             ReplayDetail,
+            ResolveShareResponse,
             RoomActionRequest,
             PhiraLoginRequest,
             ReauthRequest,

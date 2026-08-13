@@ -25,7 +25,7 @@ use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorEnvelope};
 #[allow(unused_imports)]
-use crate::openapi::{ReplayDetail, ReplayManifest};
+use crate::openapi::{ReplayDetail, ReplayManifest, ResolveShareResponse};
 use crate::middleware::auth::OptionalAuthPrincipal;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -117,7 +117,7 @@ async fn list_replays(
     path = "/api/v1/replays/share/{token}",
     operation_id = "replays_share_token_get",
     responses(
-        (status = 200, description = "resolved replay identity", body = serde_json::Value),
+        (status = 200, description = "resolved replay identity", body = ResolveShareResponse),
         (status = 404, description = "invalid/expired/revoked token", body = ErrorEnvelope),
     ),
     tag = "replays"
@@ -125,10 +125,10 @@ async fn list_replays(
 pub async fn resolve_share(
     State(state): State<Arc<AppState>>,
     Path(token): Path<String>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ResolveShareResponse>, ApiError> {
     let db = state.require_db()?;
     let (round, player) = super::resolve_share_token(db, &token).await?;
-    Ok(Json(json!({ "round_uuid": round, "player_phira_id": player })))
+    Ok(Json(ResolveShareResponse { round_uuid: round, player_phira_id: player }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,7 +157,7 @@ pub async fn detail(
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
     Query(params): Query<ReplayDetailParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ReplayDetail>, ApiError> {
     let db = state.require_db()?;
     let Some(player) = resolve_replay_access(
         db,
@@ -178,13 +178,13 @@ pub async fn detail(
     let judges = persist::fetch_batches(openuds, "judges", 0, 1, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(json!({
-        "round_uuid": round_uuid,
-        "player_phira_id": player,
-        "visibility": visibility,
-        "touches": persist::summarize_batches(&persist::batches_of(&touches)),
-        "judges": persist::summarize_batches(&persist::batches_of(&judges)),
-    })))
+    Ok(Json(ReplayDetail {
+        round_uuid,
+        player_phira_id: player,
+        visibility,
+        touches: persist::summarize_batches(&persist::batches_of(&touches)),
+        judges: persist::summarize_batches(&persist::batches_of(&judges)),
+    }))
 }
 
 /// GET /api/v1/replays/{round_uuid}/manifest?player_id=... — frame counts /
@@ -204,7 +204,7 @@ pub async fn manifest(
     State(state): State<Arc<AppState>>,
     Path(round_uuid): Path<String>,
     Query(params): Query<ReplayDetailParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ReplayManifest>, ApiError> {
     let db = state.require_db()?;
     let Some(player) = resolve_replay_access(
         db,
@@ -224,12 +224,12 @@ pub async fn manifest(
     let judges = persist::fetch_batches(openuds, "judges", 0, persist::MAX_PAGE, Some(&round_uuid), Some(player as i32))
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(json!({
-        "round_uuid": round_uuid,
-        "player_phira_id": player,
-        "touches": persist::summarize_batches(&persist::batches_of(&touches)),
-        "judges": persist::summarize_batches(&persist::batches_of(&judges)),
-    })))
+    Ok(Json(ReplayManifest {
+        round_uuid,
+        player_phira_id: player,
+        touches: persist::summarize_batches(&persist::batches_of(&touches)),
+        judges: persist::summarize_batches(&persist::batches_of(&judges)),
+    }))
 }
 
 const VISIBILITIES: &[&str] = &["inherit", "public", "friends", "private", "unlisted", "custom"];
