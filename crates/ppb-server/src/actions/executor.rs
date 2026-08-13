@@ -122,12 +122,13 @@ impl _ActionExecutorTrait for PmpActionExecutor {
 
 /// Server-fixed CLI mapping for `Executor::CliExecute` actions. Clients never
 /// supply the command text — only `pmp.cli.execute` (CliRaw) is arbitrary.
+///
+/// `pmp.update.*` is deliberately absent: those long-running updates run only
+/// through the Job API (`POST /admin/jobs`), not the generic Action executor.
+/// `execute_action` rejects them up front; this mapping returns `None` so even
+/// a broker-submitted update can never `cli.execute` directly.
 fn fixed_cli_command(action: &str, args: &Value) -> Option<String> {
     match action {
-        "pmp.update.check" => Some("update check".to_string()),
-        "pmp.update.apply" => Some("update apply".to_string()),
-        "pmp.update.cancel" => Some("update cancel".to_string()),
-        "pmp.update.force" => Some("update force".to_string()),
         "server.connections" => match args.get("enabled").and_then(Value::as_bool) {
             Some(true) => Some("connections on".to_string()),
             Some(false) => Some("connections off".to_string()),
@@ -200,22 +201,6 @@ mod tests {
     #[test]
     fn fixed_cli_commands_are_server_mapped() {
         assert_eq!(
-            fixed_cli_command("pmp.update.apply", &serde_json::json!({})),
-            Some("update apply".to_string())
-        );
-        assert_eq!(
-            fixed_cli_command("pmp.update.check", &serde_json::json!({})),
-            Some("update check".to_string())
-        );
-        assert_eq!(
-            fixed_cli_command("pmp.update.cancel", &serde_json::json!({})),
-            Some("update cancel".to_string())
-        );
-        assert_eq!(
-            fixed_cli_command("pmp.update.force", &serde_json::json!({})),
-            Some("update force".to_string())
-        );
-        assert_eq!(
             fixed_cli_command("server.connections", &serde_json::json!({ "enabled": true })),
             Some("connections on".to_string())
         );
@@ -228,5 +213,14 @@ mod tests {
             Some("connections".to_string())
         );
         assert_eq!(fixed_cli_command("room.kick", &serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn update_actions_have_no_direct_cli_mapping() {
+        // §9.4: `pmp.update.*` runs only through the Job API. There must be no
+        // fixed CLI mapping for the generic Action executor.
+        for id in ["pmp.update.check", "pmp.update.apply", "pmp.update.cancel", "pmp.update.force"] {
+            assert_eq!(fixed_cli_command(id, &serde_json::json!({})), None, "{id} must not cli.execute");
+        }
     }
 }

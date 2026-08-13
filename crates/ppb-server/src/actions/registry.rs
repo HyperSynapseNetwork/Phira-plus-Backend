@@ -77,6 +77,21 @@ pub struct ActionRegistry {
     actions: HashMap<&'static str, &'static ActionDescriptor>,
 }
 
+/// Action IDs that must run through the Job API (`POST /api/v1/admin/jobs`),
+/// never the generic Action executor.
+///
+/// The registry still defines these IDs (Action ID contract §23 #2 — frontends
+/// reference `pmp.update.*`), but executing them via
+/// `/admin/actions/{action_id}/execute` is rejected: long-running updates must
+/// have exactly one execution plane (the Job runner with resource_key/state/
+/// retry/cancel), so a generic `CliExecute` bypass is forbidden.
+pub fn is_job_only_action(id: &str) -> bool {
+    matches!(
+        id,
+        "pmp.update.check" | "pmp.update.apply" | "pmp.update.cancel" | "pmp.update.force"
+    )
+}
+
 impl ActionRegistry {
     pub fn new() -> Self {
         let mut registry = Self::default();

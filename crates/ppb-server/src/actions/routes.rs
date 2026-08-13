@@ -86,6 +86,19 @@ pub async fn execute_action(
         .get(&action_id)
         .ok_or_else(|| ApiError::not_found("action"))?;
 
+    // Stop-ship (§9.4): `pmp.update.*` must go through the Job API — the Job
+    // runner owns resource_key/state/retry/cancel. A generic Action execute
+    // would be a second execution plane that bypasses all of it.
+    if crate::actions::registry::is_job_only_action(action.id) {
+        return Err(ApiError::new(
+            ErrorCode::Conflict,
+            format!(
+                "{} is a long-running update job; use POST /api/v1/admin/jobs",
+                action.id
+            ),
+        ));
+    }
+
     // 1) Authorization (RBAC + ABAC/resource policy, design §8.5):
     //    permission granted  OR  (host_allowed action AND caller is the real host).
     let has_permission = state
