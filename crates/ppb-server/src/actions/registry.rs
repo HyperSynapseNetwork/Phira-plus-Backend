@@ -53,6 +53,9 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("server.config_reload", "config:reload", Executor::OpenUds, Risk::High, true, false, false, "config:pmp", false),
         ActionDescriptor::new("server.roomcreation", "server:manage", Executor::OpenUds, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("server.shutdown", "server:shutdown", Executor::OpenUds, Risk::Critical, true, true, false, "server", false),
+        // §23 #2: connection-acceptance gate (wrapped `cli.execute`, not a
+        // typed OpenUDS command). Absent `enabled` = read current state.
+        ActionDescriptor::new("server.connections", "server:manage", Executor::CliExecute, Risk::High, true, false, false, "server", false),
         // ── PMP CLI / update (design §9.3) ────────────────────────
         // Raw Console requires reauth (same semantics as Automation/Runbook, §22).
         ActionDescriptor::new("pmp.cli.execute", "pmp:cli", Executor::CliRaw, Risk::High, true, true, false, "server", false),
@@ -137,7 +140,7 @@ mod tests {
         for id in [
             "player.ban", "player.unban", "player.kick", "player.ban_ip", "player.unban_ip",
             "room.ban", "room.unban", "room.lock",
-            "server.config_reload", "server.roomcreation", "server.shutdown",
+            "server.config_reload", "server.roomcreation", "server.shutdown", "server.connections",
             "pmp.cli.execute", "pmp.update.apply",
         ] {
             assert!(reg.get(id).is_some(), "missing canonical action {id}");

@@ -136,6 +136,10 @@ jobs:
         run: bash scripts/check-contract-consistency.sh contracts/openapi.json /tmp/ppf/src
       - name: Contract consistency check (Panel)
         run: bash scripts/check-contract-consistency.sh contracts/openapi.json /tmp/panel
+      - name: Action ID consistency check (PPF)
+        run: bash scripts/check-action-ids.sh crates/ppb-server/src/actions/registry.rs /tmp/ppf/src
+      - name: Action ID consistency check (Panel)
+        run: bash scripts/check-action-ids.sh crates/ppb-server/src/actions/registry.rs /tmp/panel
       - name: Commit generated types (if changed)
         run: |
           git checkout -B main   # checkout is a detached HEAD (ref = build_ref)

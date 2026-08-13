@@ -120,7 +120,9 @@ pub struct ServerActionBody {
 }
 
 /// POST /api/v1/admin/server/actions — unified server operation dispatch
-/// (contract §17). config_reload / shutdown / roomcreation / connections.
+/// (contract §17). Action IDs mirror the Action Registry (§23 #2):
+/// `server.config_reload` / `server.shutdown` / `server.roomcreation` /
+/// `server.connections`.
 #[utoipa::path(
     post,
     path = "/api/v1/admin/server/actions",
@@ -139,24 +141,24 @@ pub async fn server_actions(
     Json(body): Json<ServerActionBody>,
 ) -> Result<Json<Value>, ApiError> {
     match body.action.as_str() {
-        "config_reload" => {
+        "server.config_reload" => {
             state.permissions.require(&state.db, &auth, "config:reload").await?;
             let r = state.openuds.command("server.config_reload", json!({})).await.map_err(map_err)?;
             Ok(Json(r))
         }
-        "shutdown" => {
+        "server.shutdown" => {
             state.permissions.require(&state.db, &auth, "server:shutdown").await?;
             check_reauth_header(&state, &auth, &headers, ReauthRisk::Critical)?;
             let r = state.openuds.command("server.shutdown", json!({})).await.map_err(map_err)?;
             Ok(Json(r))
         }
-        "roomcreation" => {
+        "server.roomcreation" => {
             state.permissions.require(&state.db, &auth, "server:manage").await?;
             let enabled = body.args.get("enabled").and_then(Value::as_bool).unwrap_or(false);
             let r = state.openuds.command("server.roomcreation", json!({ "enabled": enabled })).await.map_err(map_err)?;
             Ok(Json(r))
         }
-        "connections" => {
+        "server.connections" => {
             // §23 #2: real gate. `enabled` toggles new-connection acceptance
             // (PMP `connections on|off` via cli.execute); absent = read state.
             state.permissions.require(&state.db, &auth, "server:manage").await?;
