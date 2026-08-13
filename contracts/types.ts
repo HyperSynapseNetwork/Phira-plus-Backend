@@ -951,7 +951,12 @@ export interface paths {
         /** GET /api/v1/admin/rooms — list rooms (admin superset). */
         get: operations["admin_rooms_get"];
         put?: never;
-        /** POST /api/v1/admin/rooms — create a room. */
+        /**
+         * POST /api/v1/admin/rooms — create a room.
+         * @description `name` becomes PMP's `room_id`. `max_users` is accepted for contract
+         *     compatibility but is NOT forwarded: PMP `room.create` has no per-room
+         *     capacity — the server-wide `max_users_per_room` config applies.
+         */
         post: operations["admin_rooms_post"];
         delete?: never;
         options?: never;
@@ -2525,8 +2530,10 @@ export interface components {
         };
         CreateRoomBody: {
             endpoint?: string | null;
+            /** Format: int64 */
+            max_users?: number | null;
+            name: string;
             persistent_empty?: boolean;
-            room_id: string;
         };
         CreateRunbookBody: {
             definition: components["schemas"]["RunbookDefinition"];
@@ -2837,6 +2844,16 @@ export interface components {
         };
         RoomCreationBody: {
             enabled: boolean;
+        };
+        /** @description Paginated room list response (§22 `{items, total, page, pageNum}`). */
+        RoomListResponse: {
+            items: unknown[];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+            /** Format: int64 */
+            total: number;
         };
         RootLoginRequest: {
             password: string;
@@ -5003,7 +5020,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoomListResponse"];
                 };
             };
             /** @description permission denied */
@@ -7193,7 +7210,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoomListResponse"];
                 };
             };
             /** @description pmp unavailable */

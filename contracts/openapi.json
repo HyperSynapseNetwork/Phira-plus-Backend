@@ -2418,7 +2418,9 @@
             "description": "room list",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoomListResponse"
+                }
               }
             }
           },
@@ -2439,6 +2441,7 @@
           "admin"
         ],
         "summary": "POST /api/v1/admin/rooms — create a room.",
+        "description": "`name` becomes PMP's `room_id`. `max_users` is accepted for contract\ncompatibility but is NOT forwarded: PMP `room.create` has no per-room\ncapacity — the server-wide `max_users_per_room` config applies.",
         "operationId": "admin_rooms_post",
         "requestBody": {
           "content": {
@@ -5004,7 +5007,9 @@
             "description": "room list",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoomListResponse"
+                }
               }
             }
           },
@@ -6096,18 +6101,23 @@
       "CreateRoomBody": {
         "type": "object",
         "required": [
-          "room_id"
+          "name"
         ],
         "properties": {
           "endpoint": {
             "type": "string",
             "nullable": true
           },
+          "max_users": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
           "persistent_empty": {
             "type": "boolean"
-          },
-          "room_id": {
-            "type": "string"
           }
         }
       },
@@ -7079,6 +7089,34 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "RoomListResponse": {
+        "type": "object",
+        "description": "Paginated room list response (§22 `{items, total, page, pageNum}`).",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageNum"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
