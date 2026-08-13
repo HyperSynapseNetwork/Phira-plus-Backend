@@ -240,12 +240,6 @@ pub struct ConfigSnapshotsResponse {
     pub items: Vec<ConfigSnapshot>,
 }
 
-/// Typed raw-config response `{ content }`.
-#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct ConfigRawResponse {
-    pub content: String,
-}
-
 /// Typed rollback response `{ ok, restored, health }`.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ConfigRollbackResponse {
@@ -501,13 +495,16 @@ pub async fn snapshots(
     Ok(Json(ConfigSnapshotsResponse { items: snaps }))
 }
 
-/// GET /api/v1/admin/config/raw — raw PMP config YAML.
+/// GET /api/v1/admin/config/raw — raw PMP config YAML (plain text).
+///
+/// Contract: the Panel consumer reads the raw YAML as a `text/plain` string
+/// (`fetchConfigRaw(): Promise<string>`), not a JSON envelope.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/raw",
     operation_id = "admin_config_raw_get",
     responses(
-        (status = 200, description = "raw config YAML", body = ConfigRawResponse),
+        (status = 200, description = "raw config YAML", body = String, content_type = "text/plain"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -515,13 +512,13 @@ pub async fn snapshots(
 pub async fn raw(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ConfigRawResponse>, ApiError> {
+) -> Result<String, ApiError> {
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     if !manager.configured() {
         return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
     }
-    Ok(Json(ConfigRawResponse { content: manager.read_yaml()? }))
+    Ok(manager.read_yaml()?)
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

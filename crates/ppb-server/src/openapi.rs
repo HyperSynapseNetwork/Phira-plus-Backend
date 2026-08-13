@@ -19,7 +19,7 @@ use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
 use crate::config::repo::ConfigSnapshot;
 use crate::config::routes::{
-    ConfigDescriptorsResponse, ConfigDiffChange, ConfigDiffResponse, ConfigRawResponse,
+    ConfigDescriptorsResponse, ConfigDiffChange, ConfigDiffResponse,
     ConfigRollbackResponse, ConfigSaveResponse, ConfigSnapshotsResponse, ConfigValidateResponse,
     ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody,
 };
@@ -296,7 +296,6 @@ pub struct RoomActionRequest {
             ConfigDiffResponse,
             ConfigSaveResponse,
             ConfigSnapshotsResponse,
-            ConfigRawResponse,
             ConfigRollbackResponse,
             Job,
             JobListResponse,
