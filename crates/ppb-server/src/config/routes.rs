@@ -518,7 +518,7 @@ pub async fn raw(
     if !manager.configured() {
         return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
     }
-    Ok(manager.read_yaml()?)
+    manager.read_yaml()
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
