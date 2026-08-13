@@ -2732,6 +2732,37 @@
         }
       }
     },
+    "/api/v1/admin/server/gates": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/v1/admin/server/gates — read connection-acceptance + room-creation gates.",
+        "operationId": "admin_server_gates_get",
+        "responses": {
+          "200": {
+            "description": "server gates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerGatesResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/server/roomcreation": {
       "post": {
         "tags": [
@@ -6954,6 +6985,22 @@
             "type": "string"
           },
           "args": {}
+        }
+      },
+      "ServerGatesResponse": {
+        "type": "object",
+        "description": "Typed server gates (§23 #2 real gate read): `{connections, room_creation}`.",
+        "required": [
+          "connections",
+          "room_creation"
+        ],
+        "properties": {
+          "connections": {
+            "type": "boolean"
+          },
+          "room_creation": {
+            "type": "boolean"
+          }
         }
       },
       "ServerStatsResponse": {

@@ -1090,6 +1090,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/server/gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/v1/admin/server/gates — read connection-acceptance + room-creation gates. */
+        get: operations["admin_server_gates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/server/roomcreation": {
         parameters: {
             query?: never;
@@ -2799,6 +2816,11 @@ export interface components {
         ServerActionBody: {
             action: string;
             args?: unknown;
+        };
+        /** @description Typed server gates (§23 #2 real gate read): `{connections, room_creation}`. */
+        ServerGatesResponse: {
+            connections: boolean;
+            room_creation: boolean;
         };
         /** @description Typed PMP server stats (§23 #6: separate typed schema, not a giant status). */
         ServerStatsResponse: {
@@ -5217,6 +5239,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    admin_server_gates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description server gates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerGatesResponse"];
                 };
             };
             /** @description permission denied */
