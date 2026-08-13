@@ -50,7 +50,17 @@ impl PmpActionExecutor {
                     .await
                     .map_err(|e| e.to_string())
             }
-            Executor::CliExecute | Executor::CliRaw => {
+            Executor::CliExecute => {
+                // Stop-ship: `CliExecute` actions are server-fixed commands.
+                // Clients must NOT supply CLI text — only `pmp.cli.execute`
+                // (Executor::CliRaw) accepts arbitrary input.
+                let cmd = fixed_cli_command(&task.action, &task.args)
+                    .ok_or_else(|| format!("no fixed CLI mapping for action {}", task.action))?;
+                pmp_cli::cli_execute(&self.openuds, &cmd)
+                    .await
+                    .map_err(|e| e.to_string())
+            }
+            Executor::CliRaw => {
                 let cmd = task
                     .args
                     .get("command")
@@ -107,6 +117,24 @@ impl _ActionExecutorTrait for PmpActionExecutor {
             let _ = tx.send(result.clone());
         }
         result
+    }
+}
+
+/// Server-fixed CLI mapping for `Executor::CliExecute` actions. Clients never
+/// supply the command text — only `pmp.cli.execute` (CliRaw) is arbitrary.
+fn fixed_cli_command(action: &str, args: &Value) -> Option<String> {
+    match action {
+        "pmp.update.check" => Some("update check".to_string()),
+        "pmp.update.apply" => Some("update apply".to_string()),
+        "pmp.update.cancel" => Some("update cancel".to_string()),
+        "pmp.update.force" => Some("update force".to_string()),
+        "server.connections" => match args.get("enabled").and_then(Value::as_bool) {
+            Some(true) => Some("connections on".to_string()),
+            Some(false) => Some("connections off".to_string()),
+            // Absent `enabled` = read current state.
+            None => Some("connections".to_string()),
+        },
+        _ => None,
     }
 }
 
@@ -167,5 +195,38 @@ mod tests {
         let mut args = serde_json::json!({ "room_id": "ABC", "chart_id": 99 });
         normalize_openuds_args("room.set_chart", &mut args);
         assert_eq!(args["chart_id"], 99);
+    }
+
+    #[test]
+    fn fixed_cli_commands_are_server_mapped() {
+        assert_eq!(
+            fixed_cli_command("pmp.update.apply", &serde_json::json!({})),
+            Some("update apply".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("pmp.update.check", &serde_json::json!({})),
+            Some("update check".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("pmp.update.cancel", &serde_json::json!({})),
+            Some("update cancel".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("pmp.update.force", &serde_json::json!({})),
+            Some("update force".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("server.connections", &serde_json::json!({ "enabled": true })),
+            Some("connections on".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("server.connections", &serde_json::json!({ "enabled": false })),
+            Some("connections off".to_string())
+        );
+        assert_eq!(
+            fixed_cli_command("server.connections", &serde_json::json!({})),
+            Some("connections".to_string())
+        );
+        assert_eq!(fixed_cli_command("room.kick", &serde_json::json!({})), None);
     }
 }
