@@ -61,7 +61,9 @@ impl JobRunner {
             .get(job_type)
             .ok_or_else(|| ApiError::validation("unknown job type"))?;
         let db = self.require_db()?;
-        self.ensure_resource_free(db, descriptor.resource_key).await?;
+        // No application-level `COUNT active` here: the partial UNIQUE INDEX
+        // (migration 0007) enforces mutual exclusion atomically. `create` maps
+        // the unique violation to 409 `already running`.
 
         let resource_key = descriptor.resource_key.unwrap_or("");
         let job = create(db, job_type, resource_key).await?;
@@ -134,6 +136,11 @@ impl JobRunner {
         .execute(db)
         .await
         .map_err(|e| {
+            if super::is_unique_violation(&e) {
+                // Atomic guard (migration 0007): another job already holds this
+                // resource_key — the re-queue would violate the partial unique index.
+                return ApiError::new(ErrorCode::Conflict, "job already running for this resource");
+            }
             tracing::error!(error = %e, "job retry reset failed");
             ApiError::internal()
         })?;

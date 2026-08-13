@@ -9,7 +9,7 @@ use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::error::ApiError;
+use crate::error::{ApiError, ErrorCode};
 
 #[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct Job {
@@ -39,7 +39,22 @@ pub async fn create(
     .bind(resource_key)
     .fetch_one(db)
     .await
-    .map_err(db_err)
+    .map_err(|e| {
+        // DB-level mutual exclusion (§migration 0007): the partial UNIQUE INDEX
+        // `(resource_key) WHERE resource_key <> '' AND state IN ('queued','running')`
+        // makes the exclusion atomic. A concurrent create for the same resource
+        // hits this unique violation — report 409 instead of a generic 500.
+        if is_unique_violation(&e) {
+            ApiError::new(ErrorCode::Conflict, "job already running for this resource")
+        } else {
+            db_err(e)
+        }
+    })
+}
+
+/// True when a sqlx error is a Postgres unique-constraint violation (SQLSTATE 23505).
+pub fn is_unique_violation(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(dbe) if dbe.is_unique_violation())
 }
 
 pub async fn update_state(
