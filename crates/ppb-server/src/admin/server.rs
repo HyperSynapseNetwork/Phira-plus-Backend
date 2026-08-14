@@ -14,7 +14,7 @@ use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson};
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {

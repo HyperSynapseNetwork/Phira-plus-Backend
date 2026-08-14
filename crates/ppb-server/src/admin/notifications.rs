@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson};
-use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::error::{ApiError, ErrorCode};
 use crate::notifications::push::PushSummary;
 use crate::notifications::NotificationActionDraft;
 

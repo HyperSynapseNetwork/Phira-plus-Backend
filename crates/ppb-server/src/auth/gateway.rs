@@ -230,6 +230,14 @@ fn login_html(
         .and_then(|code| errors.get(code))
         .cloned()
         .unwrap_or_default();
+    // Mirror the runtime `showApiError` behaviour: surface the gateway request
+    // ID alongside the initial error so failed-login reports can be traced.
+    let initial_error_text = match initial_request_id {
+        Some(request_id) if !request_id.is_empty() && !initial_error_text.is_empty() => {
+            format!("{initial_error_text} · {}: {request_id}", s.request_id)
+        }
+        _ => initial_error_text,
+    };
     let error_map = json_for_inline_script(&errors);
     let disabled = if ready { "" } else { " disabled" };
     let github_disabled = if github_ready { "" } else { " disabled" };

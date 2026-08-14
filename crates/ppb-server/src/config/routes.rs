@@ -396,7 +396,17 @@ pub async fn save(
     )?;
     let (ok, errors) = validate_values(&body.values);
     if !ok {
-        return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "invalid config values"));
+        let detail = errors
+            .iter()
+            .filter_map(|error| error.message.as_deref())
+            .collect::<Vec<_>>()
+            .join("; ");
+        let message = if detail.is_empty() {
+            "invalid config values".to_string()
+        } else {
+            format!("invalid config values: {detail}")
+        };
+        return Err(ApiError::new(ErrorCode::ConfigValidationFailed, message));
     }
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     if !manager.configured() {
@@ -584,6 +594,15 @@ pub async fn rollback(
         restored: body.snapshot_id,
         health,
     }))
+}
+
+/// Best-effort PMP health after a config reload (§23): ping the OpenUDS
+/// control socket and report whether the reloaded server is responsive.
+async fn health_check(state: &Arc<AppState>) -> Value {
+    match state.openuds.ping().await {
+        Ok(()) => json!({ "status": "ok" }),
+        Err(error) => json!({ "status": "unreachable", "error": error.to_string() }),
+    }
 }
 
 // ── PPF build/SEO config ────────────────────────────────────────

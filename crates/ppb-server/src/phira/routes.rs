@@ -10,9 +10,9 @@ use serde_json::Value;
 
 use super::gateway::phira_gateway_error;
 use crate::app::AppState;
-use crate::auth::extractor::OptionalAuthPrincipal;
+use crate::middleware::auth::OptionalAuthPrincipal;
 use crate::error::extractors::{ApiPath, ApiQuery};
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

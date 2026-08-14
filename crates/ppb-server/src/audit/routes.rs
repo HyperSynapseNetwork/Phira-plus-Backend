@@ -15,7 +15,7 @@ use super::repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiPath, ApiQuery};
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

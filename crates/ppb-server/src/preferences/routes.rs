@@ -15,7 +15,7 @@ use serde_json::Value;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson, ApiPath};
-use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::error::ApiError;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

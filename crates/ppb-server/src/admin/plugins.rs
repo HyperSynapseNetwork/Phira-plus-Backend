@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson, ApiPath};
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {

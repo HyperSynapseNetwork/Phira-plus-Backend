@@ -12,7 +12,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use sqlx::FromRow;
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -26,7 +26,7 @@ use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
 use crate::error::extractors::{ApiJson, ApiPath};
-use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::error::{ApiError, ErrorCode};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
-use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::error::{ApiError, ErrorCode};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new().route("/coupons", get(list)).route("/coupons/create", post(create)).route("/coupons/{id}/revoke", post(revoke))

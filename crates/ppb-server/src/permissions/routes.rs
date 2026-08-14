@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -17,7 +17,7 @@ use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson, ApiPath};
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

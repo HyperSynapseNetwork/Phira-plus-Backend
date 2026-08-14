@@ -15,13 +15,13 @@ use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern, TranslatedError};
-use super::{history_entries_of, parse_log_occurrences, parse_log_line, parse_log_line_with_seq, LogEntry};
+use super::{history_entries_of, parse_log_occurrences, parse_log_line_with_seq, LogEntry};
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::error::extractors::{ApiJson, ApiQuery};
-use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+use crate::error::ApiError;
 use crate::pmp::openuds::client::OpenUdsError;
 
 pub fn routes() -> Router<Arc<AppState>> {
