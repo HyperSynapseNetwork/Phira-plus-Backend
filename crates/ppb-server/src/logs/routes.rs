@@ -16,6 +16,8 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern, TranslatedError};
 use super::{history_entries_of, parse_log_occurrences, parse_log_line_with_seq, LogEntry};
+#[cfg(test)]
+use super::parse_log_line;
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
