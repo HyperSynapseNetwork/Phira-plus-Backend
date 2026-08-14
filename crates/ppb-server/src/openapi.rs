@@ -496,6 +496,15 @@ pub struct RoomActionRequest {
             AppNotificationWire,
             NotificationInboxResponse,
             UpdatePreferencesBody,
+            AdminTaskItem,
+            AdminTaskListResponse,
+            AdminTaskCompleteResponse,
+            CreateJobResponse,
+            JobCancelResponse,
+            JobRetryResponse,
+            ErrorDetails,
+            ConfigValidationIssueCode,
+            ReplayOverride,
         )
     ),
     tags(
