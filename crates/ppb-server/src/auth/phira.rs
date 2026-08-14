@@ -121,7 +121,7 @@ mod tests {
         let mock = MockPhiraApi { fail_login: true, ..Default::default() };
         let err = authenticate_phira(&mock, "a@b.c", "wrong").await.unwrap_err();
         let api = phira_error_to_api(err);
-        assert_eq!(api.code, ErrorCode::AuthRequired);
+        assert_eq!(api.code, ErrorCode::PhiraAuthFailed);
     }
 
     #[tokio::test]

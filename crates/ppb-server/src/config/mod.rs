@@ -461,7 +461,7 @@ mod tests {
         let config = RuntimeConfig::from_toml_str(&text).expect("parses");
         assert_eq!(config.server.public_url, "https://api-phira.htadiy.com");
         assert_eq!(config.pmp.auth_mode, "approve");
-        assert_eq!(config.pmp.capabilities.len(), 5);
+        assert_eq!(config.pmp.capabilities.len(), 6);
     }
 
     #[test]

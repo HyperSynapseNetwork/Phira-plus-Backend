@@ -259,6 +259,6 @@ mod tests {
         let err = rt.block_on(mock.login_email("a@b.c", "wrong")).unwrap_err();
         assert!(matches!(err, PhiraError::InvalidCredentials));
         let api: ApiError = err.into();
-        assert_eq!(api.code, ErrorCode::AuthRequired);
+        assert_eq!(api.code, ErrorCode::PhiraAuthFailed);
     }
 }
