@@ -45,7 +45,7 @@ use crate::notifications::push::{PushSummary, SubscriptionWire};
 use crate::notifications::{NotificationActionKind, NotificationActionTarget, NotificationActionDraft, NotificationActionWire, NotificationPayload};
 use crate::notifications::routes::{
     ActionBody as NotificationActionBody, AppNotificationWire, InputBody,
-    NotificationInboxResponse,
+    NotificationActionResult, NotificationInboxResponse, NotificationInputResponse,
 };
 use crate::permissions::groups::{Group, GroupListItem, GroupListResponse};
 use crate::permissions::manifest::{PermissionDef, Risk as PermissionRisk};
@@ -54,10 +54,10 @@ use crate::permissions::routes::{
     CreateGroupBody, PatchGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
 };
 use crate::preferences::routes::UpdatePreferencesBody;
-use crate::social::routes::{SendRequestBody, RoomInviteBody, RoomInviteResponse};
+use crate::social::routes::{FriendRequestSendResponse, SendRequestBody, RoomInviteBody, RoomInviteResponse};
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
-    RoomListResponse,
+    RoomBatchResponse, RoomListResponse,
 };
 use crate::users::model::{
     AdminUserItem, GroupRef, SessionItem, UserDetailResponse, UserListResponse,
@@ -509,6 +509,10 @@ pub struct RoomActionRequest {
             ErrorDetails,
             ConfigValidationIssueCode,
             ReplayOverride,
+            RoomBatchResponse,
+            NotificationActionResult,
+            NotificationInputResponse,
+            FriendRequestSendResponse,
         )
     ),
     tags(
