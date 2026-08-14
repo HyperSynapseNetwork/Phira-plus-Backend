@@ -1,6 +1,8 @@
 name: diag-openapi
 on:
   workflow_dispatch:
+  push:
+    branches: [diag]
 jobs:
   dump:
     runs-on: ubuntu-latest
