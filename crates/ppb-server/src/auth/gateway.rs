@@ -205,6 +205,7 @@ pub async fn phira_login_page(
     secure_gateway_response(html, &nonce)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn login_html(
     state: &AppState,
     return_to: &str,

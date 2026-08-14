@@ -132,6 +132,7 @@ impl PhiraGateway {
 
     // ── Typed methods (charts) ──────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn chart_list(
         &self,
         page: i64,

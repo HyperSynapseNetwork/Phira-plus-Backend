@@ -288,7 +288,7 @@ impl Default for SecurityConfig {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct LegalConfig {
     /// Public user authentication stays disabled until approved legal documents are configured.
@@ -297,18 +297,6 @@ pub struct LegalConfig {
     pub privacy_version: String,
     pub terms_url: String,
     pub privacy_url: String,
-}
-
-impl Default for LegalConfig {
-    fn default() -> Self {
-        Self {
-            public_auth_enabled: false,
-            terms_version: String::new(),
-            privacy_version: String::new(),
-            terms_url: String::new(),
-            privacy_url: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
