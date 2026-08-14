@@ -23,7 +23,7 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
         let token = extract_bearer_or_cookie(&parts.headers, ACCESS_COOKIE)
-            .ok_or_else(|| ApiError::new(ErrorCode::Session, "missing credentials"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::SessionExpired, "missing credentials"))?;
 
         let claims = decode_access(&token, &state.secrets.jwt_secret)?;
 
@@ -43,7 +43,7 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
                 ApiError::internal()
             })?;
             if !active.0 {
-                return Err(ApiError::new(ErrorCode::Session, "session inactive"));
+                return Err(ApiError::new(ErrorCode::SessionExpired, "session inactive"));
             }
         }
 

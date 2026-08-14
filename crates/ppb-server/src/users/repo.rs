@@ -63,7 +63,7 @@ pub async fn touch_last_seen(db: &sqlx::PgPool, id: Uuid) -> Result<(), ApiError
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "user not found")
+        ApiError::new(ErrorCode::UserNotFound, "user not found")
     } else {
         tracing::error!(error = %e, "user db error");
         ApiError::internal()

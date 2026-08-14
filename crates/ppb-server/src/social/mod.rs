@@ -5,6 +5,7 @@ pub mod routes;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::{json, Value};
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -20,15 +21,51 @@ pub struct FriendRequest {
     pub responded_at: Option<DateTime<Utc>>,
 }
 
+pub fn friend_request_notification_payload(request_id: Uuid) -> Result<Value, ApiError> {
+    let target = crate::notifications::NotificationActionTarget {
+        friend_request_id: Some(request_id),
+        ..Default::default()
+    };
+    let actions = crate::notifications::normalize_action_drafts(vec![
+        crate::notifications::NotificationActionDraft {
+            label: "Accept".to_string(),
+            label_key: Some("persistent.actions.accept".to_string()),
+            action: crate::notifications::NotificationActionKind::FriendAccept,
+            data: target.clone(),
+            danger: false,
+        },
+        crate::notifications::NotificationActionDraft {
+            label: "Reject".to_string(),
+            label_key: Some("persistent.actions.reject".to_string()),
+            action: crate::notifications::NotificationActionKind::FriendReject,
+            data: target,
+            danger: false,
+        },
+    ])?;
+    Ok(json!({
+        "type": "friend.request",
+        "priority": "normal",
+        "title": "New friend request",
+        "title_key": "persistent.friendRequest.title",
+        "body": "Someone sent you a friend request.",
+        "body_key": "persistent.friendRequest.body",
+        "params": {},
+        "target": { "friend_request_id": request_id },
+        "actions": actions,
+        "input": null,
+        "deep_link": "/notifications",
+        "dedup_key": format!("friend.request:{request_id}"),
+    }))
+}
+
 pub async fn send_request(
     db: &sqlx::PgPool,
     from_user_id: Uuid,
     to_user_id: Uuid,
 ) -> Result<FriendRequest, ApiError> {
     if from_user_id == to_user_id {
-        return Err(ApiError::validation("cannot friend yourself"));
+        return Err(ApiError::new(ErrorCode::ValidationFailed, "cannot friend yourself"));
     }
-    // Reject if already friends or a request exists.
     let (friend,): (bool,) = sqlx::query_as::<_, (bool,)>(
         "SELECT EXISTS(
             SELECT 1 FROM friendships WHERE (user_a = $1 AND user_b = $2) OR (user_a = $2 AND user_b = $1)
@@ -40,9 +77,11 @@ pub async fn send_request(
     .await
     .map_err(db_err)?;
     if friend {
-        return Err(ApiError::new(ErrorCode::Conflict, "already friends"));
+        return Err(ApiError::new(ErrorCode::AlreadyFriends, "already friends"));
     }
-    sqlx::query_as::<_, FriendRequest>(
+
+    let mut tx = db.begin().await.map_err(db_err)?;
+    let request = sqlx::query_as::<_, FriendRequest>(
         "INSERT INTO friend_requests (from_user_id, to_user_id, status)
          VALUES ($1, $2, 'pending')
          ON CONFLICT (from_user_id, to_user_id) DO NOTHING
@@ -50,11 +89,39 @@ pub async fn send_request(
     )
     .bind(from_user_id)
     .bind(to_user_id)
-    .fetch_optional(db)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(db_err)?
-    .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "friend request already sent"))
+    .ok_or_else(|| {
+        ApiError::new(
+            ErrorCode::FriendRequestAlreadySent,
+            "friend request already sent",
+        )
+    })?;
+
+    let payload = friend_request_notification_payload(request.id)?;
+    let event_id = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO notification_events (type, actor_user_id, payload)
+         VALUES ('friend.request', $1, $2) RETURNING id",
+    )
+    .bind(from_user_id)
+    .bind(payload)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    sqlx::query(
+        "INSERT INTO user_notifications (event_id, user_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(event_id)
+    .bind(to_user_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(request)
 }
+
 
 pub async fn respond_request(
     db: &sqlx::PgPool,
@@ -70,13 +137,13 @@ pub async fn respond_request(
     .fetch_optional(db)
     .await
     .map_err(db_err)?
-    .ok_or_else(|| ApiError::not_found("friend request"))?;
+    .ok_or_else(|| ApiError::new(ErrorCode::FriendRequestNotFound, "friend request not found"))?;
 
     if request.to_user_id != to_user_id {
         return Err(ApiError::permission_denied());
     }
     if request.status != "pending" {
-        return Err(ApiError::new(ErrorCode::Conflict, "request already handled"));
+        return Err(ApiError::new(ErrorCode::ResourceConflict, "request already handled"));
     }
 
     let new_status = if accept { "accepted" } else { "declined" };
@@ -163,6 +230,19 @@ pub async fn get_request(
     .map_err(db_err)
 }
 
+/// Whether two users have an accepted friendship.
+pub async fn are_friends(db: &sqlx::PgPool, a: Uuid, b: Uuid) -> Result<bool, ApiError> {
+    let (row,): (bool,) = sqlx::query_as::<_, (bool,)>(
+        "SELECT EXISTS(SELECT 1 FROM friendships WHERE (user_a = $1 AND user_b = $2) OR (user_a = $2 AND user_b = $1))",
+    )
+    .bind(a)
+    .bind(b)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
+    Ok(row)
+}
+
 /// Whether `a` has blocked `b` (or vice versa).
 pub async fn is_blocked(db: &sqlx::PgPool, a: Uuid, b: Uuid) -> Result<bool, ApiError> {
     let (row,): (bool,) = sqlx::query_as::<_, (bool,)>(
@@ -206,7 +286,7 @@ pub async fn unblock(db: &sqlx::PgPool, blocker: Uuid, blocked: Uuid) -> Result<
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "not found")
     } else {
         tracing::error!(error = %e, "social db error");
         ApiError::internal()

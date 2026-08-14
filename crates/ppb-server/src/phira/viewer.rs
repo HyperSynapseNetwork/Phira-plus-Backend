@@ -113,7 +113,7 @@ fn encode_blob(info: ChartInfo, chart: Chart) -> Result<Vec<u8>, ApiError> {
     bincode::options()
         .with_varint_encoding()
         .serialize(&(info, chart))
-        .map_err(|e| ApiError::new(ErrorCode::Internal, format!("bincode: {e}")))
+        .map_err(|error| { tracing::error!(%error, "viewer bincode serialization failed"); ApiError::internal() })
 }
 
 #[cfg(test)]

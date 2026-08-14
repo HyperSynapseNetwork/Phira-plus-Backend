@@ -9,9 +9,11 @@ pub mod translator;
 
 use serde_json::Value;
 
-/// Shape of a `logs` stream frame's `frames` payload.
+/// One PMP log occurrence as returned by `logs.history` / live `logs`.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct LogLine {
+    #[serde(default)]
+    pub seq: Option<u64>,
     pub line: String,
 }
 
@@ -41,48 +43,80 @@ pub struct LogEntry {
     pub user_id: Option<String>,
 }
 
-/// Convert a raw `logs` stream frame payload into log lines (best-effort).
-pub fn parse_log_frames(frames: &Value) -> Vec<String> {
+/// Convert a raw `logs` stream frame into sequenced occurrences. Legacy PMP
+/// frames without `seq` remain readable and fall back to a content-derived id.
+pub fn parse_log_occurrences(frames: &Value) -> Vec<LogLine> {
+    fn one(value: &Value) -> Option<LogLine> {
+        if let Some(line) = value.as_str() {
+            return Some(LogLine { seq: None, line: line.to_string() });
+        }
+        let line = value.get("line")?.as_str()?.to_string();
+        Some(LogLine { seq: value.get("seq").and_then(Value::as_u64), line })
+    }
     match frames {
-        Value::Array(items) => items
-            .iter()
-            .filter_map(|v| {
-                v.as_str()
-                    .map(str::to_string)
-                    .or_else(|| v.get("line").and_then(Value::as_str).map(str::to_string))
-            })
-            .collect(),
-        Value::Object(map) => map
-            .get("line")
-            .and_then(Value::as_str)
-            .map(|s| vec![s.to_string()])
-            .unwrap_or_default(),
+        Value::Array(items) => items.iter().filter_map(one).collect(),
+        Value::Object(_) => one(frames).into_iter().collect(),
         _ => Vec::new(),
     }
 }
 
-/// Extract log lines from a `logs.history` response (`{ lines: [...], count }`)
-/// with a fallback to the generic stream-frame shapes.
-pub fn history_lines_of(value: &Value) -> Vec<String> {
+/// Backward-compatible text-only helper.
+pub fn parse_log_frames(frames: &Value) -> Vec<String> {
+    parse_log_occurrences(frames).into_iter().map(|entry| entry.line).collect()
+}
+
+/// Extract occurrences from `logs.history`. New PMP returns
+/// `{ entries:[{seq,line}], lines:[...], count }`; old PMP only returned lines.
+pub fn history_entries_of(value: &Value) -> Vec<LogLine> {
+    if let Some(entries) = value.get("entries").and_then(Value::as_array) {
+        let parsed = entries.iter().filter_map(|value| {
+            let line = value.get("line")?.as_str()?.to_string();
+            Some(LogLine { seq: value.get("seq").and_then(Value::as_u64), line })
+        }).collect::<Vec<_>>();
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
     match value.get("lines").and_then(Value::as_array) {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect(),
-        None => parse_log_frames(value),
+        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|line| LogLine { seq: None, line: line.to_string() })).collect(),
+        None => parse_log_occurrences(value),
     }
 }
 
-/// Best-effort: structure one raw PMP log line. The full original line is always
-/// preserved as `message`; `timestamp`/`level` are extracted when present.
-/// `log_id` is a stable content hash so a line can be located across requests.
-pub fn parse_log_line(line: &str) -> LogEntry {
+/// Backward-compatible text-only history helper.
+pub fn history_lines_of(value: &Value) -> Vec<String> {
+    history_entries_of(value).into_iter().map(|entry| entry.line).collect()
+}
+
+/// Best-effort structure one raw PMP log occurrence. When PMP supplies `seq`,
+/// `log_id` is `pmp-<seq>` and identifies this occurrence even if the text is
+/// identical to another line. Legacy PMP falls back to a content hash.
+pub fn parse_log_line_with_seq(line: &str, seq: Option<u64>) -> LogEntry {
     let trimmed = line.trim();
     let mut timestamp = String::new();
     let mut level = "info".to_string();
     let mut message = trimmed.to_string();
+    let mut event = None;
+    let mut error_code = None;
+    let mut request_id = None;
+    let mut command_id = None;
+    let mut room_uuid = None;
+    let mut user_id = None;
 
-    if let Some(rest) = trimmed.strip_prefix('[') {
+    // tracing JSON output: extract stable operational fields while preserving
+    // the original text as fallback. Unknown fields remain intentionally opaque.
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        let fields = value.get("fields").unwrap_or(&value);
+        timestamp = value.get("timestamp").and_then(Value::as_str).unwrap_or_default().to_string();
+        level = value.get("level").and_then(Value::as_str).map(str::to_ascii_lowercase).map(|v| normalize_level(&v)).unwrap_or_else(|| "info".to_string());
+        message = fields.get("message").or_else(|| value.get("message")).and_then(Value::as_str).unwrap_or(trimmed).to_string();
+        event = string_field(fields, "event");
+        error_code = string_field(fields, "error_code");
+        request_id = string_field(fields, "request_id");
+        command_id = string_field(fields, "command_id");
+        room_uuid = string_field(fields, "room_uuid").or_else(|| string_field(fields, "room_id"));
+        user_id = string_field(fields, "user_id");
+    } else if let Some(rest) = trimmed.strip_prefix('[') {
         // Bracketed form: `[2026-08-13T10:00:00Z] [INFO] message`.
         if let Some(close) = rest.find(']') {
             timestamp = rest[..close].to_string();
@@ -116,18 +150,30 @@ pub fn parse_log_line(line: &str) -> LogEntry {
     }
 
     LogEntry {
-        log_id: log_id_for(trimmed),
+        log_id: log_id_for(trimmed, seq),
         timestamp,
         service: "pmp".to_string(),
         level,
-        event: None,
+        event,
         message,
-        error_code: None,
-        request_id: None,
-        command_id: None,
-        room_uuid: None,
-        user_id: None,
+        error_code,
+        request_id,
+        command_id,
+        room_uuid,
+        user_id,
     }
+}
+
+pub fn parse_log_line(line: &str) -> LogEntry {
+    parse_log_line_with_seq(line, None)
+}
+
+fn string_field(value: &Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|v| match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 fn looks_like_timestamp(s: &str) -> bool {
@@ -145,16 +191,16 @@ fn normalize_level(s: &str) -> String {
     }
 }
 
-/// Stable, short content hash used as the `log_id` (locate a specific line).
-///
-/// TODO(sequence): PMP ingest exposes no stable per-line sequence number, so
-/// `log_id` is a content hash (first 8 bytes of SHA256) rather than a monotonic
-/// sequence. Log focus is therefore implemented as a filter, not a page jump; a
-/// real sequence would allow exact page positioning across ring-buffer windows.
-fn log_id_for(line: &str) -> String {
+/// Stable occurrence id. New PMP sequence numbers are authoritative within one
+/// process lifetime; legacy servers use a namespaced content hash as fallback.
+fn log_id_for(line: &str, seq: Option<u64>) -> String {
+    if let Some(seq) = seq {
+        return format!("pmp-{seq}");
+    }
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(line.as_bytes());
-    digest[..8].iter().map(|b| format!("{b:02x}")).collect()
+    let suffix = digest[..8].iter().map(|b| format!("{b:02x}")).collect::<String>();
+    format!("pmp-legacy-{suffix}")
 }
 
 #[cfg(test)]
@@ -184,7 +230,7 @@ mod tests {
         assert_eq!(e.timestamp, "2026-08-13T10:00:00.123Z");
         assert!(e.message.contains("created room ABC"), "message: {}", e.message);
         assert_eq!(e.service, "pmp");
-        assert_eq!(e.log_id.len(), 16);
+        assert!(e.log_id.starts_with("pmp-legacy-"));
     }
 
     #[test]
@@ -205,7 +251,8 @@ mod tests {
 
     #[test]
     fn log_id_is_stable() {
-        assert_eq!(log_id_for("same"), log_id_for("same"));
-        assert_ne!(log_id_for("same"), log_id_for("other"));
+        assert_eq!(log_id_for("same", None), log_id_for("same", None));
+        assert_ne!(log_id_for("same", None), log_id_for("other", None));
+        assert_ne!(log_id_for("same", Some(1)), log_id_for("same", Some(2)));
     }
 }

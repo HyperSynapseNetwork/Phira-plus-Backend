@@ -31,6 +31,6 @@ panel-phira.htadiy.com {
 	try_files {path} {path}/ /index.html
 	encode gzip zstd
 	header {
-		X-Robots-Tag "noindex, nofollow"   # Panel 禁止搜索引擎收录（§23.2）
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
 	}
 }

@@ -129,7 +129,7 @@ fn next_placeholder(sql: &str) -> usize {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "audit event not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "audit event not found")
     } else {
         tracing::error!(error = %e, "audit db error");
         ApiError::internal()

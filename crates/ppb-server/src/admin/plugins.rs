@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson, ApiPath};
 use crate::error::{ApiError, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
@@ -59,7 +59,7 @@ pub async fn list(
 pub async fn info(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "plugin:view").await?;
     let result = state.openuds.command("plugin.info", json!({ "name": name })).await.map_err(map_err)?;
@@ -80,7 +80,7 @@ pub async fn info(
 pub async fn enable(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "plugin:manage").await?;
     let result = state.openuds.command("plugin.enable", json!({ "name": name })).await.map_err(map_err)?;
@@ -101,7 +101,7 @@ pub async fn enable(
 pub async fn disable(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "plugin:manage").await?;
     let result = state.openuds.command("plugin.disable", json!({ "name": name })).await.map_err(map_err)?;
@@ -142,7 +142,7 @@ pub async fn reload(
 pub async fn remove(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
 ) -> Result<StatusCode, ApiError> {
     state.permissions.require(&state.db, &auth, "plugin:manage").await?;
     let _ = state.openuds.command("plugin.remove", json!({ "name": name })).await.map_err(map_err)?;
@@ -174,7 +174,7 @@ pub struct PluginCallBody {
 pub async fn action_dispatch(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path((name, action)): Path<(String, String)>,
+    ApiPath((name, action)): ApiPath<(String, String)>,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, ApiError> {
     let parsed: PluginCallBody = if body.is_empty() {
@@ -225,7 +225,7 @@ pub async fn action_dispatch(
 pub async fn call(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<PluginCallBody>,
+    ApiJson(body): ApiJson<PluginCallBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "plugin:call").await?;
     let result = state

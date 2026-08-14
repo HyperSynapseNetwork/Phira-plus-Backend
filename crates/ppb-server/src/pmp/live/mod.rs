@@ -1,7 +1,7 @@
-//! Live gateway scaffold (design §11.4 / §12.6, Phase D).
+//! Live gateway state (design §11.4 / §12.6).
 //!
-//! PMP high-frequency stream → PPB jitter buffer → PPF WS. Phase A defines the
-//! configuration types and sequence-gap detection; the full gateway is Phase D.
+//! PMP high-frequency stream → PPB jitter buffer → PPF WS. This module owns
+//! jitter mode and per-room sequence-gap tracking used by the live WS route.
 
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ struct RoomStreamState {
     last_sequence: Option<u64>,
 }
 
-/// Live gateway state (Phase A scaffold; Phase D wires WS output).
+/// Live gateway state shared by the live WS buffering/sequence logic.
 #[derive(Clone, Default)]
 pub struct LiveGateway {
     mode: JitterMode,

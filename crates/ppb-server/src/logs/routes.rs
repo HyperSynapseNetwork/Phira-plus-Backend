@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
@@ -15,12 +15,12 @@ use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::translator::{translate, translate_pattern, TranslatedError};
-use super::{history_lines_of, parse_log_frames, parse_log_line, LogEntry};
+use super::{history_entries_of, parse_log_occurrences, parse_log_line, parse_log_line_with_seq, LogEntry};
 use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson, ApiQuery};
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
@@ -28,7 +28,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/logs", get(history))
         .route("/logs/stream", get(stream))
-        .route("/logs/input", get(input).post(submit_input))
+        .route("/logs/input", axum::routing::post(submit_input))
         .route("/logs/translate", get(translate_endpoint).post(translate_post))
 }
 
@@ -40,9 +40,9 @@ pub struct LogParams {
     pub page_num: Option<i64>,
     /// Filter by log level (`error`/`warn`/`info`/`debug`/`trace`), case-insensitive.
     pub level: Option<String>,
-    /// Case-insensitive substring match on `message`.
+    /// Case-insensitive substring match on `message` or `error_code`.
     pub search: Option<String>,
-    /// Focus: return the entry with this `log_id` (content hash).
+    /// Focus: return the occurrence with this `log_id`.
     pub log_id: Option<String>,
 }
 
@@ -66,8 +66,8 @@ pub struct LogListResponse {
         ("pageNum" = Option<i64>, Query, description = "page size (1..=100)"),
         ("limit" = Option<u64>, Query, description = "raw PMP history window (max 2000)"),
         ("level" = Option<String>, Query, description = "filter by log level (error/warn/info/debug/trace), case-insensitive"),
-        ("search" = Option<String>, Query, description = "case-insensitive substring match on message"),
-        ("log_id" = Option<String>, Query, description = "focus: return the entry with this log_id (content hash)"),
+        ("search" = Option<String>, Query, description = "case-insensitive substring match on message or error_code"),
+        ("log_id" = Option<String>, Query, description = "focus: return the occurrence with this log_id"),
     ),
     responses(
         (status = 200, description = "log history (paginated)", body = LogListResponse),
@@ -78,7 +78,7 @@ pub struct LogListResponse {
 pub async fn history(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<LogParams>,
+    ApiQuery(params): ApiQuery<LogParams>,
 ) -> Result<Json<LogListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "logs:view").await?;
     let page = params.page.unwrap_or(1).max(1);
@@ -94,9 +94,9 @@ pub async fn history(
         .command("logs.history", json!({ "limit": window }))
         .await
         .map_err(map_err)?;
-    let entries: Vec<LogEntry> = history_lines_of(&result)
-        .iter()
-        .map(|line| parse_log_line(line))
+    let entries: Vec<LogEntry> = history_entries_of(&result)
+        .into_iter()
+        .map(|entry| parse_log_line_with_seq(&entry.line, entry.seq))
         .collect();
     // Apply `level` / `search` / `log_id` filters before pagination so that a
     // focused query (`log_id` + `pageNum:1`) lands on the matching entry.
@@ -109,29 +109,38 @@ pub async fn history(
 
 /// Apply optional `level` / `search` / `log_id` filters (AND-combined).
 ///
-/// `log_id` focus is a filter, not a page jump: `log_id` is a stable content
-/// hash with no backing sequence, so the matching entry (if present in the
-/// window) is returned as the only item and `pageNum:1` hits it.
+/// `log_id` focus is a filter over the bounded PMP history window. New PMP
+/// sequence-based ids identify individual occurrences even when messages repeat.
 fn apply_log_filters(entries: Vec<LogEntry>, params: &LogParams) -> Vec<LogEntry> {
-    let level = params.level.as_deref().filter(|s| !s.is_empty());
+    let levels = params.level.as_deref().map(|value| {
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|level| !level.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect::<std::collections::HashSet<_>>()
+    }).filter(|values| !values.is_empty());
     let search = params.search.as_deref().filter(|s| !s.is_empty());
     let log_id = params.log_id.as_deref().filter(|s| !s.is_empty());
     entries
         .into_iter()
-        .filter(|e| level.is_none_or(|lvl| e.level.eq_ignore_ascii_case(lvl)))
+        .filter(|e| levels.as_ref().is_none_or(|values| values.contains(&e.level.to_ascii_lowercase())))
         .filter(|e| {
             search.is_none_or(|q| {
-                e.message.to_lowercase().contains(&q.to_lowercase())
+                let q = q.to_lowercase();
+                e.message.to_lowercase().contains(&q)
+                    || e.error_code.as_deref().is_some_and(|code| code.to_lowercase().contains(&q))
             })
         })
         .filter(|e| log_id.is_none_or(|id| e.log_id.eq_ignore_ascii_case(id)))
         .collect()
 }
 
+#[allow(dead_code)]
 async fn input(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<LogParams>,
+    ApiQuery(params): ApiQuery<LogParams>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     let result = state
@@ -164,7 +173,7 @@ pub async fn submit_input(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<LogInputBody>,
+    ApiJson(body): ApiJson<LogInputBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     state
@@ -220,9 +229,9 @@ async fn stream(
         .filter_map(|r| std::future::ready(r.ok()))
         .filter_map(|f| std::future::ready((f.stream == "logs").then_some(f)))
         .flat_map(|f| {
-            let events = parse_log_frames(&f.frames)
+            let events = parse_log_occurrences(&f.frames)
                 .into_iter()
-                .map(|line| parse_log_line(&line))
+                .map(|line| parse_log_line_with_seq(&line.line, line.seq))
                 .map(|entry| {
                     Ok::<_, Infallible>(
                         Event::default()
@@ -265,7 +274,7 @@ pub struct TranslateResponse {
 pub async fn translate_endpoint(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<TranslateParams>,
+    ApiQuery(params): ApiQuery<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "logs:view").await?;
     let code = params.code();
@@ -308,7 +317,7 @@ impl TranslateParams {
 pub async fn translate_post(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<TranslateParams>,
+    ApiJson(body): ApiJson<TranslateParams>,
 ) -> Result<Json<TranslateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "logs:view").await?;
     let code = body.code();

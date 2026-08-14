@@ -48,7 +48,7 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 |---|---|---|
 | `access_ttl_secs` | `3600` | access JWT 有效期 |
 | `refresh_ttl_secs` | `2592000`（30d） | refresh 有效期 |
-| `cookie_domain` | `api-phira.htadiy.com` | host-only cookie 域 |
+| `cookie_domain` | 空（host-only） | Cookie Domain；推荐保持空值，避免自部署误绑定官方域名 |
 | `cookie_secure` | `true` | Secure cookie |
 | `cookie_samesite` | `lax` | lax\|strict\|none |
 | `csrf_cookie_name` | `ppb_csrf` | CSRF cookie |
@@ -64,7 +64,7 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 | `client_name` | `ppb-server` | approve 模式客户端名 |
 | `reconnect_base_ms` / `reconnect_max_ms` | `500` / `30000` | 重连退避 |
 | `request_timeout_ms` | `10000` | OpenUDS 命令超时 |
-| `capabilities` | `[persist.touches, persist.judges, room.chat_send, stream.touches, stream.judges]` | 能力集（与版本映射交集） |
+| `capabilities` | `[persist.touches, persist.judges, persist.rounds, room.chat_send, stream.touches, stream.judges]` | 能力集（与版本映射交集） |
 | `config_path` | 无 | PMP `server_config.yml` 路径（Form Descriptor / 快照） |
 | `http_url` | 无 | PMP HTTP 健康地址（如 `http://127.0.0.1:12347`） |
 
@@ -87,9 +87,27 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 |---|---|
 | `login_per_minute` | `10` |
 | `reauth_per_minute` | `10` |
+| `github_start_per_minute` | `10` |
 | `github_callback_per_minute` | `20` |
+| `github_provider_per_minute` | `120` |
 | `chat_send_per_minute` | `60` |
 | `raw_cli_per_minute` | `30` |
+
+## `[legal]`
+
+Public Phira / linked-GitHub account auth 默认 fail closed。Root 是独立本地主体，不受这一开关影响。
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `public_auth_enabled` | `false` | 只有已批准法律文本已配置时才启用普通账户认证 |
+| `terms_version` | `""` | 当前已批准 Terms 版本；启用 public auth 时必填 |
+| `privacy_version` | `""` | 当前已批准 Privacy 版本；启用 public auth 时必填 |
+| `terms_url` | `""` | HTTPS 或同产品安全相对 URL |
+| `privacy_url` | `""` | HTTPS 或同产品安全相对 URL |
+
+启用 `public_auth_enabled=true` 时四个 version/URL 字段必须同时有效，否则配置校验失败。PPB 记录用户是否接受当前 `(terms_version, privacy_version)`；已经接受当前 pair 的用户后续登录不重复要求，任一版本变化才重新要求显式同意。该事实与 analytics/cookie consent 分离。
+
+Golden bootstrap：先 Root-only health/doctor，再配置 `[legal]`，再创建第一个 Phira 普通用户，最后由 Root 授予普通管理员组。
 
 ## `[audit]`
 
@@ -113,7 +131,7 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 
 ## `[github]`
 
-`callback_url`：固定 `https://api-phira.htadiy.com/api/v1/auth/github/callback`。
+`callback_url`：GitHub OAuth App 中登记的完整回调 URL；官方部署为 `https://api-phira.htadiy.com/api/v1/auth/github/callback`，自部署必须改成自己的 API 域名并保持两端完全一致。
 
 ## 环境变量（Deployment/Secret）
 
@@ -128,7 +146,7 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 | `PPB_GITHUB_CLIENT_ID` / `PPB_GITHUB_CLIENT_SECRET` | GitHub OAuth `[secret]` |
 | `PPB_RUNTIME_CONFIG` | 运行时 TOML 路径 |
 | `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT` | Web Push VAPID `[secret]`（env 优先；对应 `ppb.toml [notifications]` 的 `vapid_private_key_pem` / `vapid_subject`，config/mod.rs 为准） |
-| `PPB_FCM_SERVICE_ACCOUNT_JSON` / `PPB_WNS_PACKAGE_SID` / `PPB_WNS_CLIENT_SECRET` | Android / Windows 推送 `[secret]`（Phase D，待 Owner 凭据） |
+| `PPB_FCM_SERVICE_ACCOUNT_JSON` / `PPB_WNS_PACKAGE_SID` / `PPB_WNS_CLIENT_SECRET` | Android / Windows 推送 `[secret]`；生产 FCM/WNS 凭据、签名与 full-exit 推送仍是 Release Gate |
 
 > [!NOTE]
 > VAPID 变量名统一：配置侧（`config/mod.rs` `NotificationConfig`）键为 `vapid_private_key_pem` / `vapid_subject`（TOML `[notifications]`）；对应环境变量为 `PPB_VAPID_PRIVATE_KEY_PEM` / `PPB_VAPID_SUBJECT`（env 覆盖 TOML）。`PPB_VAPID_PUBLIC_KEY` / `PPB_VAPID_PRIVATE_KEY` 已废弃。

@@ -1,121 +1,130 @@
 # 对外 API（REST / SSE / WebSocket）
 
-> 权威契约见 `contracts/README.md`（Contract-Freeze v0）§1–§4、§18、§19。
-> 端点清单来自当前路由实现（`crates/ppb-server/src/**/routes.rs` 与 `app.rs`）。**OpenAPI 生成物（PPB Phase E）落地后以生成物为准，本清单为人工维护的快速导航。**
+本页是**当前接口导航**，不复制完整 schema。完整普通 HTTP REST 契约以 [`contracts/openapi.json`](../contracts/openapi.json) 为唯一事实源；PPB 实际 Router 必须通过 `scripts/check-route-surface.py` 证明没有未登记的隐藏 REST。非 REST / 浏览器 /基础设施入口以 [`contracts/route-surface.json`](../contracts/route-surface.json) 为准，实时参数语义以 [`contracts/realtime.json`](../contracts/realtime.json) 为准。
 
-## 前缀与约定
+## 约定
 
-- REST 统一前缀：`/api/v1`（`api_version=1`）。
-- 实时：
-  - SSE：`GET /api/v1/events`（普通）、`GET /api/v1/admin/events`（管理）
-  - Live WS：`WSS /ws/v1/rooms/{room_uuid}/live`
-  - Replay WS：`WSS /ws/v1/replays/{round_uuid}`
-- Auth 网关页面（HTML）：`GET /auth/phira/login?return_to=<relative>`（`return_to` 必须命中 PPB 白名单，防 open redirect）。
-- 健康检查：`GET /healthz` → `{"status":"ok"}`。
-- 错误契约：`{"error":{"code","message","request_id","details"}}`，code 全 UPPER_SNAKE_CASE。
-- 分页：请求 `page`（1-based）、`pageNum`（每页 ≤100）；响应 `{items, total, page, pageNum}`。
+- REST 前缀：`/api/v1`。
+- ErrorEnvelope：`{"error":{"code","message","request_id","details"}}`；产品 UI 以稳定 `code` + i18n 为正式语义，`message` 不是产品文案契约。
+- 高风险管理 mutation 的 Reauth 由 PPB 服务端强制，不以 Panel 前端检查替代。
+- Room URL / Live WS 使用 **PMP `room_id`**；`room_uuid` 只用于明确声明的稳定身份/分享语义，不能互换。
+- Secret 永不通过 Config read API 回显明文。
 
-## 公开（`/api/v1/public`）
+## Browser / Realtime / Infrastructure
+
+| 方法 | 路径 | 类型 | 说明 |
+|---|---|---|---|
+| GET | `/auth/phira/login` | Browser HTML | PPB-owned Auth Gateway |
+| GET | `/api/v1/auth/github/callback` | Browser OAuth | GitHub OAuth callback；可恢复错误回 Auth Gateway |
+| GET | `/api/v1/events` | SSE | 公共事件流 |
+| GET | `/api/v1/admin/events` | SSE | 管理事件流 |
+| GET | `/api/v1/admin/logs/stream` | SSE | 管理日志流 |
+| GET | `/ws/v1/rooms/{room_id}/live` | WebSocket | `room_id` semantic = `pmp_room_id` |
+| GET | `/ws/v1/replays/{round_uuid}` | WebSocket | Replay round UUID |
+| GET | `/api/v1/openapi.json` | Infrastructure | 当前 OpenAPI 文档 |
+| GET | `/healthz` | Infrastructure | Liveness only |
+
+## REST 快速导航
+
+以下仅列高频入口；**不是完整 endpoint 清单**。未列出的普通 REST 仍必须存在于 OpenAPI，且必须被 Runtime Route Surface Gate 覆盖。
+
+### Public / Account
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/v1/public/meta` | 版本 / api_version / capabilities / pmp 能力集 |
-| GET | `/api/v1/public/site` | 站点信息（含 `visit_count`，P-86） |
+| GET | `/api/v1/public/meta` | API / capability metadata |
+| GET | `/api/v1/public/site` | 站点信息 |
 | GET | `/api/v1/public/announcements` | 公告 |
 | GET | `/api/v1/public/downloads` | 下载入口 |
-| GET | `/api/v1/public/nodes` | 节点 |
-| GET | `/api/v1/public/events` | 公开 SSE 事件流 |
-
-## 认证（`/api/v1/auth`）
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/api/v1/auth/phira/login` | Phira 登录 → PPB session |
-| POST | `/api/v1/auth/phira/reauth` | 高危险动作二次鉴权（`{password}` → 5min `reauth_context` JWT，走 `X-Reauth-Token`） |
-| POST | `/api/v1/auth/refresh` | 轮换 session / JWT |
-| POST | `/api/v1/auth/logout` | 撤销 session、清 cookie |
-| GET | `/api/v1/auth/github/start` | GitHub 绑定流程开始（需已登录） |
-| GET | `/api/v1/auth/github/callback` | GitHub 回调（固定 URL） |
+| POST | `/api/v1/auth/phira/login` | Phira credentials → PPB account session |
+| POST | `/api/v1/auth/phira/reauth` | Critical-action reauth token |
+| GET | `/api/v1/auth/github/login/start` | 已绑定 GitHub 的后续登录入口 |
+| GET | `/api/v1/auth/github/start` | 已登录账户 GitHub 绑定入口 |
 | POST | `/api/v1/auth/github/unbind` | 解绑 GitHub |
-| POST | `/api/v1/auth/auth/root/login` | Root 登录 `{password}` → `{principal_type, must_change_password}` |
-| GET | `/api/v1/auth/auth/root/session` | Root session 探针（P1） |
-| POST | `/api/v1/auth/auth/root/change-password` | Root 改密 `{current_password, new_password}` |
+| GET | `/api/v1/me` | 当前用户摘要 |
+| GET | `/api/v1/me/profile` | 当前用户社区资料 |
+| GET | `/api/v1/me/preferences` | 账户偏好 |
 
-> [!NOTE]
-> `admin/routes.rs` 把 root 认证子路径 merge 在 `/api/v1/admin` 下，故出现 `/api/v1/admin/auth/root/login`（与 `/api/v1/auth/auth/root/login` 双路径等价，契约以 `/api/v1/admin/auth/root/*` 为准）。
-
-## 本人（`/api/v1/me`）
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/v1/me` | 当前用户摘要 + 身份 + 权限 |
-| GET | `/api/v1/me/profile` | 社区资料（bio/背景/可见性 + rks/stats/online_status/friends_count，缺失为 null） |
-| GET | `/api/v1/me/preferences` | 全部命名空间偏好 |
-| GET/POST | `/api/v1/me/join-intents` | 列出 / 创建 JoinIntent（§19） |
-| DELETE | `/api/v1/me/join-intents/{intent_id}` | 取消 JoinIntent |
-| GET/POST | `/api/v1/me/push-endpoints` | 列出 / 注册推送端点（channel: web_push|fcm|wns） |
-| DELETE | `/api/v1/me/push-endpoints/{endpoint_id}` | 删除推送端点 |
-
-## 房间（`/api/v1/rooms`）
+### Rooms / Replays
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/v1/rooms` | 房间列表 |
 | GET | `/api/v1/rooms/{room_id}` | 房间详情 |
-| GET | `/api/v1/rooms/{room_id}/history` | 房间历史 |
-| GET/POST | `/api/v1/rooms/{room_id}/chat` | 聊天历史 / 发送（`room.chat_send`） |
-| POST | `/api/v1/rooms/{room_id}/actions` | 房间动作 `{action, args}`（Action Registry） |
-| GET | `/api/v1/rooms/{room_id}/banlist` | 封禁名单 |
-| GET | `/api/v1/rooms/{room_id}/whitelist` | 白名单 |
-
-## Phira 数据网关（`/api/v1/charts|records|users`）
-
-已确认公开数据子集（typed 方法，TTL 缓存 + 速率限制）：
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/v1/charts` · `/charts/popular` | 谱面列表 / 热门 |
-| GET | `/api/v1/charts/{id}` · `/preview` | 谱面详情 / 预览 |
-| GET | `/api/v1/charts/{id}/viewer` | Chart viewer bincode blob（§19，P-84） |
-| GET | `/api/v1/charts/{id}/records` · `/top` | 谱面成绩 / 排行 |
-| GET | `/api/v1/records` · `/records/query/{chart_id}` · `/list15/{chart_id}` · `/pool/{user_id}` · `/{id}` | 成绩查询 |
-| GET | `/api/v1/users` · `/users/{phira_id}` · `/stats` | 用户搜索 / 详情 / 统计 |
-
-## Replay（`/api/v1/replays`）
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/v1/replays` | Replay 列表 |
+| GET | `/api/v1/rooms/{room_id}/chat` | 房间聊天历史 |
+| POST | `/api/v1/rooms/{room_id}/chat` | 发送聊天 |
+| POST | `/api/v1/rooms/{room_id}/actions` | Action Registry 房间动作 |
 | GET | `/api/v1/replays/{round_uuid}` | Replay 详情 |
-| GET | `/api/v1/replays/{round_uuid}/manifest` | Replay manifest（§19） |
-| POST | `/api/v1/replays/{round_uuid}/visibility` | 设置可见性 |
-| POST | `/api/v1/replays/{round_uuid}/share` | 创建分享链接（只存 hash，可 revoke） |
-| DELETE | `/api/v1/replays/{round_uuid}/share/{link_id}` | 撤销分享 |
-| GET | `/api/v1/replays/share/{token}` | 解析分享 token |
+| GET | `/api/v1/replays/{round_uuid}/manifest` | Replay manifest |
+| POST | `/api/v1/replays/{round_uuid}/visibility` | Replay visibility |
+| POST | `/api/v1/replays/{round_uuid}/share` | 创建分享 |
 
-## 管理（`/api/v1/admin`）
+### Root / Admin
 
-> 管理子路径为普通端点超集，不加重复业务模型。泛型动作统一经 Action Registry / Command Broker（§17）。
+Root 是独立本地主体，正式路径只有 `/api/v1/admin/auth/root/*`；不存在第二套“等价 Root 路径”。
 
-- **Server**：`/server/status` · `/server/stats` · `/server/runtime` · `/server/actions` · `/server/config-reload` · `/server/roomcreation` · `/server/shutdown` · `/server/broadcast/{all,room,user}`
-- **Plugins**：`/plugins` · `/plugins/{name}` · `/{name}/enable|disable|remove` · `/{name}/{action}` · `/plugins/call`
-- **Notifications**：`/notifications/send` · `/notifications/delivery`
-- **Coupons**：`/coupons` · `/coupons/create` · `/coupons/{id}/revoke`
-- **Audit**：`/audit` · `/audit/{id}` · `/audit/export` · `/audit/export.csv`
-- **Config**：`/config/descriptors` · `/config/values` · `/config/validate` · `/config/diff` · `/config/save` · `/config/snapshots` · `/config/raw` · `/config/rollback` · `/config/ppb` · `/config/pmp[/snapshots[/{id}/rollback]]` · `/config/ppf` · `/config/public/{key}`
-- **Users**：`/users` · `/users/{user_id}` · `/{user_id}/multiplayer|sessions|security|audit` · `/{user_id}/actions` · `/{user_id}/ban|unban|kick` · `/{user_id}/ip-history`
-- **Rooms**：`/rooms`（GET+POST）· `/rooms/{room_id}`（GET+DELETE）· `/rooms/{room_id}/actions` · `/rooms/actions/batch`（preview + partial failure）· `/rooms/{room_id}/banlist|whitelist`
-- **Permissions**：`/permissions/manifest` · `/groups` · `/groups/{id}` · `/{id}/set-default` · `/{id}/permissions` · `/{id}/members` · `/{id}/members/{user_id}`
-- **Actions / Commands**：`/actions` · `/actions/{action_id}/execute` · `/commands` · `/commands/history` · `/commands/execute`（raw `cli.execute`，全量 Audit）
-- **Logs**：`/logs` · `/logs/stream` · `/logs/input` · `/logs/translate`
-- **Jobs**：`/jobs` · `/jobs/{job_id}` · `/jobs/{job_id}/cancel`
-- **Automation**：`/runbooks` · `/runbooks/{id}` · `/runbooks/{id}/run` · `/runbook-runs`
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/v1/admin/auth/root/login` | Root 登录 |
+| GET | `/api/v1/admin/auth/root/session` | Root session probe |
+| POST | `/api/v1/admin/auth/root/change-password` | Root 改密 |
+| GET | `/api/v1/admin/users` | 用户列表 |
+| GET | `/api/v1/admin/users/{phira_id}` | 用户 workspace |
+| POST | `/api/v1/admin/users/{phira_id}/actions` | 用户管理动作统一入口 |
+| GET | `/api/v1/admin/rooms` | 管理房间列表 |
+| POST | `/api/v1/admin/rooms/{room_id}/actions` | 管理房间动作统一入口 |
+| GET | `/api/v1/admin/groups` | 管理组列表 |
+| PUT | `/api/v1/admin/groups/{id}/permissions` | 原子替换组权限 |
+| PUT | `/api/v1/admin/groups/{id}/members` | 原子替换组成员 |
 
-## SSE 事件信封
+### Config — 唯一执行面
 
-```json
-{"id":"uuid","type":"room.updated","version":1,"occurred_at":"RFC3339",
- "resource":{"type":"room","id":"..."},"data":{}}
+Config 不再保留 whole-YAML write、RuntimeConfig echo 或额外 rollback plane。正式写链：Validate / Diff → Critical Reauth → Save；Rollback 同样由服务端 Critical Reauth，并记录不含 Secret 值的 Audit metadata。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/admin/config/descriptors` | 字段 descriptor / sensitive metadata |
+| GET | `/api/v1/admin/config/values` | canonical values；secret 只返回 redacted 状态 |
+| POST | `/api/v1/admin/config/validate` | 校验 draft |
+| POST | `/api/v1/admin/config/diff` | changed field paths / safe diff |
+| POST | `/api/v1/admin/config/save` | Critical Reauth；descriptor patch / secret preserve / snapshot / atomic write / reload / audit |
+| GET | `/api/v1/admin/config/snapshots` | snapshot list |
+| GET | `/api/v1/admin/config/raw` | 只读 redacted canonical projection；unknown raw YAML 不发送给浏览器 |
+| POST | `/api/v1/admin/config/rollback` | Critical Reauth；rollback / reload / audit |
+| GET | `/api/v1/admin/config/ppf` | PPF build config |
+| PUT | `/api/v1/admin/config/ppf` | PPF build config update |
+
+### Automation
+
+Automation 正式前缀是 `/api/v1/admin/automation`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/admin/automation/runbooks` | Runbook list |
+| POST | `/api/v1/admin/automation/runbooks` | Create runbook |
+| GET | `/api/v1/admin/automation/runbooks/{id}` | Runbook detail |
+| PATCH | `/api/v1/admin/automation/runbooks/{id}` | Update runbook |
+| POST | `/api/v1/admin/automation/runbooks/{id}/run` | Start run |
+| GET | `/api/v1/admin/automation/runbook-runs` | Run list |
+| GET | `/api/v1/admin/automation/runbook-runs/{id}` | Run status |
+| POST | `/api/v1/admin/automation/runbook-runs/{id}/cancel` | Cancel run |
+
+## Contract / Gate
+
+本地静态校验：
+
+```bash
+python3 scripts/check-error-contract.py
+python3 scripts/check-rest-extractors.py --self-test
+python3 scripts/check-rest-extractors.py
+python3 scripts/check-route-surface.py --self-test
+python3 scripts/check-route-surface.py
+python3 scripts/check-realtime-contract.py --self-test
+python3 scripts/check-realtime-contract.py
+python3 scripts/check-config-security.py --self-test
+python3 scripts/check-config-security.py
+python3 scripts/check-current-docs.py
+python3 scripts/verify-contract-bundle.py
 ```
 
-支持 `server.heartbeat`、`Last-Event-ID` 短 replay、无法续传时 snapshot+realtime。PMP 事件映射见 [pmp-integration.md](./pmp-integration.md)。
+真正发布仍要求目标 commit/tag 的 `cargo check/test/clippy`、数据库/浏览器/部署证据；本文档不把历史 CI 结果当作当前候选已验证。

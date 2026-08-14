@@ -15,9 +15,8 @@ use crate::auth::reauth::ReauthRisk;
 pub enum JobExecutor {
     /// Server-side fixed CLI command. Client text is never accepted.
     FixedCli(&'static str),
-    /// Not yet implemented; must terminate `not_implemented` rather than fake
-    /// `succeeded`.
-    NotImplemented,
+    /// Controlled deployment command configured by the operator; never client-supplied.
+    Deployment,
 }
 
 /// When a Job may be cancelled.
@@ -97,28 +96,27 @@ pub fn seed_jobs() -> Vec<JobDescriptor> {
             stage: "forcing_update",
             terminal: "completed",
         },
-        // Stubs — never fabricate success; terminate `not_implemented`.
         JobDescriptor {
             id: "ppf.build",
             permission: "server:manage",
-            reauth: None,
+            reauth: Some(ReauthRisk::High),
             resource_key: Some("ppf"),
             retryable: false,
             cancel_mode: CancelMode::BeforeDispatch,
-            executor: NotImplemented,
+            executor: Deployment,
             stage: "building",
-            terminal: "not_implemented",
+            terminal: "completed",
         },
         JobDescriptor {
             id: "backup",
             permission: "server:manage",
-            reauth: None,
+            reauth: Some(ReauthRisk::High),
             resource_key: Some("server"),
             retryable: false,
             cancel_mode: CancelMode::BeforeDispatch,
-            executor: NotImplemented,
+            executor: Deployment,
             stage: "backing-up",
-            terminal: "not_implemented",
+            terminal: "completed",
         },
     ]
 }
@@ -175,7 +173,7 @@ mod tests {
     #[test]
     fn stubs_are_not_implemented() {
         let reg = JobRegistry::new();
-        assert_eq!(reg.get("ppf.build").unwrap().executor, JobExecutor::NotImplemented);
-        assert_eq!(reg.get("backup").unwrap().executor, JobExecutor::NotImplemented);
+        assert_eq!(reg.get("ppf.build").unwrap().executor, JobExecutor::Deployment);
+        assert_eq!(reg.get("backup").unwrap().executor, JobExecutor::Deployment);
     }
 }

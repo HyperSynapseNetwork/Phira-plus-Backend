@@ -4,11 +4,10 @@
 //! access to the pair and pins the player server-side; the viewer WS can never
 //! be redirected to another player's touches/judges. There is NO raw download.
 
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -22,18 +21,24 @@ use super::visibility::resolve_replay_access;
 use super::{create_share_link, revoke_share_link, set_visibility, ReplayOverride};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 #[allow(unused_imports)]
-use crate::openapi::{ReplayDetail, ReplayManifest, ResolveShareResponse};
+use crate::openapi::{
+    ReplayDetail, ReplayFramesResponse, ReplayJudgeFrame, ReplayListResponse,
+    ReplayManifest, ReplaySummary, ReplayTouchPoint, ResolveShareResponse,
+};
 use crate::middleware::auth::OptionalAuthPrincipal;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/replays", get(list_replays))
+        .route("/me/replays", get(list_my_replays))
         .route("/replays/share/{token}", get(resolve_share))
         .route("/replays/{round_uuid}", get(detail))
         .route("/replays/{round_uuid}/manifest", get(manifest))
+        .route("/replays/{round_uuid}/frames", get(frames))
         .route("/replays/{round_uuid}/visibility", post(set_replay_visibility))
         .route("/replays/{round_uuid}/share", post(create_share))
         .route("/replays/{round_uuid}/share/{link_id}", delete(revoke_share))
@@ -44,15 +49,165 @@ pub struct ReplayListParams {
     pub player_id: i32,
 }
 
-/// GET /api/v1/replays?player_id=... — a player's distinct rounds (best-effort).
+#[derive(Debug, Clone, Deserialize)]
+struct ReplayRoundMeta {
+    round_uuid: String,
+    chart_id: i32,
+    chart_name: String,
+    room_id: String,
+    #[serde(default)]
+    players: Vec<i32>,
+    started_at: i64,
+    finished_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct OwnerReplayShareLink {
+    pub id: Uuid,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct OwnerReplaySummary {
+    pub round_uuid: String,
+    pub player_phira_id: i64,
+    pub chart_id: i32,
+    pub chart_name: String,
+    pub room_id: String,
+    pub played_at: i64,
+    pub finished_at: Option<i64>,
+    pub visibility: String,
+    pub share_links: Vec<OwnerReplayShareLink>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct OwnerReplayListResponse {
+    pub player_id: i64,
+    pub items: Vec<OwnerReplaySummary>,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ReplayCreatedShareLink {
+    pub id: Uuid,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ReplayShareCreatedResponse {
+    pub link: ReplayCreatedShareLink,
+    /// Opaque raw token, returned once. Only a hash is persisted.
+    pub token: String,
+}
+
+async fn round_meta(
+    state: &AppState,
+    round_uuid: &str,
+    player_id: i32,
+) -> Result<ReplayRoundMeta, ApiError> {
+    let values = persist::fetch_rounds(&state.openuds, Some(round_uuid), Some(player_id), 1)
+        .await
+        .map_err(ApiError::from)?;
+    values
+        .into_iter()
+        .find_map(|value| serde_json::from_value::<ReplayRoundMeta>(value).ok())
+        .filter(|round| round.players.contains(&player_id))
+        .ok_or_else(|| ApiError::new(ErrorCode::ReplayNotFound, "replay not found"))
+}
+
+/// GET /api/v1/me/replays — owner inventory including non-public visibility.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/replays",
+    operation_id = "me_replays_get",
+    responses(
+        (status = 200, description = "owner replay inventory", body = OwnerReplayListResponse),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn list_my_replays(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<OwnerReplayListResponse>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let user = crate::users::repo::find_by_id(db, auth.sub)
+        .await?
+        .ok_or_else(|| ApiError::new(crate::error::ErrorCode::UserNotFound, "user not found"))?;
+    let player_id = user.phira_id;
+
+    let overrides = sqlx::query_as::<_, (String, String)>(
+        "SELECT pmp_replay_id, visibility FROM replay_overrides
+         WHERE player_phira_id = $1 AND (owner_user_id = $2 OR owner_user_id IS NULL)",
+    )
+    .bind(player_id)
+    .bind(auth.sub)
+    .fetch_all(db)
+    .await
+    .map_err(super::db_err_public)?
+    .into_iter()
+    .collect::<std::collections::HashMap<_, _>>();
+
+    let links = sqlx::query_as::<_, (Uuid, String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>(
+        "SELECT id, replay_round, expires_at, revoked_at FROM replay_share_links
+         WHERE player_phira_id = $1 AND created_by = $2 ORDER BY created_at DESC",
+    )
+    .bind(player_id)
+    .bind(auth.sub)
+    .fetch_all(db)
+    .await
+    .map_err(super::db_err_public)?;
+    let mut links_by_round: std::collections::HashMap<String, Vec<OwnerReplayShareLink>> = std::collections::HashMap::new();
+    for (id, replay_round, expires_at, revoked_at) in links {
+        links_by_round.entry(replay_round).or_default().push(OwnerReplayShareLink { id, expires_at, revoked_at });
+    }
+
+    let rounds = persist::fetch_all_rounds(&state.openuds, None, Some(player_id as i32))
+        .await
+        .map_err(ApiError::from)?;
+    let items = rounds
+        .into_iter()
+        .filter_map(|value| serde_json::from_value::<ReplayRoundMeta>(value).ok())
+        .map(|round| OwnerReplaySummary {
+            visibility: overrides.get(&round.round_uuid).cloned().unwrap_or_else(|| "public".to_string()),
+            share_links: links_by_round.remove(&round.round_uuid).unwrap_or_default(),
+            round_uuid: round.round_uuid,
+            player_phira_id: player_id,
+            chart_id: round.chart_id,
+            chart_name: round.chart_name,
+            room_id: round.room_id,
+            played_at: round.started_at,
+            finished_at: round.finished_at,
+        })
+        .collect::<Vec<_>>();
+    let total = items.len() as i64;
+    Ok(Json(OwnerReplayListResponse { player_id, items, total }))
+}
+
+/// GET /api/v1/replays?player_id=... — a player's durable round inventory.
 ///
 /// Only `public` (incl. `inherit`→public) replays are listed; unlisted/private/
 /// friends/custom overrides are never exposed in the public listing (contract §20).
-async fn list_replays(
+#[utoipa::path(
+    get,
+    path = "/api/v1/replays",
+    operation_id = "replays_get",
+    params(("player_id" = i32, Query, description = "Phira player id")),
+    responses(
+        (status = 200, description = "public replay list", body = ReplayListResponse),
+        (status = 502, description = "pmp unavailable", body = ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn list_replays(
     _auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<ReplayListParams>,
-) -> Result<Json<Value>, ApiError> {
+    ApiQuery(params): ApiQuery<ReplayListParams>,
+) -> Result<Json<ReplayListResponse>, ApiError> {
     // Listing is public; per-pair access is enforced on detail/manifest/WS.
     let db = state.require_db()?;
     // Replays with a non-public visibility override must not appear in lists.
@@ -71,43 +226,30 @@ async fn list_replays(
     .map(|(r,)| r)
     .collect();
 
-    let openuds = &state.openuds;
-    let mut rounds: BTreeSet<String> = BTreeSet::new();
-    let mut total_frames = 0i64;
-    let mut since = 0i64;
-    for _ in 0..50 {
-        let v = persist::fetch_batches(openuds, "touches", since, persist::MAX_PAGE, None, Some(params.player_id))
-            .await
-            .map_err(ApiError::from)?;
-        let batches = persist::batches_of(&v);
-        if batches.is_empty() {
-            break;
-        }
-        for b in &batches {
-            if let Some(r) = b.get("round_uuid").and_then(Value::as_str) {
-                if !non_public.contains(r) {
-                    rounds.insert(r.to_string());
-                }
-            }
-            if let Some(c) = b.get("count").and_then(Value::as_i64) {
-                total_frames += c;
-            }
-        }
-        let last = batches
-            .iter()
-            .filter_map(|b| b.get("sequence").and_then(Value::as_i64))
-            .max()
-            .unwrap_or(since);
-        if last <= since {
-            break;
-        }
-        since = last;
-    }
-    Ok(Json(json!({
-        "player_id": params.player_id,
-        "replays": rounds.into_iter().collect::<Vec<String>>(),
-        "total_frames": total_frames,
-    })))
+    let rounds = persist::fetch_all_rounds(&state.openuds, None, Some(params.player_id))
+        .await
+        .map_err(ApiError::from)?;
+    let items = rounds
+        .into_iter()
+        .filter_map(|value| serde_json::from_value::<ReplayRoundMeta>(value).ok())
+        .filter(|round| !non_public.contains(&round.round_uuid))
+        .map(|round| ReplaySummary {
+            round_uuid: round.round_uuid,
+            player_phira_id: params.player_id as i64,
+            chart_id: round.chart_id,
+            chart_name: round.chart_name,
+            room_id: round.room_id,
+            played_at: round.started_at,
+            finished_at: round.finished_at,
+            visibility: "public".to_string(),
+        })
+        .collect::<Vec<_>>();
+    let total = items.len() as i64;
+    Ok(Json(ReplayListResponse {
+        player_id: params.player_id,
+        items,
+        total,
+    }))
 }
 
 /// GET /api/v1/replays/share/{token} — resolve an opaque share token to the
@@ -124,7 +266,7 @@ async fn list_replays(
 )]
 pub async fn resolve_share(
     State(state): State<Arc<AppState>>,
-    Path(token): Path<String>,
+    ApiPath(token): ApiPath<String>,
 ) -> Result<Json<ResolveShareResponse>, ApiError> {
     let db = state.require_db()?;
     let (round, player) = super::resolve_share_token(db, &token).await?;
@@ -146,6 +288,11 @@ pub struct ReplayDetailParams {
     get,
     path = "/api/v1/replays/{round_uuid}",
     operation_id = "replays_round_uuid_get",
+    params(
+        ("round_uuid" = String, Path, description = "PMP round UUID"),
+        ("player_id" = i64, Query, description = "Phira player id"),
+        ("token" = Option<String>, Query, description = "Optional Replay share token"),
+    ),
     responses(
         (status = 200, description = "replay detail", body = ReplayDetail),
         (status = 403, description = "access denied", body = ErrorEnvelope),
@@ -155,8 +302,8 @@ pub struct ReplayDetailParams {
 pub async fn detail(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(round_uuid): Path<String>,
-    Query(params): Query<ReplayDetailParams>,
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
 ) -> Result<Json<ReplayDetail>, ApiError> {
     let db = state.require_db()?;
     let Some(player) = resolve_replay_access(
@@ -171,6 +318,7 @@ pub async fn detail(
         return Err(ApiError::permission_denied());
     };
     let visibility = super::visibility::effective_visibility(db, &round_uuid, player).await?;
+    let meta = round_meta(&state, &round_uuid, player as i32).await?;
     let openuds = &state.openuds;
     let touches = persist::fetch_batches(openuds, "touches", 0, 1, Some(&round_uuid), Some(player as i32))
         .await
@@ -181,6 +329,11 @@ pub async fn detail(
     Ok(Json(ReplayDetail {
         round_uuid,
         player_phira_id: player,
+        chart_id: meta.chart_id,
+        chart_name: meta.chart_name,
+        room_id: meta.room_id,
+        started_at: meta.started_at,
+        finished_at: meta.finished_at,
         visibility,
         touches: persist::summarize_batches(&persist::batches_of(&touches)),
         judges: persist::summarize_batches(&persist::batches_of(&judges)),
@@ -193,6 +346,11 @@ pub async fn detail(
     get,
     path = "/api/v1/replays/{round_uuid}/manifest",
     operation_id = "replays_round_uuid_manifest_get",
+    params(
+        ("round_uuid" = String, Path, description = "PMP round UUID"),
+        ("player_id" = i64, Query, description = "Phira player id"),
+        ("token" = Option<String>, Query, description = "Optional Replay share token"),
+    ),
     responses(
         (status = 200, description = "replay manifest", body = ReplayManifest),
         (status = 403, description = "access denied", body = ErrorEnvelope),
@@ -202,8 +360,8 @@ pub async fn detail(
 pub async fn manifest(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(round_uuid): Path<String>,
-    Query(params): Query<ReplayDetailParams>,
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
 ) -> Result<Json<ReplayManifest>, ApiError> {
     let db = state.require_db()?;
     let Some(player) = resolve_replay_access(
@@ -218,72 +376,166 @@ pub async fn manifest(
         return Err(ApiError::permission_denied());
     };
     let openuds = &state.openuds;
-    let touches = persist::fetch_batches(openuds, "touches", 0, persist::MAX_PAGE, Some(&round_uuid), Some(player as i32))
+    let meta = round_meta(&state, &round_uuid, player as i32).await?;
+    let touches = persist::fetch_all_batches(openuds, "touches", &round_uuid, player as i32)
         .await
         .map_err(ApiError::from)?;
-    let judges = persist::fetch_batches(openuds, "judges", 0, persist::MAX_PAGE, Some(&round_uuid), Some(player as i32))
+    let judges = persist::fetch_all_batches(openuds, "judges", &round_uuid, player as i32)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(ReplayManifest {
         round_uuid,
         player_phira_id: player,
-        touches: persist::summarize_batches(&persist::batches_of(&touches)),
-        judges: persist::summarize_batches(&persist::batches_of(&judges)),
+        chart_id: meta.chart_id,
+        chart_name: meta.chart_name,
+        room_id: meta.room_id,
+        started_at: meta.started_at,
+        finished_at: meta.finished_at,
+        touches: persist::summarize_batches(&touches),
+        judges: persist::summarize_batches(&judges),
+    }))
+}
+
+fn payload_items<T: serde::de::DeserializeOwned>(batches: Vec<Value>) -> Vec<T> {
+    batches
+        .into_iter()
+        .filter_map(|batch| batch.get("payload").and_then(Value::as_array).cloned())
+        .flatten()
+        .filter_map(|item| serde_json::from_value(item).ok())
+        .collect()
+}
+
+/// Full typed telemetry for a Replay viewer. Access is pinned to the same
+/// `(round_uuid, player_phira_id)` policy as manifest and WebSocket routes.
+#[utoipa::path(
+    get,
+    path = "/api/v1/replays/{round_uuid}/frames",
+    operation_id = "replays_round_uuid_frames_get",
+    params(
+        ("round_uuid" = String, Path, description = "PMP round UUID"),
+        ("player_id" = i64, Query, description = "Phira player id"),
+        ("token" = Option<String>, Query, description = "Optional Replay share token"),
+    ),
+    responses(
+        (status = 200, description = "typed Replay telemetry", body = ReplayFramesResponse),
+        (status = 403, description = "access denied", body = ErrorEnvelope),
+    ),
+    tag = "replays"
+)]
+pub async fn frames(
+    auth: OptionalAuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
+) -> Result<Json<ReplayFramesResponse>, ApiError> {
+    let db = state.require_db()?;
+    let Some(player) = resolve_replay_access(
+        db,
+        &round_uuid,
+        params.player_id,
+        auth.0.as_ref(),
+        params.token.as_deref(),
+    )
+    .await?
+    else {
+        return Err(ApiError::permission_denied());
+    };
+    // Confirm that the pair belongs to a durable round before returning data.
+    let _ = round_meta(&state, &round_uuid, player as i32).await?;
+    let touches = persist::fetch_all_batches(&state.openuds, "touches", &round_uuid, player as i32)
+        .await
+        .map_err(ApiError::from)?;
+    let judges = persist::fetch_all_batches(&state.openuds, "judges", &round_uuid, player as i32)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(ReplayFramesResponse {
+        round_uuid,
+        player_phira_id: player,
+        touches: payload_items::<ReplayTouchPoint>(touches),
+        judges: payload_items::<ReplayJudgeFrame>(judges),
     }))
 }
 
 const VISIBILITIES: &[&str] = &["inherit", "public", "friends", "private", "unlisted", "custom"];
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct ReplayVisibilityResponse {
+    pub r#override: ReplayOverride,
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct VisibilityBody {
     pub visibility: String,
 }
 
 /// POST /api/v1/replays/{round_uuid}/visibility?player_id=... — set visibility
 /// for the pair (owner).
-async fn set_replay_visibility(
+#[utoipa::path(
+    post,
+    path = "/api/v1/replays/{round_uuid}/visibility",
+    operation_id = "replays_round_uuid_visibility_post",
+    request_body = VisibilityBody,
+    responses((status = 200, description = "visibility updated", body = ReplayVisibilityResponse)),
+    tag = "replays"
+)]
+pub async fn set_replay_visibility(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(round_uuid): Path<String>,
-    Query(params): Query<ReplayDetailParams>,
-    Json(body): Json<VisibilityBody>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
+    ApiJson(body): ApiJson<VisibilityBody>,
+) -> Result<Json<ReplayVisibilityResponse>, ApiError> {
     if !VISIBILITIES.contains(&body.visibility.as_str()) {
-        return Err(ApiError::validation("visibility must be one of inherit|public|friends|private|unlisted|custom"));
+        return Err(ApiError::new(ErrorCode::ReplayVisibilityInvalid, "invalid replay visibility"));
     }
     let db = state.require_db()?;
     ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
     let over = set_visibility(db, &round_uuid, params.player_id, auth.sub, &body.visibility).await?;
-    Ok(Json(json!({ "override": over })))
+    Ok(Json(ReplayVisibilityResponse { r#override: over }))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ShareBody {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// POST /api/v1/replays/{round_uuid}/share?player_id=... — create a share link
 /// for the pair (owner).
-async fn create_share(
+#[utoipa::path(
+    post,
+    path = "/api/v1/replays/{round_uuid}/share",
+    operation_id = "replays_round_uuid_share_post",
+    request_body = ShareBody,
+    responses((status = 200, description = "share link created", body = ReplayShareCreatedResponse)),
+    tag = "replays"
+)]
+pub async fn create_share(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(round_uuid): Path<String>,
-    Query(params): Query<ReplayDetailParams>,
-    Json(body): Json<ShareBody>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
+    ApiJson(body): ApiJson<ShareBody>,
+) -> Result<Json<ReplayShareCreatedResponse>, ApiError> {
     let db = state.require_db()?;
     ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
     let (link, token) = create_share_link(db, &round_uuid, params.player_id, auth.sub, body.expires_at).await?;
-    Ok(Json(json!({ "link": link, "token": token })))
+    Ok(Json(ReplayShareCreatedResponse { link: ReplayCreatedShareLink { id: link.id, expires_at: link.expires_at }, token }))
 }
 
 /// DELETE /api/v1/replays/{round_uuid}/share/{link_id}?player_id=... — revoke a
 /// share link for the pair (owner).
-async fn revoke_share(
+#[utoipa::path(
+    delete,
+    path = "/api/v1/replays/{round_uuid}/share/{link_id}",
+    operation_id = "replays_round_uuid_share_link_id_delete",
+    responses((status = 204, description = "share link revoked"), (status = 404, description = "link not found", body = ErrorEnvelope)),
+    tag = "replays"
+)]
+pub async fn revoke_share(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path((round_uuid, link_id)): Path<(String, Uuid)>,
-    Query(params): Query<ReplayDetailParams>,
+    ApiPath((round_uuid, link_id)): ApiPath<(String, Uuid)>,
+    ApiQuery(params): ApiQuery<ReplayDetailParams>,
 ) -> Result<StatusCode, ApiError> {
     let db = state.require_db()?;
     ensure_owner(db, &round_uuid, params.player_id, auth.sub).await?;
@@ -345,8 +597,8 @@ pub struct ReplayWsParams {
 pub async fn replay_ws(
     auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(round_uuid): Path<String>,
-    Query(params): Query<ReplayWsParams>,
+    ApiPath(round_uuid): ApiPath<String>,
+    ApiQuery(params): ApiQuery<ReplayWsParams>,
     ws: WebSocketUpgrade,
 ) -> Result<axum::response::Response, ApiError> {
     let db = state.require_db()?;
@@ -362,7 +614,7 @@ pub async fn replay_ws(
                 user.map(|u| u.phira_id).unwrap_or(0)
             }
             (None, None) => {
-                return Err(ApiError::validation("player_id required"));
+                return Err(ApiError::new(ErrorCode::ReplayPlayerRequired, "replay player_id required"));
             }
         }
     };

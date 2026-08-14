@@ -24,7 +24,7 @@ impl RateLimiter {
     /// Check + record an attempt. Returns `RATE_LIMIT` when over `limit_per_minute`.
     pub fn check(&self, key: &str, limit_per_minute: u32) -> Result<(), ApiError> {
         if limit_per_minute == 0 {
-            return Err(ApiError::new(ErrorCode::RateLimit, "rate limit disabled by policy"));
+            return Err(ApiError::new(ErrorCode::RateLimited, "rate limit disabled by policy"));
         }
         let now = now_secs();
         let mut bucket = self.buckets.entry(key.to_string()).or_default();
@@ -34,13 +34,13 @@ impl RateLimiter {
                 .front()
                 .map(|t| (60 - (now - *t)).max(1))
                 .unwrap_or(60);
-            return Err(ApiError {
-                code: ErrorCode::RateLimit,
-                message: "rate limit exceeded".to_string(),
-                request_id: String::new(),
-                details: serde_json::json!({ "retry_after": retry_after }),
-                retry_after_secs: Some(retry_after as u64),
-            });
+            let mut error = ApiError::with_details(
+                ErrorCode::RateLimited,
+                "rate limit exceeded",
+                serde_json::json!({ "retry_after_seconds": retry_after }),
+            );
+            error.retry_after_secs = Some(retry_after as u64);
+            return Err(error);
         }
         bucket.push_back(now);
         Ok(())
@@ -73,7 +73,7 @@ mod tests {
             let _ = rl.check("cli:root", 3);
         }
         let err = rl.check("cli:root", 3).unwrap_err();
-        assert_eq!(err.code, ErrorCode::RateLimit);
+        assert_eq!(err.code, ErrorCode::RateLimited);
         assert!(err.retry_after_secs.is_some());
     }
 

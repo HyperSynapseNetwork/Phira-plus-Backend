@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
@@ -25,7 +25,7 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson, ApiPath};
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -44,7 +44,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     path = "/api/v1/admin/automation/runbook-runs/{id}",
     operation_id = "admin_automation_runbook_runs_id_get",
     responses(
-        (status = 200, description = "runbook run detail", body = serde_json::Value),
+        (status = 200, description = "runbook run detail", body = RunbookRunRow),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -52,7 +52,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub async fn get_run(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<RunbookRunRow>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:view").await?;
     let db = state.require_db()?;
@@ -74,7 +74,7 @@ pub async fn get_run(
     path = "/api/v1/admin/automation/runbook-runs/{id}/cancel",
     operation_id = "admin_automation_runbook_runs_id_cancel_post",
     responses(
-        (status = 200, description = "cancelled", body = serde_json::Value),
+        (status = 200, description = "cancelled", body = RunbookCancelResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -82,8 +82,8 @@ pub async fn get_run(
 pub async fn cancel_run(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<RunbookCancelResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:execute").await?;
     let db = state.require_db()?;
     sqlx::query(
@@ -94,10 +94,10 @@ pub async fn cancel_run(
     .execute(db)
     .await
     .map_err(db_err)?;
-    Ok(Json(json!({ "cancelled": id })))
+    Ok(Json(RunbookCancelResponse { cancelled: id }))
 }
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct RunbookRow {
     pub id: Uuid,
     pub name: String,
@@ -108,7 +108,7 @@ pub struct RunbookRow {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct RunbookRunRow {
     pub id: Uuid,
     pub runbook_id: Uuid,
@@ -155,12 +155,12 @@ async fn fetch_runbook(db: &sqlx::PgPool, id: Uuid) -> Result<RunbookRow, ApiErr
 pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<CreateRunbookBody>,
+    ApiJson(body): ApiJson<CreateRunbookBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:edit").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
-    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+    let def = serde_json::to_value(&body.definition).map_err(|error| { tracing::error!(%error, "runbook serialization failed"); ApiError::internal() })?;
     let row = sqlx::query_as::<_, RunbookRow>(
         "INSERT INTO runbooks (name, description, definition, created_by, updated_by)
          VALUES ($1, $2, $3, $4, $4)
@@ -214,7 +214,7 @@ pub async fn list(
 pub async fn get_one(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<RunbookRow>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:view").await?;
     let db = state.require_db()?;
@@ -236,13 +236,13 @@ pub async fn get_one(
 pub async fn update(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
-    Json(body): Json<CreateRunbookBody>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<CreateRunbookBody>,
 ) -> Result<Json<RunbookRow>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:edit").await?;
     validate_steps(&body.definition.steps, &state.actions).map_err(ApiError::validation)?;
     let db = state.require_db()?;
-    let def = serde_json::to_value(&body.definition).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+    let def = serde_json::to_value(&body.definition).map_err(|error| { tracing::error!(%error, "runbook serialization failed"); ApiError::internal() })?;
     let row = sqlx::query_as::<_, RunbookRow>(
         "UPDATE runbooks SET name = $1, description = $2, definition = $3, updated_by = $4, updated_at = now()
          WHERE id = $5
@@ -273,7 +273,7 @@ pub async fn update(
 pub async fn delete_runbook(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:edit").await?;
     let db = state.require_db()?;
@@ -285,10 +285,41 @@ pub async fn delete_runbook(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RunBody {
     #[serde(default)]
     pub args: Value,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct AutomationStepError {
+    pub code: ErrorCode,
+    /// Debug/legacy fallback only. Formal UI uses `code`.
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct AutomationStepResult {
+    pub step: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<AutomationStepError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct RunbookExecutionResponse {
+    pub run_id: Uuid,
+    pub status: String,
+    pub results: Vec<AutomationStepResult>,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct RunbookCancelResponse {
+    pub cancelled: Uuid,
 }
 
 /// POST /api/v1/admin/automation/runbooks/{id}/run — snapshot + execute steps sequentially.
@@ -297,7 +328,7 @@ pub struct RunBody {
     path = "/api/v1/admin/automation/runbooks/{id}/run",
     operation_id = "admin_automation_runbooks_id_run_post",
     responses(
-        (status = 200, description = "run result", body = serde_json::Value),
+        (status = 200, description = "run result", body = RunbookExecutionResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -306,9 +337,9 @@ pub async fn run(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     body: axum::body::Bytes,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<RunbookExecutionResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "automation:execute").await?;
     let db = state.require_db()?;
     let runbook = fetch_runbook(db, id).await?;
@@ -320,7 +351,10 @@ pub async fn run(
         Value::Null
     } else {
         serde_json::from_slice::<RunBody>(&body)
-            .map_err(|e| ApiError::validation(format!("invalid body: {e}")))?
+            .map_err(|error| {
+                tracing::debug!(%error, "invalid automation run json");
+                ApiError::new(ErrorCode::InvalidJson, "invalid json request")
+            })?
             .args
     };
     let run_id = sqlx::query_as::<_, (Uuid,)>(
@@ -337,13 +371,13 @@ pub async fn run(
     .map_err(db_err)?
     .0;
 
-    let mut results: Vec<Value> = Vec::new();
+    let mut results: Vec<AutomationStepResult> = Vec::new();
     let mut ok = true;
     for step in &definition.steps {
         // WAIT-only step (design §10.1): no action, just sleep.
         if step.action.is_empty() {
             if let Some(wait) = step.wait_secs {
-                results.push(json!({ "step": "wait", "ok": true, "wait_secs": wait }));
+                results.push(AutomationStepResult { step: "wait".to_string(), ok: true, result: None, error: None, wait_secs: Some(wait) });
                 tokio::time::sleep(Duration::from_secs(wait.min(3600))).await;
             }
             continue;
@@ -352,10 +386,34 @@ pub async fn run(
             .actions
             .get(&step.action)
             .ok_or_else(|| ApiError::not_found("action"))?;
+        // A runbook request is synchronous. Submitting a long-running action here
+        // would let the HTTP request time out while the command keeps mutating
+        // state in the background. Until runbooks persist and expose Job handles,
+        // fail before enqueueing so callers never receive a false terminal result.
+        if action.long_running || crate::actions::registry::is_job_only_action(action.id) {
+            ok = false;
+            results.push(AutomationStepResult {
+                step: step.action.clone(),
+                ok: false,
+                result: None,
+                error: Some(AutomationStepError {
+                    code: ErrorCode::LongRunningActionRequiresJob,
+                    message: "long-running action requires Job execution".to_string(),
+                }),
+                wait_secs: None,
+            });
+            break;
+        }
         // Re-authorize each step (design §10).
         if !state.permissions.has_permission(&state.db, &auth, action.permission).await? {
             ok = false;
-            results.push(json!({ "step": step.action, "ok": false, "error": "permission_denied" }));
+            results.push(AutomationStepResult {
+                step: step.action.clone(),
+                ok: false,
+                result: None,
+                error: Some(AutomationStepError { code: ErrorCode::PermissionDenied, message: "permission denied".to_string() }),
+                wait_secs: None,
+            });
             break;
         }
         if action.reauth {
@@ -402,11 +460,19 @@ pub async fn run(
                 completion: Some(tx),
                 audit,
             })?;
-        match tokio::time::timeout(Duration::from_secs(30), rx).await {
-            Ok(Ok(Ok(v))) => results.push(json!({ "step": step.action, "ok": true, "result": v })),
+        // The command executor owns the action-specific timeout. Waiting for its
+        // completion avoids reporting a false failure while work is still running.
+        match rx.await {
+            Ok(Ok(v)) => results.push(AutomationStepResult { step: step.action.clone(), ok: true, result: Some(v), error: None, wait_secs: None }),
             _ => {
                 ok = false;
-                results.push(json!({ "step": step.action, "ok": false, "error": "command failed" }));
+                results.push(AutomationStepResult {
+                    step: step.action.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(AutomationStepError { code: ErrorCode::PmpCommandFailed, message: "command failed".to_string() }),
+                    wait_secs: None,
+                });
                 break;
             }
         }
@@ -422,7 +488,7 @@ pub async fn run(
         .execute(db)
         .await
         .map_err(db_err)?;
-    Ok(Json(json!({ "run_id": run_id, "status": status, "results": results })))
+    Ok(Json(RunbookExecutionResponse { run_id, status: status.to_string(), results }))
 }
 
 /// GET /api/v1/admin/automation/runbook-runs — recent runbook runs.
@@ -431,7 +497,7 @@ pub async fn run(
     path = "/api/v1/admin/automation/runbook-runs",
     operation_id = "admin_automation_runbook_runs_get",
     responses(
-        (status = 200, description = "runbook run list", body = serde_json::Value),
+        (status = 200, description = "runbook run list", body = Vec<RunbookRunRow>),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -472,7 +538,7 @@ fn user_agent_from_headers(headers: &axum::http::HeaderMap) -> String {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "not found")
     } else {
         tracing::error!(error = %e, "automation db error");
         ApiError::internal()

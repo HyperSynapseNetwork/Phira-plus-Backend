@@ -63,13 +63,13 @@ pub fn refresh_token_expired(refresh_expires_at: &DateTime<Utc>, now: &DateTime<
 pub fn parse_expire_at(value: &str) -> Result<DateTime<Utc>, ApiError> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|_| ApiError::new(ErrorCode::Validation, "invalid expireAt"))
+        .map_err(|_| ApiError::new(ErrorCode::ValidationFailed, "invalid expireAt"))
 }
 
 /// Map a PhiraError into the correct ApiError (reauth vs unavailable vs auth).
 pub fn phira_error_to_api(e: PhiraError) -> ApiError {
     match e {
-        PhiraError::InvalidCredentials => ApiError::new(ErrorCode::Auth, "invalid credentials"),
+        PhiraError::InvalidCredentials => ApiError::new(ErrorCode::PhiraAuthFailed, "invalid credentials"),
         PhiraError::ReauthRequired(m) => ApiError::with_details(
             ErrorCode::PhiraReauthRequired,
             "需要重新验证 Phira 身份",
@@ -79,7 +79,7 @@ pub fn phira_error_to_api(e: PhiraError) -> ApiError {
             ApiError::new(ErrorCode::PhiraApiUnavailable, m)
         }
         PhiraError::Unavailable(m) => ApiError::new(ErrorCode::PhiraApiUnavailable, m),
-        PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimit, "phira api rate limited"),
+        PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimited, "phira api rate limited"),
     }
 }
 
@@ -99,7 +99,7 @@ pub async fn decrypt_refresh_token(
     }
     let plaintext = cipher.decrypt(&ct)?;
     let token = String::from_utf8(plaintext)
-        .map_err(|_| ApiError::new(ErrorCode::Internal, "credential decode failed"))?;
+        .map_err(|_| ApiError::new(ErrorCode::InternalError, "credential decode failed"))?;
     Ok((token, refresh_expires_at, state))
 }
 
@@ -121,7 +121,7 @@ mod tests {
         let mock = MockPhiraApi { fail_login: true, ..Default::default() };
         let err = authenticate_phira(&mock, "a@b.c", "wrong").await.unwrap_err();
         let api = phira_error_to_api(err);
-        assert_eq!(api.code, ErrorCode::Auth);
+        assert_eq!(api.code, ErrorCode::AuthRequired);
     }
 
     #[tokio::test]

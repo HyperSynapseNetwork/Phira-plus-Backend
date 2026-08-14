@@ -13,7 +13,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson};
 use crate::error::{ApiError, ErrorEnvelope};
 use crate::pmp::openuds::client::OpenUdsError;
 
@@ -61,16 +61,14 @@ pub async fn server_stats(
 ) -> Result<Json<ServerStatsResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:view").await?;
     let result = state.openuds.command("server.stats", json!({})).await.map_err(map_err)?;
-    Ok(Json(serde_json::from_value(result).unwrap_or(ServerStatsResponse {
-        users_online: 0,
-        active_rooms: 0,
-        active_sessions: 0,
-        loaded_plugins: 0,
-        port: 0,
-        http_port: 0,
-        uptime_secs: 0,
-        server_name: String::new(),
-    })))
+    let stats = serde_json::from_value::<ServerStatsResponse>(result.clone()).map_err(|error| {
+        tracing::error!(%error, payload = %result, "invalid PMP server.stats response");
+        ApiError::new(
+            crate::error::ErrorCode::PmpInvalidResponse,
+            "PMP returned an invalid server.stats response",
+        )
+    })?;
+    Ok(Json(stats))
 }
 
 /// GET /api/v1/admin/server/runtime — runtime status.
@@ -184,7 +182,7 @@ pub async fn server_actions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<ServerActionBody>,
+    ApiJson(body): ApiJson<ServerActionBody>,
 ) -> Result<Json<Value>, ApiError> {
     match body.action.as_str() {
         "server.config_reload" => {
@@ -245,7 +243,7 @@ pub struct RoomCreationBody {
 pub async fn room_creation(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<RoomCreationBody>,
+    ApiJson(body): ApiJson<RoomCreationBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "server:manage").await?;
     let result = state
@@ -303,7 +301,7 @@ pub struct BroadcastBody {
 pub async fn broadcast_all(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<BroadcastBody>,
+    ApiJson(body): ApiJson<BroadcastBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "broadcast:all").await?;
     let result = state
@@ -329,7 +327,7 @@ pub async fn broadcast_all(
 pub async fn broadcast_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<BroadcastBody>,
+    ApiJson(body): ApiJson<BroadcastBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "broadcast:room").await?;
     let room_id = body
@@ -358,7 +356,7 @@ pub async fn broadcast_room(
 pub async fn broadcast_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<BroadcastBody>,
+    ApiJson(body): ApiJson<BroadcastBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "broadcast:user").await?;
     let user_id = body

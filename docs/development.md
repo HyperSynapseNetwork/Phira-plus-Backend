@@ -82,7 +82,7 @@ PPB 只持久化**身份 / 策略 / 控制 / 社区 / 偏好 / 通知 / 审计**
 - `user_preferences`（namespace common|ppf|panel|experiments，JSONB + revision）
 - `notification_events` / `user_notifications` / `push_endpoints`
 - `audit_events` / `command_runs` / `jobs`
-- `coupons`（Phase B）
+- `coupons`（技术兼容命名；产品语义为“兑换码”）
 
 ## 认证与权限（要点）
 

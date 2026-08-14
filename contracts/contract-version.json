@@ -1,0 +1,14 @@
+{
+  "source": "PPB contracts/openapi.json",
+  "sha256": "a6567d96e9d7b65d5792e9ea77d1499efb90dc907631acb07d05c0d9e2003bf1",
+  "openapi_sha256": "a6567d96e9d7b65d5792e9ea77d1499efb90dc907631acb07d05c0d9e2003bf1",
+  "generated_types_sha256": "2c30c159d3453fa44eff173f98b20dfc6055808463da645e6a5d8a3ac6dcd021",
+  "error_codes_sha256": "d9c963108add580f0e9acde7491a792c6afe4c06586cd1143769eff177b43909",
+  "path_count": 140,
+  "operation_count": 161,
+  "schema_count": 142,
+  "error_code_count": 82,
+  "freeze": "v0",
+  "evidence_level": "STATIC_VALIDATED",
+  "source_commit": null
+}

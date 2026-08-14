@@ -5,10 +5,162 @@ pub mod routes;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::error::{ApiError, ErrorCode};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationActionKind {
+    JoinRoom,
+    FriendAccept,
+    FriendReject,
+    OpenChart,
+    OpenReplay,
+    OpenRoom,
+    OpenUser,
+    OpenProfile,
+}
+
+impl NotificationActionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::JoinRoom => "join_room",
+            Self::FriendAccept => "friend_accept",
+            Self::FriendReject => "friend_reject",
+            Self::OpenChart => "open_chart",
+            Self::OpenReplay => "open_replay",
+            Self::OpenRoom => "open_room",
+            Self::OpenUser => "open_user",
+            Self::OpenProfile => "open_profile",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct NotificationActionTarget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chart_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phira_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub round_uuid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub friend_request_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct NotificationActionDraft {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_key: Option<String>,
+    pub action: NotificationActionKind,
+    #[serde(default)]
+    pub data: NotificationActionTarget,
+    #[serde(default)]
+    pub danger: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct NotificationActionWire {
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_key: Option<String>,
+    pub action: NotificationActionKind,
+    #[serde(default)]
+    pub data: NotificationActionTarget,
+    #[serde(default)]
+    pub danger: bool,
+}
+
+pub fn validate_action_target(
+    action: NotificationActionKind,
+    target: &NotificationActionTarget,
+) -> Result<(), ApiError> {
+    let valid = match action {
+        NotificationActionKind::JoinRoom | NotificationActionKind::OpenRoom => {
+            target.room_id.as_deref().is_some_and(|value| !value.trim().is_empty())
+        }
+        NotificationActionKind::FriendAccept | NotificationActionKind::FriendReject => {
+            target.friend_request_id.is_some()
+        }
+        NotificationActionKind::OpenChart => target.chart_id.is_some(),
+        NotificationActionKind::OpenReplay => {
+            target.round_uuid.as_deref().is_some_and(|value| !value.trim().is_empty())
+        }
+        NotificationActionKind::OpenUser | NotificationActionKind::OpenProfile => target.phira_id.is_some(),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(ApiError::new(
+            ErrorCode::NotificationActionTargetInvalid,
+            "notification action target is invalid",
+        ))
+    }
+}
+
+pub fn normalize_action_drafts(
+    drafts: Vec<NotificationActionDraft>,
+) -> Result<Vec<NotificationActionWire>, ApiError> {
+    let mut out = Vec::with_capacity(drafts.len());
+    for draft in drafts {
+        if draft.label.trim().is_empty() && draft.label_key.as_deref().unwrap_or("").trim().is_empty() {
+            return Err(ApiError::new(
+                ErrorCode::NotificationActionTargetInvalid,
+                "notification action label or label_key is required",
+            ));
+        }
+        validate_action_target(draft.action, &draft.data)?;
+        out.push(NotificationActionWire {
+            id: Uuid::new_v4().to_string(),
+            label: draft.label.trim().to_string(),
+            label_key: draft.label_key.filter(|value| !value.trim().is_empty()),
+            action: draft.action,
+            data: draft.data,
+            danger: draft.danger,
+        });
+    }
+    Ok(out)
+}
+
+/// Normalize already-stored notifications. Legacy actions without ids receive
+/// a deterministic event-id/index id. Invalid legacy actions are hidden so the
+/// frontend never renders a dead button.
+pub fn normalize_stored_actions(
+    value: Option<&serde_json::Value>,
+    event_id: Uuid,
+) -> Vec<NotificationActionWire> {
+    let Some(items) = value.and_then(serde_json::Value::as_array) else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, raw)| {
+            if let Ok(action) = serde_json::from_value::<NotificationActionWire>(raw.clone()) {
+                return validate_action_target(action.action, &action.data).ok().map(|_| action);
+            }
+            let draft = serde_json::from_value::<NotificationActionDraft>(raw.clone()).ok()?;
+            validate_action_target(draft.action, &draft.data).ok()?;
+            Some(NotificationActionWire {
+                id: format!("legacy-{event_id}-{index}"),
+                label: draft.label.trim().to_string(),
+                label_key: draft.label_key,
+                action: draft.action,
+                data: draft.data,
+                danger: draft.danger,
+            })
+        })
+        .collect()
+}
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct NotificationEvent {
@@ -32,7 +184,7 @@ pub struct UserNotification {
 }
 
 /// Wire schema (contract §8): `{type, priority, title, body, actor, target, actions, input, deep_link, expires_at, dedup_key}`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotificationPayload {
     #[serde(rename = "type")]
     pub notification_type: String,
@@ -40,13 +192,19 @@ pub struct NotificationPayload {
     pub priority: String,
     #[serde(default)]
     pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_key: Option<String>,
     #[serde(default)]
     pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_key: Option<String>,
+    #[serde(default)]
+    pub params: BTreeMap<String, serde_json::Value>,
     pub actor: Option<i64>,
     #[serde(default)]
     pub target: serde_json::Value,
     #[serde(default)]
-    pub actions: Vec<serde_json::Value>,
+    pub actions: Vec<NotificationActionWire>,
     #[serde(default)]
     pub input: Option<serde_json::Value>,
     #[serde(rename = "deep_link", default)]
@@ -84,8 +242,18 @@ pub async fn publish_to_users(
     payload: serde_json::Value,
     recipients: &[Uuid],
 ) -> Result<NotificationEvent, ApiError> {
-    let event = create_event(db, notification_type, actor_user_id, payload).await?;
     let mut tx = db.begin().await.map_err(db_err)?;
+    let event = sqlx::query_as::<_, NotificationEvent>(
+        "INSERT INTO notification_events (type, actor_user_id, payload)
+         VALUES ($1, $2, $3)
+         RETURNING id, type, actor_user_id, payload, created_at",
+    )
+    .bind(notification_type)
+    .bind(actor_user_id)
+    .bind(payload)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
     for uid in recipients {
         sqlx::query(
             "INSERT INTO user_notifications (event_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -288,7 +456,7 @@ pub async fn register_push_endpoint(
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "notification not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "notification not found")
     } else {
         tracing::error!(error = %e, "notification db error");
         ApiError::internal()

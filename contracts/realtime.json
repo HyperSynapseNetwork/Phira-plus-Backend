@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "channels": {
+    "public_events": {
+      "kind": "sse",
+      "method": "GET",
+      "path": "/api/v1/events",
+      "owner": "public-events",
+      "security": "public event stream; no management mutation"
+    },
+    "admin_events": {
+      "kind": "sse",
+      "method": "GET",
+      "path": "/api/v1/admin/events",
+      "owner": "admin-events",
+      "security": "AuthPrincipal + dashboard:view"
+    },
+    "admin_logs": {
+      "kind": "sse",
+      "method": "GET",
+      "path": "/api/v1/admin/logs/stream",
+      "owner": "logs",
+      "security": "AuthPrincipal + logs:view"
+    },
+    "live_room": {
+      "kind": "websocket",
+      "method": "GET",
+      "path": "/ws/v1/rooms/{room_id}/live",
+      "owner": "live-room",
+      "params": {
+        "room_id": {
+          "semantic": "pmp_room_id"
+        }
+      },
+      "security": "token/session checked by handler"
+    },
+    "replay": {
+      "kind": "websocket",
+      "method": "GET",
+      "path": "/ws/v1/replays/{round_uuid}",
+      "owner": "replay",
+      "params": {
+        "round_uuid": {
+          "semantic": "replay_round_uuid"
+        }
+      },
+      "security": "round access checked by handler"
+    }
+  }
+}

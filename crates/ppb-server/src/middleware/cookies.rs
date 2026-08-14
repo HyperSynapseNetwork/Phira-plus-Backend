@@ -1,8 +1,8 @@
 //! Cookie helpers (no tower-cookies — avoids layer ordering coupling with CSRF).
 //!
-//! Cookie policy (see PHASE_A_PLAN P2): Secure + HttpOnly access cookie,
-//! host-only domain `api-phira.htadiy.com`, SameSite=Lax (same-site cross-origin
-//! credentialed fetch from PPF/Panel). CSRF cookie is non-HttpOnly.
+//! Production defaults to Secure + HttpOnly. Domain, Secure and SameSite are
+//! supplied by runtime configuration so localhost and host-only deployments
+//! work without weakening production defaults.
 
 use axum::http::header;
 use axum::http::HeaderMap;
@@ -20,7 +20,7 @@ fn same_site_str(v: SameSite) -> &'static str {
 /// Options controlling cookie serialization.
 #[derive(Debug, Clone)]
 pub struct CookieOpts {
-    pub domain: String,
+    pub domain: Option<String>,
     pub path: String,
     pub secure: bool,
     pub http_only: bool,
@@ -30,7 +30,7 @@ pub struct CookieOpts {
 impl CookieOpts {
     pub fn new(domain: &str) -> Self {
         Self {
-            domain: domain.to_string(),
+            domain: (!domain.trim().is_empty()).then(|| domain.trim().to_string()),
             path: "/".to_string(),
             secure: true,
             http_only: true,
@@ -47,6 +47,22 @@ impl CookieOpts {
         self.same_site = v;
         self
     }
+
+    pub fn secure(mut self, v: bool) -> Self {
+        self.secure = v;
+        self
+    }
+
+    pub fn from_session(config: &crate::config::SessionConfig) -> Self {
+        let same_site = match config.cookie_samesite.to_ascii_lowercase().as_str() {
+            "strict" => SameSite::Strict,
+            "none" => SameSite::None,
+            _ => SameSite::Lax,
+        };
+        Self::new(&config.cookie_domain)
+            .secure(config.cookie_secure)
+            .same_site(same_site)
+    }
 }
 
 /// Serialize a Set-Cookie header value (manually constructed to avoid the
@@ -57,7 +73,9 @@ impl CookieOpts {
 pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64) -> HeaderValue {
     let mut s = format!("{name}={value}");
     s.push_str(&format!("; Path={}", opts.path));
-    s.push_str(&format!("; Domain={}", opts.domain));
+    if let Some(domain) = &opts.domain {
+        s.push_str(&format!("; Domain={domain}"));
+    }
     if opts.secure || opts.same_site == SameSite::None {
         s.push_str("; Secure");
     }
@@ -75,7 +93,9 @@ pub fn set_cookie(name: &str, value: &str, opts: &CookieOpts, max_age_secs: i64)
 pub fn clear_cookie(name: &str, opts: &CookieOpts) -> HeaderValue {
     let mut s = format!("{name}=");
     s.push_str(&format!("; Path={}", opts.path));
-    s.push_str(&format!("; Domain={}", opts.domain));
+    if let Some(domain) = &opts.domain {
+        s.push_str(&format!("; Domain={domain}"));
+    }
     if opts.secure || opts.same_site == SameSite::None {
         s.push_str("; Secure");
     }
@@ -130,5 +150,22 @@ mod tests {
         let opts = CookieOpts::new("api-phira.htadiy.com").http_only(false);
         let header = set_cookie("ppb_csrf", "t", &opts, 60).to_str().unwrap().to_string();
         assert!(!header.contains("HttpOnly"));
+    }
+
+    #[test]
+    fn host_only_and_insecure_dev_cookie() {
+        let opts = CookieOpts::new("").secure(false);
+        let header = set_cookie("ppb_access", "v", &opts, 60).to_str().unwrap().to_string();
+        assert!(!header.contains("Domain="));
+        assert!(!header.contains("; Secure"));
+        assert!(header.contains("SameSite=Lax"));
+    }
+
+    #[test]
+    fn same_site_none_forces_secure() {
+        let opts = CookieOpts::new("").secure(false).same_site(SameSite::None);
+        let header = set_cookie("ppb_access", "v", &opts, 60).to_str().unwrap().to_string();
+        assert!(header.contains("; Secure"));
+        assert!(header.contains("SameSite=None"));
     }
 }

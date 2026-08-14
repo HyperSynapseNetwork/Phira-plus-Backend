@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -21,6 +21,7 @@ use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::model::{CommandRun, CommandRunListResponse};
 use crate::commands::repo as command_repo;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
@@ -29,7 +30,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/actions", get(list_actions))
         .route("/actions/{action_id}/execute", post(execute_action))
         .route("/commands", get(list_commands))
-        .route("/commands/history", get(list_commands))
         .route("/commands/execute", post(execute_command))
 }
 
@@ -79,24 +79,27 @@ pub async fn execute_action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(action_id): Path<String>,
-    Json(body): Json<ExecuteActionBody>,
+    ApiPath(action_id): ApiPath<String>,
+    ApiJson(body): ApiJson<ExecuteActionBody>,
 ) -> Result<axum::response::Response, ApiError> {
     let action = state
         .actions
         .get(&action_id)
         .ok_or_else(|| ApiError::not_found("action"))?;
 
-    // Stop-ship (§9.4): `pmp.update.*` must go through the Job API — the Job
-    // runner owns resource_key/state/retry/cancel. A generic Action execute
-    // would be a second execution plane that bypasses all of it.
+
+    // Generic/scoped Action endpoints are not an alternate execution plane.
+    // Update actions belong to Jobs; raw PMP CLI belongs to CommandRun.
     if crate::actions::registry::is_job_only_action(action.id) {
         return Err(ApiError::new(
-            ErrorCode::Conflict,
-            format!(
-                "{} is a long-running update job; use POST /api/v1/admin/jobs",
-                action.id
-            ),
+            ErrorCode::LongRunningActionRequiresJob,
+            "long-running action requires the Job API",
+        ));
+    }
+    if action.id == "pmp.cli.execute" {
+        return Err(ApiError::new(
+            ErrorCode::ResourceConflict,
+            "raw PMP CLI requires the dedicated CommandRun endpoint",
         ));
     }
 
@@ -225,7 +228,7 @@ pub struct CommandListParams {
 pub async fn list_commands(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<CommandListParams>,
+    ApiQuery(params): ApiQuery<CommandListParams>,
 ) -> Result<Json<CommandRunListResponse>, ApiError> {
     state
         .permissions
@@ -269,7 +272,7 @@ pub async fn execute_command(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<ExecuteCommandBody>,
+    ApiJson(body): ApiJson<ExecuteCommandBody>,
 ) -> Result<Json<CommandRun>, ApiError> {
     state.permissions.require(&state.db, &auth, "pmp:cli").await?;
     state
@@ -351,7 +354,7 @@ async fn verify_real_host(
     let room_id = args
         .get("room_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| ApiError::validation("room_id required for host action"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::RoomIdRequired, "room_id required for host action"))?;
     let db = state.require_db()?;
     let user = crate::users::repo::find_by_id(db, auth.sub)
         .await?

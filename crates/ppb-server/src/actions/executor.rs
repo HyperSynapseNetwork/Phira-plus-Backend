@@ -18,6 +18,7 @@ pub struct PmpActionExecutor {
     openuds: Arc<OpenUdsClient>,
     registry: Arc<ActionRegistry>,
     db: Option<sqlx::PgPool>,
+    deployment: Arc<crate::deployment::DeploymentAdapter>,
 }
 
 impl PmpActionExecutor {
@@ -25,11 +26,13 @@ impl PmpActionExecutor {
         openuds: Arc<OpenUdsClient>,
         registry: Arc<ActionRegistry>,
         db: Option<sqlx::PgPool>,
+        deployment: Arc<crate::deployment::DeploymentAdapter>,
     ) -> Self {
         Self {
             openuds,
             registry,
             db,
+            deployment,
         }
     }
 
@@ -74,7 +77,30 @@ impl PmpActionExecutor {
                     .await
                     .map_err(|e| e.to_string())
             }
-            Executor::Internal => Err("internal executor not implemented in Phase A".to_string()),
+            Executor::Internal => self.run_internal(task).await,
+        }
+    }
+
+    async fn run_internal(&self, task: &CommandTask) -> Result<Value, String> {
+        match task.action.as_str() {
+            "server.start" => self.deployment.start_pmp(&task.args).await,
+            "server.supervisor_stop" => self.deployment.stop_pmp().await,
+            "user.revoke_sessions" => {
+                let phira_id = task.args.get("user_id").and_then(Value::as_i64)
+                    .ok_or_else(|| "user.revoke_sessions requires args.user_id".to_string())?;
+                let db = self.db.as_ref().ok_or_else(|| "database not configured".to_string())?;
+                let row = sqlx::query_as::<_, (uuid::Uuid,)>("SELECT id FROM users WHERE phira_id = $1")
+                    .bind(phira_id)
+                    .fetch_optional(db)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let (user_id,) = row.ok_or_else(|| "user not found".to_string())?;
+                crate::auth::session::revoke_all_for_user(db, user_id)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(serde_json::json!({ "revoked": true }))
+            }
+            _ => Err(format!("unsupported internal action: {}", task.action)),
         }
     }
 }

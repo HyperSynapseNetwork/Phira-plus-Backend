@@ -102,7 +102,7 @@ pub async fn csrf_middleware(
             .cloned()
             .collect();
         if !origin_allowed(origin.as_deref(), &allowed) {
-            return Err(ApiError::new(ErrorCode::Auth, "CSRF origin rejected"));
+            return Err(ApiError::new(ErrorCode::CsrfInvalid, "CSRF origin rejected"));
         }
 
         // 2) Session-bound token must match X-CSRF-Token.
@@ -118,7 +118,7 @@ pub async fn csrf_middleware(
                     .unwrap_or("");
                 if !ct_eq(&expected, provided) {
                     return Err(ApiError::new(
-                        ErrorCode::Auth,
+                        ErrorCode::CsrfInvalid,
                         "CSRF token mismatch or missing X-CSRF-Token header",
                     ));
                 }

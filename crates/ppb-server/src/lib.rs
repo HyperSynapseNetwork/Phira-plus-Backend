@@ -19,6 +19,7 @@ pub mod auth;
 pub mod automation;
 pub mod commands;
 pub mod config;
+pub mod deployment;
 pub mod error;
 pub mod identities;
 pub mod join_intent;

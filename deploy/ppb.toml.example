@@ -1,0 +1,98 @@
+# PPB runtime config example.
+# This file contains NO secrets. Secrets come from the deployment environment
+# (see config/example.env) and are never returned by Panel APIs.
+#
+# Path resolution: PPB_RUNTIME_CONFIG env var, or ./config/ppb.toml, or
+# --config on the CLI.
+
+[server]
+listen_addr = "0.0.0.0:8080"
+public_url = "https://api-phira.example.com"
+graceful_shutdown_secs = 15
+
+[site]
+ppf_url = "https://phira.example.com"
+panel_url = "https://panel-phira.example.com"
+docs_url = "https://docs.phira.example.com"
+# Privacy-friendly aggregate visit count baseline (P-86); server-side counter
+# adds on each /api/v1/public/site fetch. Default 0.
+visit_count = 0
+
+# Credentialed CORS exact-origin allowlist. '*' is forbidden when credentials=true.
+[cors]
+credentials = true
+allowed_origins = ["https://phira.example.com", "https://panel-phira.example.com"]
+# Local development origins (never enabled in production by config validation):
+dev_origins = ["http://localhost:3000", "http://localhost:5173"]
+
+[session]
+access_ttl_secs = 3600
+refresh_ttl_secs = 2592000 # 30d
+# Empty = host-only cookie (recommended for official and self-host installs).
+cookie_domain = ""
+cookie_secure = true
+cookie_samesite = "lax"
+csrf_cookie_name = "ppb_csrf"
+csrf_header_name = "X-CSRF-Token"
+reauth_ttl_secs = 300 # 5 min
+
+[pmp]
+openuds_path = "/var/run/pmp-openuds.sock"
+# token or approve
+auth_mode = "approve"
+client_name = "ppb-server"
+reconnect_base_ms = 500
+reconnect_max_ms = 30000
+request_timeout_ms = 10000
+# Hard capability set for PMP 1.0.38 (verified). Extended per version map in code.
+capabilities = ["persist.touches", "persist.judges", "persist.rounds", "room.chat_send", "stream.touches", "stream.judges"]
+
+[phira]
+base_url = "https://phira.5wyxi.com"
+timeout_ms = 15000
+# Access token lives in memory only; refresh token encrypted at rest.
+access_token_ttl_secs = 21600 # 6h
+# Public-data gateway (charts/records/users proxy): TTL cache + rate limit.
+gateway_ttl_secs = 120
+gateway_rate_per_minute = 60
+# TopChart aggregator: hourly record-count snapshots for popular charts.
+aggregator_enabled = true
+aggregator_interval_hours = 1
+aggregator_top_n = 50
+
+[rate_limit]
+login_per_minute = 10
+reauth_per_minute = 10
+github_callback_per_minute = 20
+chat_send_per_minute = 60
+social_per_minute = 30
+raw_cli_per_minute = 30
+
+[audit]
+retention_days = 90
+
+[notifications]
+default_chat_channel = "only_when_companion_background"
+# Web Push VAPID (P-256 PEM + subject). Leave empty → WebPush adapter reports
+# "not configured"; FCM/WNS adapters are stubs pending Owner credentials.
+# vapid_private_key_pem = ""
+# vapid_subject = "mailto:admin@phira.htadiy.com"
+
+[metrics]
+retention_days = 30
+
+# return_to allowlist (anti open-redirect)
+[security]
+return_to_allowlist = ["https://phira.example.com", "https://panel-phira.example.com"]
+
+[github]
+# client_id lives in deployment env. Callback URL is fixed by contract.
+callback_url = "https://api-phira.example.com/api/v1/auth/github/callback"
+
+# Public user auth must remain disabled until Owner-approved legal documents are configured.
+[legal]
+public_auth_enabled = false
+terms_version = ""
+privacy_version = ""
+terms_url = ""
+privacy_url = ""

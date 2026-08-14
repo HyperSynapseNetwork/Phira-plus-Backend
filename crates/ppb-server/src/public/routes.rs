@@ -26,7 +26,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/announcements", get(announcements))
         .route("/downloads", get(downloads))
         .route("/nodes", get(nodes))
-        .route("/events", get(events_sse))
 }
 
 /// GET /api/v1/public/meta — capabilities / meta contract.

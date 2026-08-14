@@ -52,7 +52,7 @@ pub async fn upsert(
     if let Some(expected) = expected_revision {
         if expected != revision {
             return Err(ApiError::with_details(
-                ErrorCode::Conflict,
+                ErrorCode::ResourceConflict,
                 "preference revision mismatch (optimistic concurrency)",
                 serde_json::json!({ "current_revision": revision }),
             ));
@@ -89,7 +89,7 @@ pub async fn delete(db: &sqlx::PgPool, user_id: Uuid, namespace: &str) -> Result
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "preference not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "preference not found")
     } else {
         tracing::error!(error = %e, "preference db error");
         ApiError::internal()

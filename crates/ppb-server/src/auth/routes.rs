@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::http::header;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
@@ -11,6 +11,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::consent;
 use super::jwt::{self, ROOT_SUB};
 use super::reauth::{self, ReauthClaims, ReauthRisk};
 use super::root::RootAuthService;
@@ -18,12 +19,14 @@ use super::session::{self, Session};
 use super::types::{AuthPrincipal, ClientType, PrincipalType};
 use super::{phira as phira_service, ACCESS_COOKIE, REFRESH_COOKIE};
 use crate::app::AppState;
+use crate::error::extractors::{ApiJson, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::identities::repo as identities_repo;
 use crate::middleware::cookies::{self, CookieOpts};
 use crate::middleware::rate_limit::RateLimiter;
 use crate::users::model::User;
+use crate::users::repo as users_repo;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -32,6 +35,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/refresh", post(refresh))
         .route("/logout", post(logout))
         .route("/github/start", get(github_start))
+        .route("/github/login/start", get(github_login_start))
         .route("/github/callback", get(github_callback))
         .route("/github/unbind", post(github_unbind))
 }
@@ -55,6 +59,12 @@ pub struct PhiraLoginRequest {
     pub device_name: Option<String>,
     #[serde(default)]
     pub return_to: Option<String>,
+    #[serde(default)]
+    pub accepted: Option<bool>,
+    #[serde(default)]
+    pub terms_version: Option<String>,
+    #[serde(default)]
+    pub privacy_version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,10 +98,26 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct GithubLoginStartParams {
+    #[serde(default)]
+    pub return_to: Option<String>,
+    #[serde(default)]
+    pub client_type: Option<String>,
+    #[serde(default)]
+    pub accepted: Option<bool>,
+    #[serde(default)]
+    pub terms_version: Option<String>,
+    #[serde(default)]
+    pub privacy_version: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GithubCallbackParams {
     pub code: Option<String>,
     pub state: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -142,7 +168,7 @@ fn issue_cookies(
     access_token: &str,
     refresh_token: &str,
 ) -> (axum::http::HeaderValue, axum::http::HeaderValue) {
-    let opts = CookieOpts::new(&cfg.cookie_domain);
+    let opts = CookieOpts::from_session(cfg);
     let access = cookies::set_cookie(ACCESS_COOKIE, access_token, &opts, cfg.access_ttl_secs);
     let refresh = cookies::set_cookie(REFRESH_COOKIE, refresh_token, &opts, cfg.refresh_ttl_secs);
     (access, refresh)
@@ -207,14 +233,14 @@ pub fn check_reauth_header(
     let token = headers
         .get("x-reauth-token")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| ApiError::new(ErrorCode::Session, "reauth context required"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::SessionExpired, "reauth context required"))?;
     let claims = reauth::decode_reauth(token, &state.secrets.jwt_secret, auth.sid)?;
     let adequate = match risk {
         ReauthRisk::Critical => claims.risk == "critical",
         ReauthRisk::High => matches!(claims.risk.as_str(), "high" | "critical"),
     };
     if !adequate {
-        return Err(ApiError::new(ErrorCode::Session, "reauth risk insufficient"));
+        return Err(ApiError::new(ErrorCode::SessionExpired, "reauth risk insufficient"));
     }
     Ok(())
 }
@@ -230,13 +256,15 @@ pub fn check_reauth_header(
     responses(
         (status = 200, description = "logged in; cookies set", body = serde_json::Value),
         (status = 401, description = "invalid credentials", body = ErrorEnvelope),
+        (status = 422, description = "current Terms/Privacy versions were not explicitly accepted", body = ErrorEnvelope),
+        (status = 503, description = "approved legal documents are not configured", body = ErrorEnvelope),
     ),
     tag = "auth"
 )]
 pub async fn phira_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<PhiraLoginRequest>,
+    ApiJson(body): ApiJson<PhiraLoginRequest>,
 ) -> Result<axum::response::Response, ApiError> {
     let limiter: &RateLimiter = &state.rate_limiter;
     limiter.check(&format!("login:{}", ip_from_headers(&headers)), state.config.rate_limit.login_per_minute)?;
@@ -246,12 +274,27 @@ pub async fn phira_login(
     if let Some(rt) = &body.return_to {
         validate_return_to(&state.config.security.return_to_allowlist, rt)?;
     }
+    // Public account auth is fail-closed when approved legal documents are not configured.
+    consent::current_versions(&state.config.legal)?;
 
     let db = state.require_db()?;
     let (login, me) = phira_service::authenticate_phira(state.phira.as_ref(), &body.email, &body.password)
         .await
         .map_err(phira_service::phira_error_to_api)?;
+    let existing_user = users_repo::find_by_phira_id(db, login.id).await?;
+    let legal_acceptance = consent::acceptance_for_login(
+        db,
+        existing_user.as_ref().map(|user| user.id),
+        &state.config.legal,
+        body.accepted == Some(true),
+        body.terms_version.as_deref(),
+        body.privacy_version.as_deref(),
+    )
+    .await?;
     let user = phira_service::commit_login(db, &state.credential_cipher, &login, &me).await?;
+    if let Some(acceptance) = legal_acceptance.as_ref() {
+        consent::record_acceptance(db, user.id, client_type, acceptance, "phira_login").await?;
+    }
 
     let (_sess, access_token, refresh_token) = issue_session_and_jwt(
         &state,
@@ -286,7 +329,7 @@ pub async fn phira_reauth(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,
     headers: HeaderMap,
-    Json(body): Json<ReauthRequest>,
+    ApiJson(body): ApiJson<ReauthRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.rate_limiter.check(
         &format!("reauth:{}", ip_from_headers(&headers)),
@@ -316,7 +359,7 @@ pub async fn phira_reauth(
             .ok_or_else(|| ApiError::not_found("user"))?;
         if login.id != user.phira_id {
             return Err(ApiError::new(
-                ErrorCode::Auth,
+                ErrorCode::AuthRequired,
                 "reauth phira_id does not match the current user",
             ));
         }
@@ -357,11 +400,11 @@ pub async fn refresh(
 ) -> Result<axum::response::Response, ApiError> {
     let db = state.require_db()?;
     let refresh_token = cookies::get_cookie(&headers, REFRESH_COOKIE)
-        .ok_or_else(|| ApiError::new(ErrorCode::Session, "missing refresh cookie"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::SessionExpired, "missing refresh cookie"))?;
     let refresh_hash = session::hash_refresh_token(&refresh_token);
     let sess = session::find_active_by_refresh_hash(db, &refresh_hash)
         .await?
-        .ok_or_else(|| ApiError::new(ErrorCode::Session, "refresh token invalid or expired"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::SessionExpired, "refresh token invalid or expired"))?;
 
     let principal_type = parse_principal_type(&sess);
     let client_type = ClientType::parse(&sess.client_type).unwrap_or(ClientType::Ppf);
@@ -440,7 +483,7 @@ pub async fn logout(
     }
 
     let cfg = &state.config.session;
-    let opts = CookieOpts::new(&cfg.cookie_domain);
+    let opts = CookieOpts::from_session(cfg);
     let clear_access = cookies::clear_cookie(ACCESS_COOKIE, &opts);
     let clear_refresh = cookies::clear_cookie(REFRESH_COOKIE, &opts);
 
@@ -460,16 +503,33 @@ fn parse_principal_type(sess: &Session) -> PrincipalType {
 
 // ── GitHub bind-only OAuth ─────────────────────────────────────
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/github/start",
+    operation_id = "auth_github_start_get",
+    responses((status = 200, description = "GitHub bind authorization URL", body = serde_json::Value), (status = 503, description = "GitHub OAuth not configured", body = ErrorEnvelope)),
+    tag = "auth"
+)]
 pub async fn github_start(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,
+    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
     if !state.secrets.github_configured() {
-        return Err(ApiError::new(ErrorCode::Auth, "GitHub OAuth not configured"));
+        return Err(ApiError::new(ErrorCode::GithubOauthNotConfigured, "GitHub OAuth not configured"));
     }
+    let network_key = ip_from_headers(&headers);
+    state.rate_limiter.check(
+        &format!("github-bind-start:{}:{}", auth.sub, network_key),
+        state.config.rate_limit.github_start_per_minute,
+    )?;
+    state.rate_limiter.check(
+        "github-provider:start",
+        state.config.rate_limit.github_provider_per_minute,
+    )?;
     let (url, state_token) = state.github.authorize_url(&state.secrets, &state.config)?;
     state
         .github
@@ -477,48 +537,292 @@ pub async fn github_start(
     Ok(Json(serde_json::json!({ "authorize_url": url, "state": state_token })))
 }
 
-pub async fn github_callback(
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/github/login/start",
+    operation_id = "auth_github_login_start_get",
+    params(GithubLoginStartParams),
+    responses((status = 302, description = "redirect to GitHub OAuth"), (status = 422, description = "current Terms/Privacy versions were not explicitly accepted", body = ErrorEnvelope), (status = 503, description = "GitHub OAuth or approved legal documents not configured", body = ErrorEnvelope)),
+    tag = "auth"
+)]
+pub async fn github_login_start(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<GithubCallbackParams>,
+    headers: HeaderMap,
+    ApiQuery(params): ApiQuery<GithubLoginStartParams>,
 ) -> Result<axum::response::Response, ApiError> {
-    state.rate_limiter.check(
-        &format!("github-callback:{}", params.code.as_deref().unwrap_or("")),
-        state.config.rate_limit.github_callback_per_minute,
-    )?;
-
-    let code = params
-        .code
-        .ok_or_else(|| ApiError::new(ErrorCode::Auth, "missing code"))?;
-    let state_token = params
-        .state
-        .ok_or_else(|| ApiError::new(ErrorCode::Auth, "missing state"))?;
-
-    // consume_state enforces the token was bound to an authenticated user.
-    let oauth_state = state.github.consume_state(&state_token)?;
-    let gh_user = state.github.exchange_code(&state.secrets, &code).await?;
-
-    let db = state.require_db()?;
-    let gh_id = gh_user.id.to_string();
-    if let Some(existing) = identities_repo::find_by_provider(db, "github", &gh_id).await? {
-        if existing.user_id != oauth_state.user_id {
-            return Err(ApiError::new(
-                ErrorCode::Conflict,
-                "GitHub 账户已绑定到其他用户",
-            ));
-        }
+    if !state.secrets.github_configured() {
+        return Err(ApiError::new(ErrorCode::GithubOauthNotConfigured, "GitHub OAuth not configured"));
     }
-    identities_repo::bind_github(db, oauth_state.user_id, &gh_id, &gh_user.login).await?;
-
-    let redirect = format!("{}/auth?github=bound", state.config.site.ppf_url);
-    let mut resp = StatusCode::FOUND.into_response();
-    resp.headers_mut().insert(
-        header::LOCATION,
-        header::HeaderValue::from_str(&redirect)
-            .map_err(|_| ApiError::validation("invalid redirect"))?,
+    let client_type = ClientType::parse(params.client_type.as_deref().unwrap_or("ppf"))
+        .ok_or_else(|| ApiError::validation("invalid client_type"))?;
+    if !matches!(client_type, ClientType::Ppf | ClientType::Panel) {
+        return Err(ApiError::validation("GitHub web login supports ppf/panel clients only"));
+    }
+    let network_key = ip_from_headers(&headers);
+    state.rate_limiter.check(
+        &format!("github-login-start:{}:{}", client_type, network_key),
+        state.config.rate_limit.github_start_per_minute,
+    )?;
+    state.rate_limiter.check(
+        "github-provider:start",
+        state.config.rate_limit.github_provider_per_minute,
+    )?;
+    let return_to = params.return_to.unwrap_or_else(|| match client_type {
+        ClientType::Panel => "/".to_string(),
+        _ => "/profile".to_string(),
+    });
+    validate_return_to(&state.config.security.return_to_allowlist, &return_to)?;
+    let current_legal = consent::current_versions(&state.config.legal)?;
+    let accepted_legal = params.accepted == Some(true);
+    let legal_versions = if accepted_legal {
+        consent::validate_acceptance(
+            &state.config.legal,
+            true,
+            params.terms_version.as_deref(),
+            params.privacy_version.as_deref(),
+        )?
+    } else {
+        current_legal
+    };
+    let (url, state_token) = state.github.authorize_url(&state.secrets, &state.config)?;
+    state.github.mark_login_state(
+        &state_token,
+        &return_to,
+        &client_type.to_string(),
+        accepted_legal,
+        &legal_versions.terms_version,
+        &legal_versions.privacy_version,
     );
-    Ok(resp)
+    let mut response = StatusCode::FOUND.into_response();
+    response.headers_mut().insert(header::LOCATION, header::HeaderValue::from_str(&url).map_err(|_| ApiError::validation("invalid GitHub authorize URL"))?);
+    Ok(response)
 }
 
+fn github_gateway_error_redirect(
+    client_type: &str,
+    return_to: &str,
+    code: ErrorCode,
+    request_id: &str,
+) -> Result<axum::response::Response, ApiError> {
+    let client_type = if client_type == "panel" { "panel" } else { "ppf" };
+    let return_to = percent_encoding::utf8_percent_encode(return_to, percent_encoding::NON_ALPHANUMERIC);
+    let request_id = percent_encoding::utf8_percent_encode(request_id, percent_encoding::NON_ALPHANUMERIC);
+    let location = format!(
+        "/auth/phira/login?client_type={client_type}&return_to={return_to}&intent=github&error={}&request_id={request_id}",
+        code.as_str()
+    );
+    let mut response = StatusCode::FOUND.into_response();
+    response.headers_mut().insert(
+        header::LOCATION,
+        header::HeaderValue::from_str(&location)
+            .map_err(|_| ApiError::internal())?,
+    );
+    Ok(response)
+}
+
+pub async fn github_callback(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ApiQuery(params): ApiQuery<GithubCallbackParams>,
+) -> Result<axum::response::Response, ApiError> {
+    let request_id = crate::middleware::request_id::current_request_id();
+    let network_key = ip_from_headers(&headers);
+    if let Err(error) = state.rate_limiter.check(
+        &format!("github-callback:{}", network_key),
+        state.config.rate_limit.github_callback_per_minute,
+    ) {
+        return github_gateway_error_redirect("ppf", "/profile", error.code, &request_id);
+    }
+    if let Err(error) = state.rate_limiter.check(
+        "github-provider:callback",
+        state.config.rate_limit.github_provider_per_minute,
+    ) {
+        return github_gateway_error_redirect("ppf", "/profile", error.code, &request_id);
+    }
+
+    let state_token = match params.state {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => return github_gateway_error_redirect("ppf", "/profile", ErrorCode::GithubOauthStateInvalid, &request_id),
+    };
+    let oauth_state = match state.github.consume_state(&state_token) {
+        Ok(value) => value,
+        Err(error) => return github_gateway_error_redirect("ppf", "/profile", error.code, &request_id),
+    };
+    if params.error.is_some() {
+        return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            ErrorCode::GithubOauthFailed,
+            &request_id,
+        );
+    }
+    let code = match params.code {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            ErrorCode::GithubOauthFailed,
+            &request_id,
+        ),
+    };
+
+    let gh_user = match state
+        .github
+        .exchange_code(&state.secrets, &code, &state.config.github.callback_url)
+        .await
+    {
+        Ok(user) => user,
+        Err(error) => return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            error.code,
+            &request_id,
+        ),
+    };
+
+    let db = match state.require_db() {
+        Ok(db) => db,
+        Err(error) => return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            error.code,
+            &request_id,
+        ),
+    };
+    let gh_id = gh_user.id.to_string();
+    let existing = match identities_repo::find_by_provider(db, "github", &gh_id).await {
+        Ok(value) => value,
+        Err(error) => return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            error.code,
+            &request_id,
+        ),
+    };
+
+    if oauth_state.mode == "login" {
+        let identity = match existing {
+            Some(identity) => identity,
+            None => return github_gateway_error_redirect(
+                &oauth_state.client_type,
+                &oauth_state.return_to,
+                ErrorCode::GithubIdentityNotBound,
+                &request_id,
+            ),
+        };
+        let client_type = match ClientType::parse(&oauth_state.client_type) {
+            Some(value @ (ClientType::Ppf | ClientType::Panel)) => value,
+            _ => return github_gateway_error_redirect(
+                "ppf",
+                "/profile",
+                ErrorCode::GithubOauthStateInvalid,
+                &request_id,
+            ),
+        };
+        let acceptance = match consent::acceptance_for_login(
+            db,
+            Some(identity.user_id),
+            &state.config.legal,
+            oauth_state.accepted_legal,
+            Some(&oauth_state.terms_version),
+            Some(&oauth_state.privacy_version),
+        )
+        .await
+        {
+            Ok(value) => value,
+            Err(error) => return github_gateway_error_redirect(
+                &oauth_state.client_type,
+                &oauth_state.return_to,
+                error.code,
+                &request_id,
+            ),
+        };
+        if let Some(acceptance) = acceptance.as_ref() {
+            if let Err(error) = consent::record_acceptance(db, identity.user_id, client_type, acceptance, "github_login").await {
+                return github_gateway_error_redirect(
+                    &oauth_state.client_type,
+                    &oauth_state.return_to,
+                    error.code,
+                    &request_id,
+                );
+            }
+        }
+        let (_sess, access_token, refresh_token) = match issue_session_and_jwt(
+            &state, db, PrincipalType::User, Some(identity.user_id), client_type, "github-web", "",
+        ).await {
+            Ok(value) => value,
+            Err(error) => return github_gateway_error_redirect(
+                &oauth_state.client_type,
+                &oauth_state.return_to,
+                error.code,
+                &request_id,
+            ),
+        };
+        let redirect = crate::auth::gateway::resolve_redirect_target(
+            &state.config.site,
+            &state.config.security,
+            &oauth_state.client_type,
+            Some(&oauth_state.return_to),
+        );
+        let (access_c, refresh_c) = issue_cookies(&state.config.session, &access_token, &refresh_token);
+        let mut response = StatusCode::FOUND.into_response();
+        response.headers_mut().append(header::SET_COOKIE, access_c);
+        response.headers_mut().append(header::SET_COOKIE, refresh_c);
+        match header::HeaderValue::from_str(&redirect) {
+            Ok(location) => response.headers_mut().insert(header::LOCATION, location),
+            Err(_) => return github_gateway_error_redirect(
+                &oauth_state.client_type,
+                &oauth_state.return_to,
+                ErrorCode::InternalError,
+                &request_id,
+            ),
+        };
+        return Ok(response);
+    }
+
+    let user_id = match oauth_state.user_id {
+        Some(value) => value,
+        None => return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            ErrorCode::GithubOauthStateInvalid,
+            &request_id,
+        ),
+    };
+    if let Some(existing) = existing {
+        if existing.user_id != user_id {
+            return github_gateway_error_redirect(
+                &oauth_state.client_type,
+                &oauth_state.return_to,
+                ErrorCode::ResourceConflict,
+                &request_id,
+            );
+        }
+    }
+    if let Err(error) = identities_repo::bind_github(db, user_id, &gh_id, &gh_user.login).await {
+        return github_gateway_error_redirect(
+            &oauth_state.client_type,
+            &oauth_state.return_to,
+            error.code,
+            &request_id,
+        );
+    }
+    let redirect = format!("{}/profile?github=bound", state.config.site.ppf_url.trim_end_matches('/'));
+    let mut response = StatusCode::FOUND.into_response();
+    match header::HeaderValue::from_str(&redirect) {
+        Ok(location) => response.headers_mut().insert(header::LOCATION, location),
+        Err(_) => return github_gateway_error_redirect("ppf", "/profile", ErrorCode::InternalError, &request_id),
+    };
+    Ok(response)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/github/unbind",
+    operation_id = "auth_github_unbind_post",
+    responses((status = 204, description = "GitHub identity unbound"), (status = 401, description = "unauthenticated", body = ErrorEnvelope)),
+    tag = "auth"
+)]
 pub async fn github_unbind(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,
@@ -553,7 +857,7 @@ pub async fn github_unbind(
 pub async fn root_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<RootLoginRequest>,
+    ApiJson(body): ApiJson<RootLoginRequest>,
 ) -> Result<axum::response::Response, ApiError> {
     let db = state.require_db()?;
     let outcome = RootAuthService::verify(db, &body.password).await?;
@@ -619,7 +923,7 @@ pub async fn root_session(
 pub async fn root_change_password(
     State(state): State<Arc<AppState>>,
     auth: AuthPrincipal,
-    Json(body): Json<ChangePasswordRequest>,
+    ApiJson(body): ApiJson<ChangePasswordRequest>,
 ) -> Result<StatusCode, ApiError> {
     if !auth.is_root() {
         return Err(ApiError::permission_denied());

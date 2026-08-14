@@ -6,7 +6,7 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::{Json, Router};
 use futures_util::stream::{self, Stream};
 use futures_util::StreamExt;
@@ -25,11 +25,6 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/events", get(admin_events_sse))
         .route("/server/status", get(server_status))
-        // Alias: Panel `fetchServerStatus` calls `/admin/server`.
-        .route("/server", get(server_status))
-        // Alias: Panel `fetchPermissionManifest` calls `/admin/permissions`.
-        .route("/permissions", get(crate::permissions::routes::manifest))
-        .route("/auth/reauth", post(crate::auth::routes::phira_reauth))
         .merge(crate::audit::routes::routes())
         .merge(crate::config::routes::routes())
         .merge(crate::logs::routes::routes())
@@ -37,7 +32,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .merge(super::plugins::routes())
         .merge(super::notifications::routes())
         .merge(super::coupons::routes())
-        .merge(crate::automation::routes::routes())
+        .nest("/automation", crate::automation::routes::routes())
         .merge(crate::jobs::routes::routes())
         .merge(auth_routes::root_routes())
         .merge(permission_routes::routes())
@@ -106,10 +101,11 @@ pub struct ServerStatusResponse {
     pub ppb_version: String,
     pub pmp: PmpStatus,
     pub db_configured: bool,
+    pub deployment: crate::deployment::DeploymentCapabilities,
     pub metrics: serde_json::Value,
 }
 
-/// GET /api/v1/admin/server/status — scaffold summary.
+/// GET /api/v1/admin/server/status — runtime and deployment capability summary.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/server/status",
@@ -137,6 +133,7 @@ pub async fn server_status(
             session_id: openuds_state.session_id,
         },
         db_configured: state.db.is_some(),
+        deployment: state.deployment.capabilities(),
         metrics: state.metrics.snapshot(),
     }))
 }

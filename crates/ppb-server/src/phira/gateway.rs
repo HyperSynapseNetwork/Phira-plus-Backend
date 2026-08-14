@@ -132,13 +132,42 @@ impl PhiraGateway {
 
     // ── Typed methods (charts) ──────────────────────────────────
 
-    pub async fn chart_list(&self, page: i64, page_num: i64, search: Option<&str>) -> Result<Value, PhiraError> {
+    pub async fn chart_list(
+        &self,
+        page: i64,
+        page_num: i64,
+        search: Option<&str>,
+        chart_type: Option<i64>,
+        rating_min: Option<f64>,
+        rating_max: Option<f64>,
+        tags: Option<&str>,
+        order: Option<&str>,
+    ) -> Result<Value, PhiraError> {
         let mut q: Vec<(&str, String)> = vec![
             ("page", page.to_string()),
             ("pageNum", page_num.to_string()),
         ];
         if let Some(s) = search {
             q.push(("search", s.to_string()));
+        }
+        if let Some(value) = chart_type {
+            q.push(("type", value.to_string()));
+        }
+        if rating_min.is_some() || rating_max.is_some() {
+            q.push((
+                "rating",
+                format!(
+                    "{},{}",
+                    rating_min.map(|v| v.to_string()).unwrap_or_default(),
+                    rating_max.map(|v| v.to_string()).unwrap_or_default()
+                ),
+            ));
+        }
+        if let Some(value) = tags.filter(|value| !value.trim().is_empty()) {
+            q.push(("tags", value.to_string()));
+        }
+        if let Some(value) = order.filter(|value| !value.trim().is_empty()) {
+            q.push(("order", value.to_string()));
         }
         self.get_json("chart", &q).await
     }
@@ -298,14 +327,14 @@ fn is_transient(e: &reqwest::Error) -> bool {
 pub fn phira_gateway_error(e: PhiraError) -> crate::error::ApiError {
     match e {
         PhiraError::RateLimited => crate::error::ApiError::new(
-            crate::error::ErrorCode::RateLimit,
+            crate::error::ErrorCode::RateLimited,
             "Phira API rate limited",
         ),
         PhiraError::Unavailable(m) | PhiraError::Api(m) | PhiraError::Other(m) => {
             crate::error::ApiError::new(crate::error::ErrorCode::PhiraApiUnavailable, m)
         }
         PhiraError::InvalidCredentials => crate::error::ApiError::new(
-            crate::error::ErrorCode::Auth,
+            crate::error::ErrorCode::PhiraAuthFailed,
             "invalid credentials",
         ),
         PhiraError::ReauthRequired(m) => crate::error::ApiError::with_details(
@@ -368,7 +397,7 @@ mod tests {
     #[test]
     fn rate_limited_error_maps_to_ratelimit() {
         let api = phira_gateway_error(PhiraError::RateLimited);
-        assert_eq!(api.code, crate::error::ErrorCode::RateLimit);
+        assert_eq!(api.code, crate::error::ErrorCode::RateLimited);
     }
 
     #[test]

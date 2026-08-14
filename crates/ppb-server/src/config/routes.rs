@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use super::pmp::{pmp_config_descriptor, pmp_config_groups, ConfigFieldGroup, Pmp
 use super::repo::{self as config_repo, ConfigSnapshot};
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
+use crate::error::extractors::ApiJson;
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
@@ -27,90 +29,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/snapshots", get(snapshots))
         .route("/config/raw", get(raw))
         .route("/config/rollback", post(rollback))
-        .route("/config/ppb", get(ppb_config).put(ppb_config_update))
-        .route("/config/pmp/descriptor", get(pmp_descriptor))
-        .route("/config/pmp", get(pmp_config).put(pmp_config_update))
-        .route("/config/pmp/snapshots", get(pmp_snapshots).post(pmp_snapshot_create))
-        .route("/config/pmp/snapshots/{id}/rollback", post(pmp_snapshot_rollback))
         .route("/config/ppf", get(ppf_config).put(ppf_config_update))
-        .route("/config/public/{key}", get(public_content).put(public_content_update))
 }
 
-// ── PPB runtime config ──────────────────────────────────────────
-
-/// GET /api/v1/admin/config/ppb — effective PPB config (merged with overrides).
-#[utoipa::path(
-    get,
-    path = "/api/v1/admin/config/ppb",
-    operation_id = "admin_config_ppb_get",
-    responses(
-        (status = 200, description = "effective PPB config", body = serde_json::Value),
-        (status = 403, description = "permission denied", body = ErrorEnvelope),
-    ),
-    tag = "admin"
-)]
-pub async fn ppb_config(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:view").await?;
-    let effective = effective_config(&state).await?;
-    Ok(Json(effective))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PpConfigBody {
-    pub overrides: Value,
-}
-
-/// PUT /api/v1/admin/config/ppb — validate + store runtime overrides.
-async fn ppb_config_update(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<PpConfigBody>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:reload").await?;
-    let db = state.require_db()?;
-    // Validate by applying to a copy.
-    state
-        .config
-        .apply_overrides(&body.overrides)
-        .map_err(|e| ApiError::validation(format!("invalid overrides: {e}")))?;
-    config_repo::put_overrides(db, body.overrides.clone(), Some(auth.sub)).await?;
-    Ok(Json(json!({ "ok": true, "overrides": body.overrides })))
-}
-
-async fn effective_config(state: &Arc<AppState>) -> Result<Value, ApiError> {
-    let base = serde_json::to_value(&*state.config)
-        .map_err(|e| ApiError::new(crate::error::ErrorCode::Internal, e.to_string()))?;
-    if let Some(db) = &state.db {
-        if let Some(over) = config_repo::get_overrides(db).await? {
-            let mut merged = base;
-            if let (Some(b), Some(o)) = (merged.as_object_mut(), over.as_object()) {
-                for (k, v) in o {
-                    if b.contains_key(k) {
-                        b.insert(k.clone(), v.clone());
-                    }
-                }
-            }
-            return Ok(merged);
-        }
-    }
-    Ok(base)
-}
-
-// ── PMP config ──────────────────────────────────────────────────
-
-async fn pmp_descriptor(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:view").await?;
-    Ok(Json(serde_json::json!({
-        "version": 1,
-        "fields": pmp_config_descriptor(),
-    })))
-}
+// Canonical config surface: descriptors / redacted values / validate / diff / save / snapshots / raw read / rollback.
 
 // ── §17 unified config endpoints ───────────────────────────────
 
@@ -199,11 +121,24 @@ pub struct ConfigValuesResponse {
     pub values: HashMap<String, Value>,
 }
 
-/// One field validation error `{ path, message }`.
+/// Stable machine-readable field validation issue. `message` is a debug/legacy
+/// fallback only; official Panel UI localizes `code + params` and never renders
+/// this string as product copy.
+#[derive(Debug, Clone, Copy, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ConfigValidationIssueCode {
+    ValuesMustBeObject,
+    ExpectedType,
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ConfigValidationError {
     pub path: String,
-    pub message: String,
+    pub code: ConfigValidationIssueCode,
+    #[serde(default)]
+    pub params: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// §22 typed validate response `{ ok, errors }`.
@@ -259,10 +194,10 @@ pub struct ConfigRollbackResponse {
 /// limitation, not a silent corruption — non-comment content is preserved.
 fn merge_yaml_patch(current_yaml: &str, values: &Value) -> Result<String, ApiError> {
     let mut root: serde_yaml::Value = serde_yaml::from_str(current_yaml)
-        .map_err(|e| ApiError::validation(format!("existing config is not valid YAML: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::ConfigValidationFailed, format!("existing config is not valid YAML: {e}")))?;
     let obj = values
         .as_object()
-        .ok_or_else(|| ApiError::validation("values must be an object"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::ConfigValidationFailed, "values must be an object"))?;
     for f in pmp_config_descriptor() {
         let Some(v) = obj.get(f.path) else { continue };
         // Sensitive field sentinel (case-insensitive): keep the old value —
@@ -278,7 +213,7 @@ fn merge_yaml_patch(current_yaml: &str, values: &Value) -> Result<String, ApiErr
         set_yaml_path(&mut root, &parts, v)?;
     }
     serde_yaml::to_string(&root)
-        .map_err(|e| ApiError::validation(format!("yaml serialize failed: {e}")))
+        .map_err(|e| ApiError::new(ErrorCode::ConfigValidationFailed, format!("yaml serialize failed: {e}")))
 }
 
 fn set_yaml_path(root: &mut serde_yaml::Value, parts: &[&str], value: &Value) -> Result<(), ApiError> {
@@ -287,7 +222,7 @@ fn set_yaml_path(root: &mut serde_yaml::Value, parts: &[&str], value: &Value) ->
     }
     let mapping = match root {
         serde_yaml::Value::Mapping(m) => m,
-        _ => return Err(ApiError::validation("existing config segment is not a mapping")),
+        _ => return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "existing config segment is not a mapping")),
     };
     let key = serde_yaml::Value::String(parts[0].to_string());
     if parts.len() == 1 {
@@ -299,7 +234,7 @@ fn set_yaml_path(root: &mut serde_yaml::Value, parts: &[&str], value: &Value) ->
     }
     match mapping.get_mut(&key) {
         Some(child) => set_yaml_path(child, &parts[1..], value),
-        None => Err(ApiError::validation(format!("nested path conflict at {}", parts[0]))),
+        None => Err(ApiError::new(ErrorCode::ConfigValidationFailed, format!("nested path conflict at {}", parts[0]))),
     }
 }
 
@@ -336,7 +271,9 @@ fn validate_values(values: &Value) -> (bool, Vec<ConfigValidationError>) {
                 false,
                 vec![ConfigValidationError {
                     path: String::new(),
-                    message: "values must be an object".to_string(),
+                    code: ConfigValidationIssueCode::ValuesMustBeObject,
+                    params: json!({}),
+                    message: Some("values must be an object".to_string()),
                 }],
             );
         }
@@ -358,7 +295,9 @@ fn validate_values(values: &Value) -> (bool, Vec<ConfigValidationError>) {
         if !type_ok {
             errors.push(ConfigValidationError {
                 path: f.path.to_string(),
-                message: format!("expected {}", f.r#type),
+                code: ConfigValidationIssueCode::ExpectedType,
+                params: json!({ "expected": f.r#type }),
+                message: Some(format!("expected {}", f.r#type)),
             });
         }
     }
@@ -380,7 +319,7 @@ fn validate_values(values: &Value) -> (bool, Vec<ConfigValidationError>) {
 pub async fn validate(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigValuesBody>,
+    ApiJson(body): ApiJson<ConfigValuesBody>,
 ) -> Result<Json<ConfigValidateResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:reload").await?;
     let (ok, errors) = validate_values(&body.values);
@@ -402,11 +341,11 @@ pub async fn validate(
 pub async fn diff(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigValuesBody>,
+    ApiJson(body): ApiJson<ConfigValuesBody>,
 ) -> Result<Json<ConfigDiffResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
-    let current = manager.read_yaml().unwrap_or_default();
+    let current = manager.read_yaml()?;
     // §23: diff against the actual merge result (redacted kept, unknowns preserved).
     let proposed = merge_yaml_patch(&current, &body.values)?;
     let mut changes: Vec<ConfigDiffChange> = Vec::new();
@@ -437,6 +376,7 @@ pub async fn diff(
     request_body = ConfigValuesBody,
     responses(
         (status = 200, description = "saved + snapshot id", body = ConfigSaveResponse),
+        (status = 401, description = "critical reauth required", body = ErrorEnvelope),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -444,12 +384,19 @@ pub async fn diff(
 pub async fn save(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<ConfigValuesBody>,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<ConfigValuesBody>,
 ) -> Result<Json<ConfigSaveResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:reload").await?;
+    crate::auth::routes::check_reauth_header(
+        &state,
+        &auth,
+        &headers,
+        crate::auth::reauth::ReauthRisk::Critical,
+    )?;
     let (ok, errors) = validate_values(&body.values);
     if !ok {
-        return Err(ApiError::validation(format!("invalid config values: {errors:?}")));
+        return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "invalid config values"));
     }
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     if !manager.configured() {
@@ -462,7 +409,7 @@ pub async fn save(
     let yaml = merge_yaml_patch(&prev, &body.values)?;
     // validate the merged YAML still parses.
     serde_yaml::from_str::<serde_yaml::Value>(&yaml)
-        .map_err(|e| ApiError::validation(format!("merged YAML invalid: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::ConfigValidationFailed, format!("merged YAML invalid: {e}")))?;
     let db = state.require_db()?;
     let snapshot_id = config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-save: {}", body.note), Some(auth.sub)).await?;
     manager.write_yaml_atomic(&yaml)?;
@@ -471,6 +418,33 @@ pub async fn save(
         .command("server.config_reload", serde_json::json!({}))
         .await
         .map_err(ApiError::from)?;
+
+    let changed_paths = body
+        .values
+        .as_object()
+        .map(|values| values.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    if let Err(error) = crate::audit::service::record_principal(
+        db,
+        &auth,
+        "config.save",
+        "config",
+        "pmp",
+        json!({
+            "changed_paths": changed_paths,
+            "snapshot_id": snapshot_id,
+        }),
+        "succeeded",
+        "",
+        "",
+        &ip_from_headers(&headers),
+        &user_agent_from_headers(&headers),
+    )
+    .await
+    {
+        tracing::error!(%error, snapshot_id = %snapshot_id, "config save audit record failed");
+    }
+
     Ok(Json(ConfigSaveResponse { ok: true, snapshot_id }))
 }
 
@@ -495,16 +469,19 @@ pub async fn snapshots(
     Ok(Json(ConfigSnapshotsResponse { items: snaps }))
 }
 
-/// GET /api/v1/admin/config/raw — raw PMP config YAML (plain text).
+/// GET /api/v1/admin/config/raw — redacted read-only YAML projection.
 ///
-/// Contract: the Panel consumer reads the raw YAML as a `text/plain` string
-/// (`fetchConfigRaw(): Promise<string>`), not a JSON envelope.
+/// This is deliberately NOT the literal on-disk file: only descriptor-owned
+/// fields are projected, sensitive fields are replaced with `[REDACTED]`, and
+/// unknown fields are omitted. The save path still merges against the real
+/// source YAML server-side, so unknown fields remain preserved without ever
+/// being echoed to the browser.
 #[utoipa::path(
     get,
     path = "/api/v1/admin/config/raw",
     operation_id = "admin_config_raw_get",
     responses(
-        (status = 200, description = "raw config YAML", body = String, content_type = "text/plain"),
+        (status = 200, description = "redacted canonical config YAML projection", body = String, content_type = "text/plain"),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -518,7 +495,26 @@ pub async fn raw(
     if !manager.configured() {
         return Err(ApiError::new(ErrorCode::PmpUnavailable, "pmp.config_path not configured"));
     }
-    manager.read_yaml()
+
+    let source = manager.read_yaml()?;
+    let mut projected = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+    for field in pmp_config_descriptor() {
+        let Some(raw_value) = manager.field_value(&source, field.path) else {
+            continue;
+        };
+        let value = if field.sensitive {
+            Value::String("[REDACTED]".to_string())
+        } else {
+            serde_yaml::from_value::<Value>(raw_value).unwrap_or(Value::Null)
+        };
+        let parts: Vec<&str> = field.path.split('.').collect();
+        set_yaml_path(&mut projected, &parts, &value)?;
+    }
+    let yaml = serde_yaml::to_string(&projected)
+        .map_err(|e| ApiError::new(ErrorCode::ConfigValidationFailed, format!("yaml projection failed: {e}")))?;
+    Ok(format!(
+        "# Redacted canonical configuration projection; unknown fields are omitted.\n{yaml}"
+    ))
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -534,6 +530,7 @@ pub struct RollbackBody {
     request_body = RollbackBody,
     responses(
         (status = 200, description = "rolled back + health", body = ConfigRollbackResponse),
+        (status = 401, description = "critical reauth required", body = ErrorEnvelope),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -541,8 +538,8 @@ pub struct RollbackBody {
 pub async fn rollback(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
-    Json(body): Json<RollbackBody>,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<RollbackBody>,
 ) -> Result<Json<ConfigRollbackResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:rollback").await?;
     // §23 #10: config rollback requires reauth.
@@ -550,9 +547,9 @@ pub async fn rollback(
     let db = state.require_db()?;
     let snapshot = config_repo::get_snapshot(db, body.snapshot_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("snapshot"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::ConfigSnapshotNotFound, "config snapshot not found"))?;
     if snapshot.scope != "pmp" {
-        return Err(ApiError::validation("snapshot scope must be pmp"));
+        return Err(ApiError::new(ErrorCode::ConfigScopeInvalid, "snapshot scope must be pmp"));
     }
     let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
     manager.write_yaml_atomic(&snapshot.content)?;
@@ -563,139 +560,30 @@ pub async fn rollback(
         .map_err(ApiError::from)?;
     config_repo::mark_restored(db, body.snapshot_id).await?;
     let health = health_check(&state).await;
+
+    if let Err(error) = crate::audit::service::record_principal(
+        db,
+        &auth,
+        "config.rollback",
+        "config",
+        "pmp",
+        json!({ "snapshot_id": body.snapshot_id }),
+        "succeeded",
+        "",
+        "",
+        &ip_from_headers(&headers),
+        &user_agent_from_headers(&headers),
+    )
+    .await
+    {
+        tracing::error!(%error, snapshot_id = %body.snapshot_id, "config rollback audit record failed");
+    }
+
     Ok(Json(ConfigRollbackResponse {
         ok: true,
         restored: body.snapshot_id,
         health,
     }))
-}
-
-async fn pmp_config(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:view").await?;
-    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
-    if !manager.configured() {
-        return Err(ApiError::new(
-            crate::error::ErrorCode::PmpUnavailable,
-            "pmp.config_path not configured",
-        ));
-    }
-    let yaml = manager.read_yaml()?;
-    let mut values = serde_json::Map::new();
-    for f in pmp_config_descriptor() {
-        let v = manager.field_value(&yaml, f.path);
-        let value = if f.sensitive {
-            if v.is_some() {
-                Value::String("[REDACTED]".to_string())
-            } else {
-                Value::Null
-            }
-        } else {
-            v.map(|y| serde_yaml::from_value::<Value>(y).unwrap_or(Value::Null))
-                .unwrap_or(Value::Null)
-        };
-        values.insert(f.path.to_string(), value);
-    }
-    Ok(Json(json!({ "version": 1, "values": values })))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PmpConfigUpdateBody {
-    /// Full YAML content (field edits are applied to the whole file).
-    pub content: String,
-    #[serde(default)]
-    pub note: String,
-}
-
-async fn pmp_config_update(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<PmpConfigUpdateBody>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:reload").await?;
-    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
-    // Validate YAML parses before writing.
-    serde_yaml::from_str::<serde_yaml::Value>(&body.content)
-        .map_err(|e| ApiError::validation(format!("invalid YAML: {e}")))?;
-    // Snapshot the pre-change state first.
-    let db = state.require_db()?;
-    let prev = manager.read_yaml().ok();
-    if let Some(prev) = prev {
-        config_repo::insert_snapshot(db, "pmp", &prev, &format!("pre-edit: {}", body.note), Some(auth.sub)).await?;
-    }
-    manager.write_yaml_atomic(&body.content)?;
-    // Reload PMP.
-    state
-        .openuds
-        .command("server.config_reload", json!({}))
-        .await
-        .map_err(crate::error::ApiError::from)?;
-    Ok(Json(json!({ "ok": true, "note": body.note })))
-}
-
-async fn pmp_snapshots(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:view").await?;
-    let db = state.require_db()?;
-    let snapshots = config_repo::list_snapshots(db, "pmp", 200).await?;
-    Ok(Json(json!({ "snapshots": snapshots })))
-}
-
-async fn pmp_snapshot_create(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<PmpConfigUpdateBody>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:reload").await?;
-    let db = state.require_db()?;
-    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
-    let yaml = manager.read_yaml()?;
-    let id = config_repo::insert_snapshot(db, "pmp", &yaml, &body.note, Some(auth.sub)).await?;
-    Ok(Json(json!({ "snapshot_id": id })))
-}
-
-async fn pmp_snapshot_rollback(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Path(snapshot_id): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:rollback").await?;
-    let db = state.require_db()?;
-    let snapshot = config_repo::get_snapshot(db, snapshot_id)
-        .await?
-        .ok_or_else(|| ApiError::not_found("snapshot"))?;
-    if snapshot.scope != "pmp" {
-        return Err(ApiError::validation("snapshot scope must be pmp"));
-    }
-    let manager = PmpConfigManager::new(state.config.pmp.config_path.clone());
-    manager.write_yaml_atomic(&snapshot.content)?;
-    state
-        .openuds
-        .command("server.config_reload", json!({}))
-        .await
-        .map_err(crate::error::ApiError::from)?;
-    config_repo::mark_restored(db, snapshot_id).await?;
-    let health = health_check(&state).await;
-    Ok(Json(json!({ "ok": true, "restored": snapshot_id, "health": health })))
-}
-
-async fn health_check(state: &Arc<AppState>) -> Value {
-    let Some(url) = state.config.pmp.http_url.clone() else {
-        return json!({ "checked": false, "note": "pmp.http_url not configured" });
-    };
-    let result = reqwest::Client::new()
-        .get(format!("{url}/health/ready"))
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await;
-    match result {
-        Ok(resp) => json!({ "checked": true, "status": resp.status().as_u16() }),
-        Err(e) => json!({ "checked": true, "error": e.to_string() }),
-    }
 }
 
 // ── PPF build/SEO config ────────────────────────────────────────
@@ -706,7 +594,7 @@ async fn health_check(state: &Arc<AppState>) -> Value {
     path = "/api/v1/admin/config/ppf",
     operation_id = "admin_config_ppf_get",
     responses(
-        (status = 200, description = "PPF build config", body = serde_json::Value),
+        (status = 200, description = "PPF build config", body = PpfBuildConfigResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -714,60 +602,94 @@ async fn health_check(state: &Arc<AppState>) -> Value {
 pub async fn ppf_config(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<PpfBuildConfigResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:view").await?;
     let db = state.require_db()?;
     match config_repo::get_ppf_config(db).await? {
-        Some((revision, content)) => Ok(Json(json!({ "revision": revision, "content": content }))),
-        None => Ok(Json(json!({ "revision": 0, "content": {} }))),
+        Some((revision, content)) => Ok(Json(PpfBuildConfigResponse { revision, content })),
+        None => Ok(Json(PpfBuildConfigResponse { revision: 0, content: json!({}) })),
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct PpConfigBody2 {
     pub content: Value,
 }
 
-async fn ppf_config_update(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<PpConfigBody2>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:reload").await?;
-    let db = state.require_db()?;
-    let revision = config_repo::put_ppf_config(db, body.content.clone(), Some(auth.sub)).await?;
-    Ok(Json(json!({ "ok": true, "revision": revision })))
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct PpfBuildConfigResponse {
+    pub revision: i64,
+    pub content: Value,
 }
 
-// ── Public runtime content ──────────────────────────────────────
-
-async fn public_content(
-    auth: AuthPrincipal,
-    State(state): State<Arc<AppState>>,
-    Path(key): Path<String>,
-) -> Result<Json<Value>, ApiError> {
-    state.permissions.require(&state.db, &auth, "config:view").await?;
-    if !matches!(key.as_str(), "site" | "announcements" | "downloads" | "nodes") {
-        return Err(ApiError::validation("key must be site|announcements|downloads|nodes"));
-    }
-    let db = state.require_db()?;
-    let content = config_repo::get_public_content(db, &key).await?.unwrap_or(serde_json::Value::Object(Default::default()));
-    Ok(Json(json!({ "key": key, "content": content })))
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct PpfBuildConfigSaveResponse {
+    pub ok: bool,
+    pub revision: i64,
 }
 
-async fn public_content_update(
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/config/ppf",
+    operation_id = "admin_config_ppf_put",
+    request_body = PpConfigBody2,
+    responses(
+        (status = 200, description = "PPF build config saved", body = PpfBuildConfigSaveResponse),
+        (status = 403, description = "permission denied", body = ErrorEnvelope),
+        (status = 422, description = "invalid build config", body = ErrorEnvelope),
+    ),
+    tag = "admin"
+)]
+pub async fn ppf_config_update(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(key): Path<String>,
-    Json(body): Json<PpConfigBody2>,
-) -> Result<Json<Value>, ApiError> {
+    ApiJson(body): ApiJson<PpConfigBody2>,
+) -> Result<Json<PpfBuildConfigSaveResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "config:reload").await?;
-    if !matches!(key.as_str(), "site" | "announcements" | "downloads" | "nodes") {
-        return Err(ApiError::validation("key must be site|announcements|downloads|nodes"));
-    }
+    validate_ppf_build_config(&body.content)?;
     let db = state.require_db()?;
-    config_repo::put_public_content(db, &key, body.content.clone(), Some(auth.sub)).await?;
-    Ok(Json(json!({ "ok": true, "key": key })))
+    let revision = config_repo::put_ppf_config(db, body.content, Some(auth.sub)).await?;
+    Ok(Json(PpfBuildConfigSaveResponse { ok: true, revision }))
+}
+
+fn validate_ppf_build_config(content: &Value) -> Result<(), ApiError> {
+    let object = content.as_object().ok_or_else(|| ApiError::new(ErrorCode::ConfigValidationFailed, "PPF build config must be an object"))?;
+    for key in object.keys() {
+        if !matches!(key.as_str(), "site_name" | "site_description" | "canonical_url" | "analytics_provider" | "plausible_domain" | "ga_id" | "search_verification_google" | "search_verification_bing") {
+            return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "unsupported PPF build config key"));
+        }
+    }
+    if let Some(url) = object.get("canonical_url").and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()) {
+        let parsed = reqwest::Url::parse(url).map_err(|_| ApiError::new(ErrorCode::ConfigValidationFailed, "canonical_url must be an absolute URL"))?;
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "canonical_url must use http or https"));
+        }
+    }
+    if let Some(provider) = object.get("analytics_provider").and_then(Value::as_str) {
+        if !matches!(provider, "" | "plausible" | "ga4") {
+            return Err(ApiError::new(ErrorCode::ConfigValidationFailed, "analytics_provider must be plausible or ga4"));
+        }
+    }
+    Ok(())
+}
+
+fn ip_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn user_agent_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 #[cfg(test)]

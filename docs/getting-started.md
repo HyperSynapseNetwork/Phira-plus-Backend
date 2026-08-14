@@ -11,6 +11,20 @@
   - `phira.htadiy.com`（PPF，公开伴生站）
   - `panel-phira.htadiy.com`（Panel，管理控制台）
 
+在 PMP `server_config.yml` 中启用 OpenUDS，并确保 socket 路径与 PPB `[pmp].openuds_path` 完全一致：
+
+```yaml
+openuds:
+  enabled: true
+  socket_path: "/var/run/pmp-openuds.sock"
+  auth_token: ""
+  max_connections: 4
+  event_buffer_size: 1024
+  heartbeat_interval_secs: 60
+```
+
+启动 PPB 前运行 `ppctl doctor --config /etc/ppb/ppb.toml`；它会检查配置、socket 存在性和连接权限。
+
 ## 方式 A：一键安装（推荐）
 
 [`deploy/install.sh`](../deploy/install.sh) 是 Native Linux x86_64 的首选安装路径：幂等、自动下载并
@@ -57,8 +71,11 @@ cp deploy/docker-compose.yml docker-compose.yml
 # 填入强口令（自动生成见 `ppctl init`）：
 export PPB_DB_PASSWORD=... PPB_JWT_SECRET=... PPB_PHIRA_CREDENTIAL_KEY=...
 export PPB_IMAGE=ghcr.io/your-org/ppb-server:0.1.x
-# 若 PMP OpenUDS socket 不在 /var/run/pmp，覆盖：
-export PMP_OPENUDS_SOCKET_DIR=/run/phira-mp-plus
+export PPF_IMAGE=ghcr.io/your-org/phira-plus-frontend:0.1.x
+export PANEL_IMAGE=ghcr.io/your-org/phira-plus-panel:0.1.x
+export PMP_OPENUDS_SOCKET=/var/run/pmp-openuds.sock
+export API_DOMAIN=api.example.com PPF_DOMAIN=phira.example.com PANEL_DOMAIN=panel.example.com
+export ACME_EMAIL=admin@example.com
 docker compose up -d
 ```
 
@@ -90,17 +107,34 @@ sudo systemctl enable --now ppb
 > [!NOTE]
 > 配置加载顺序（`crates/ppb-server/src/config/mod.rs`）：`PPB_RUNTIME_CONFIG` 环境变量指定的 TOML → `./config/ppb.toml` → 内置默认值。systemd 部署时请用 `PPB_RUNTIME_CONFIG=/etc/ppb/ppb.toml` 显式指定配置文件（当前二进制未解析 `--config` 参数；`--check-config <path>` 仅用于配置校验）。
 
-## 首次登录（Root）
+## 首次启动：Root-only Bootstrap 与 Public Auth Enable
 
-PPB 首次启动会生成 Root 一次性口令，打印到服务端 stdout（仅打印一次，不会写日志）。使用 Panel 登录后立即改密。
+Fresh install 默认 `legal.public_auth_enabled=false`。先完成 Root-only bootstrap，再启用普通账户身份，不要把两步倒置。
+
+### 1. Root-only Bootstrap
+
+PPB 首次启动会生成一次性 Root 口令并输出一次。使用 Panel 登录后立即改密，确认 PostgreSQL / OpenUDS / health/doctor 正常，并先创建所需管理员组。此阶段 Auth Gateway 的普通 Phira/GitHub 登录保持禁用。
 
 ```bash
-# 若需重置（ppctl）：
-ppctl root reset-password
+ppctl root reset-password --env-file /etc/ppb/ppb.env   # 仅在需要重置时
 ```
 
-> [!NOTE]
-> `ppb-server root init` 也是 CLI 路径（生成/打印首启 Root 口令并跑迁移）；两者都要求 `PPB_DATABASE_URL` 已设置。
+> `ppb-server root init` 也是 CLI 路径；两者都要求 `PPB_DATABASE_URL` 已设置。
+
+### 2. Enable Normal Identity
+
+Owner-approved Terms / Privacy 有稳定版本和安全 URL 后，在 `ppb.toml` 配置 `[legal]`：
+
+```toml
+[legal]
+public_auth_enabled = true
+terms_version = "<approved-version>"
+privacy_version = "<approved-version>"
+terms_url = "https://phira.example.com/terms"
+privacy_url = "https://phira.example.com/privacy"
+```
+
+校验并 reload/restart 后，完成第一个 Phira 登录，再由 Root 把该 PPB 用户加入普通管理员组；最后退出 Root，用普通管理员重新验证授权页面。已接受当前 version pair 的用户后续登录不重复要求同意，只有版本变化才重新要求。
 
 ## 更新
 

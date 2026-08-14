@@ -153,7 +153,7 @@ pub async fn resolve_replay_access(
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ReplayNotFound, "replay not found")
     } else {
         tracing::error!(error = %e, "replay visibility db error");
         ApiError::internal()

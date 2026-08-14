@@ -42,7 +42,7 @@ impl RootAuthService {
         }
         let password = generate_random_password();
         let hash = bcrypt::hash(&password, BCRYPT_COST)
-            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root hash: {e}")))?;
+            .map_err(|error| { tracing::error!(%error, "root password hash failed"); ApiError::internal() })?;
         sqlx::query(
             "INSERT INTO root_credentials (id, password_hash, must_change_password)
              VALUES (1, $1, TRUE)
@@ -67,11 +67,11 @@ impl RootAuthService {
         .map_err(db_err)?;
 
         let (hash, must_change_password) = row
-            .ok_or_else(|| ApiError::new(ErrorCode::Auth, "root not initialized"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::AuthRequired, "root not initialized"))?;
         let ok = bcrypt::verify(password, &hash)
-            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root verify: {e}")))?;
+            .map_err(|error| { tracing::error!(%error, "root password verify failed"); ApiError::internal() })?;
         if !ok {
-            return Err(ApiError::new(ErrorCode::Auth, "invalid root password"));
+            return Err(ApiError::new(ErrorCode::RootPasswordInvalid, "invalid root password"));
         }
         Ok(RootLoginOutcome { must_change_password })
     }
@@ -91,7 +91,7 @@ impl RootAuthService {
     pub async fn reset_password(db: &PgPool) -> Result<String, ApiError> {
         let password = generate_random_password();
         let hash = bcrypt::hash(&password, BCRYPT_COST)
-            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root hash: {e}")))?;
+            .map_err(|error| { tracing::error!(%error, "root password hash failed"); ApiError::internal() })?;
         sqlx::query(
             "UPDATE root_credentials
              SET password_hash = $1, must_change_password = TRUE, updated_at = now()
@@ -110,7 +110,7 @@ impl RootAuthService {
             return Err(ApiError::validation("root password must be at least 12 chars"));
         }
         let hash = bcrypt::hash(new_password, BCRYPT_COST)
-            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("root hash: {e}")))?;
+            .map_err(|error| { tracing::error!(%error, "root password hash failed"); ApiError::internal() })?;
         sqlx::query(
             "UPDATE root_credentials
              SET password_hash = $1, must_change_password = FALSE, updated_at = now()
@@ -135,7 +135,7 @@ pub fn generate_random_password() -> String {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "root credentials not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "root credentials not found")
     } else {
         tracing::error!(error = %e, "root db error");
         ApiError::internal()

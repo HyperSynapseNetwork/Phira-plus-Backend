@@ -134,7 +134,7 @@ pub async fn touch(db: &sqlx::PgPool, id: Uuid) -> Result<(), ApiError> {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "session not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "session not found")
     } else {
         tracing::error!(error = %e, "session db error");
         ApiError::internal()

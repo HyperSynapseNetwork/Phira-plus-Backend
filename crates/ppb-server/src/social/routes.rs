@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::users::model::User;
@@ -26,6 +27,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/friends/requests", get(list_requests).post(send_request))
         .route("/friends/requests/{request_id}/accept", post(respond_accept))
         .route("/friends/requests/{request_id}/reject", post(respond_reject))
+        .route("/friends/{phira_id}/room-invite", post(invite_to_room))
         .route("/users/{phira_id}/block", post(block))
 }
 
@@ -72,7 +74,7 @@ async fn user_by_id(db: &sqlx::PgPool, id: Uuid) -> Result<Option<User>, ApiErro
 pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<PageParams>,
+    ApiQuery(params): ApiQuery<PageParams>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -103,7 +105,7 @@ pub async fn list(
 pub async fn list_requests(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<PageParams>,
+    ApiQuery(params): ApiQuery<PageParams>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -132,6 +134,13 @@ pub async fn list_requests(
     Ok(Json(json!({ "items": slice, "total": total, "page": params.page.unwrap_or(1).max(1), "pageNum": params.page_num.unwrap_or(50) })))
 }
 
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct FriendRequestSendResponse {
+    pub id: Uuid,
+    pub status: String,
+}
+
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SendRequestBody {
     pub phira_id: i64,
@@ -144,7 +153,7 @@ pub struct SendRequestBody {
     operation_id = "friends_requests_post",
     request_body = SendRequestBody,
     responses(
-        (status = 200, description = "request sent", body = serde_json::Value),
+        (status = 200, description = "request sent", body = FriendRequestSendResponse),
         (status = 409, description = "already friends / request exists", body = ErrorEnvelope),
     ),
     tag = "friends"
@@ -152,20 +161,38 @@ pub struct SendRequestBody {
 pub async fn send_request(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<SendRequestBody>,
-) -> Result<Json<Value>, ApiError> {
+    ApiJson(body): ApiJson<SendRequestBody>,
+) -> Result<Json<FriendRequestSendResponse>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
     }
+    state.rate_limiter.check(
+        &format!("social-request:{}", auth.sub),
+        state.config.rate_limit.social_per_minute,
+    )?;
     let db = state.require_db()?;
     let target = crate::users::repo::find_by_phira_id(db, body.phira_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("user"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::UserNotFound, "user not found"))?;
     if crate::social::is_blocked(db, auth.sub, target.id).await? {
-        return Err(ApiError::new(ErrorCode::Conflict, "blocked"));
+        return Err(ApiError::new(ErrorCode::UserBlocked, "user is blocked"));
     }
     let req = crate::social::send_request(db, auth.sub, target.id).await?;
-    Ok(Json(json!({ "id": req.id, "status": req.status })))
+    // The in-app event is committed transactionally with the request. Push is
+    // best-effort and can fail independently without rolling back the domain event.
+    if let Ok(payload) = crate::social::friend_request_notification_payload(req.id) {
+        let _ = state
+            .push
+            .notify(
+                db,
+                target.id,
+                payload.get("title").and_then(Value::as_str).unwrap_or(""),
+                payload.get("body").and_then(Value::as_str).unwrap_or(""),
+                Some(&payload),
+            )
+            .await;
+    }
+    Ok(Json(FriendRequestSendResponse { id: req.id, status: req.status }))
 }
 
 /// POST /api/v1/friends/requests/{id}/accept — accept a friend request.
@@ -182,7 +209,7 @@ pub async fn send_request(
 pub async fn respond_accept(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(request_id): Path<Uuid>,
+    ApiPath(request_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -206,7 +233,7 @@ pub async fn respond_accept(
 pub async fn respond_reject(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(request_id): Path<Uuid>,
+    ApiPath(request_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -214,6 +241,124 @@ pub async fn respond_reject(
     let db = state.require_db()?;
     crate::social::respond_request(db, request_id, auth.sub, false).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct RoomInviteBody {
+    pub room_id: String,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct RoomInviteResponse {
+    pub event_id: Uuid,
+    pub status: String,
+}
+
+/// POST /api/v1/friends/{phira_id}/room-invite — invite an accepted friend.
+#[utoipa::path(
+    post,
+    path = "/api/v1/friends/{phira_id}/room-invite",
+    operation_id = "friends_phira_id_room_invite_post",
+    request_body = RoomInviteBody,
+    responses(
+        (status = 200, description = "room invite notification created", body = RoomInviteResponse),
+        (status = 403, description = "friend relation required", body = ErrorEnvelope),
+        (status = 404, description = "user or room not found", body = ErrorEnvelope),
+    ),
+    tag = "friends"
+)]
+pub async fn invite_to_room(
+    auth: AuthPrincipal,
+    State(state): State<Arc<AppState>>,
+    ApiPath(phira_id): ApiPath<i64>,
+    ApiJson(body): ApiJson<RoomInviteBody>,
+) -> Result<Json<RoomInviteResponse>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let room_id = body.room_id.trim();
+    if room_id.is_empty() {
+        return Err(ApiError::new(ErrorCode::RoomIdRequired, "room_id is required"));
+    }
+    state.rate_limiter.check(
+        &format!("social-invite:{}", auth.sub),
+        state.config.rate_limit.social_per_minute,
+    )?;
+    let db = state.require_db()?;
+    let target = crate::users::repo::find_by_phira_id(db, phira_id)
+        .await?
+        .ok_or_else(|| ApiError::new(ErrorCode::UserNotFound, "user not found"))?;
+    if !crate::social::are_friends(db, auth.sub, target.id).await? {
+        return Err(ApiError::new(
+            ErrorCode::FriendRelationRequired,
+            "friend relation required",
+        ));
+    }
+    if crate::social::is_blocked(db, auth.sub, target.id).await? {
+        return Err(ApiError::new(ErrorCode::UserBlocked, "user is blocked"));
+    }
+    state
+        .rooms
+        .info(room_id)
+        .await
+        .map_err(|_| ApiError::new(ErrorCode::RoomNotFound, "room not found"))?;
+
+    let action_target = crate::notifications::NotificationActionTarget {
+        room_id: Some(room_id.to_string()),
+        ..Default::default()
+    };
+    let actions = crate::notifications::normalize_action_drafts(vec![
+        crate::notifications::NotificationActionDraft {
+            label: "Join room".to_string(),
+            label_key: Some("persistent.actions.joinRoom".to_string()),
+            action: crate::notifications::NotificationActionKind::JoinRoom,
+            data: action_target.clone(),
+            danger: false,
+        },
+        crate::notifications::NotificationActionDraft {
+            label: "Open room".to_string(),
+            label_key: Some("persistent.actions.openRoom".to_string()),
+            action: crate::notifications::NotificationActionKind::OpenRoom,
+            data: action_target,
+            danger: false,
+        },
+    ])?;
+    let payload = json!({
+        "type": "friend.room_invite",
+        "priority": "normal",
+        "title": "Room invitation",
+        "title_key": "persistent.roomInvite.title",
+        "body": format!("A friend invited you to room {room_id}."),
+        "body_key": "persistent.roomInvite.body",
+        "params": { "room_id": room_id },
+        "target": { "room_id": room_id },
+        "actions": actions,
+        "input": null,
+        "deep_link": format!("/room/{room_id}"),
+        "dedup_key": format!("friend.room_invite:{}:{}:{}", auth.sub, target.id, room_id),
+    });
+    let event = crate::notifications::publish_to_users(
+        db,
+        "friend.room_invite",
+        Some(auth.sub),
+        payload.clone(),
+        &[target.id],
+    )
+    .await?;
+    let _ = state
+        .push
+        .notify(
+            db,
+            target.id,
+            payload.get("title").and_then(Value::as_str).unwrap_or(""),
+            payload.get("body").and_then(Value::as_str).unwrap_or(""),
+            Some(&payload),
+        )
+        .await;
+    Ok(Json(RoomInviteResponse {
+        event_id: event.id,
+        status: "sent".to_string(),
+    }))
 }
 
 /// POST /api/v1/users/{phira_id}/block — block a user by Phira id.
@@ -230,7 +375,7 @@ pub async fn respond_reject(
 pub async fn block(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(phira_id): Path<i64>,
+    ApiPath(phira_id): ApiPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());

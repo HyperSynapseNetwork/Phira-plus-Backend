@@ -1,0 +1,23 @@
+{
+    email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+    reverse_proxy ppb:8080
+    request_body {
+        max_size 20MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+    }
+}
+
+{$PPF_DOMAIN} {
+    reverse_proxy ppf:80
+}
+
+{$PANEL_DOMAIN} {
+    reverse_proxy panel:80
+    header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+}

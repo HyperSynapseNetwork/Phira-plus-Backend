@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::types::{ActionDescriptor, Executor, Risk};
 
-/// Seed actions covering the Phase B control set (design §9.1, §18.3/§18.6/§18.9).
+/// Canonical action registry for the current control surface (design §9.1, §18.3/§18.6/§18.9).
 ///
 /// Executor::OpenUds actions use the action id directly as the OpenUDS command
 /// name; args are the command params (room_id/user_id etc.). `host_allowed`
@@ -54,6 +54,8 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("server.config_reload", "config:reload", Executor::OpenUds, Risk::High, true, false, false, "config:pmp", false),
         ActionDescriptor::new("server.roomcreation", "server:manage", Executor::OpenUds, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("server.shutdown", "server:shutdown", Executor::OpenUds, Risk::Critical, true, true, false, "server", false),
+        ActionDescriptor::new("server.start", "server:start", Executor::Internal, Risk::Critical, true, true, false, "server", false),
+        ActionDescriptor::new("server.supervisor_stop", "server:shutdown", Executor::Internal, Risk::Critical, true, true, false, "server", false),
         // §23 #2: connection-acceptance gate (wrapped `cli.execute`, not a
         // typed OpenUDS command). Absent `enabled` = read current state.
         ActionDescriptor::new("server.connections", "server:manage", Executor::CliExecute, Risk::High, true, false, false, "server", false),
@@ -64,9 +66,6 @@ pub fn seed_actions() -> Vec<ActionDescriptor> {
         ActionDescriptor::new("pmp.update.check", "server:update", Executor::CliExecute, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("pmp.update.cancel", "server:update", Executor::CliExecute, Risk::High, true, false, false, "server", false),
         ActionDescriptor::new("pmp.update.force", "server:update", Executor::CliExecute, Risk::Critical, true, true, false, "server", true),
-        // ── PPB-internal capabilities (no PMP command, §13) ───────
-        // Session revocation is PPB identity/session territory; the Internal
-        // executor is wired in a later phase (currently returns "not implemented").
         ActionDescriptor::new("user.revoke_sessions", "user:kick", Executor::Internal, Risk::High, true, false, false, "user:{user_id}", false),
     ]
 }
@@ -163,7 +162,7 @@ mod tests {
         for id in [
             "player.ban", "player.unban", "player.kick", "player.ban_ip", "player.unban_ip",
             "room.ban", "room.unban", "room.lock", "room.ready",
-            "server.config_reload", "server.roomcreation", "server.shutdown", "server.connections",
+            "server.config_reload", "server.roomcreation", "server.shutdown", "server.start", "server.supervisor_stop", "server.connections",
             "pmp.cli.execute", "pmp.update.apply", "pmp.update.check", "pmp.update.cancel",
             "pmp.update.force", "user.revoke_sessions",
         ] {
@@ -181,7 +180,7 @@ mod tests {
         let reg = ActionRegistry::new();
         for id in [
             "player.ban", "player.unban", "player.ban_ip", "player.unban_ip",
-            "server.shutdown", "pmp.cli.execute", "pmp.update.apply", "pmp.update.force",
+            "server.shutdown", "server.start", "server.supervisor_stop", "pmp.cli.execute", "pmp.update.apply", "pmp.update.force",
         ] {
             let a = reg.get(id).unwrap();
             assert!(a.reauth, "sensitive action {id} must require reauth");

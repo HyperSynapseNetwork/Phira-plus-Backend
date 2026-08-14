@@ -2,15 +2,16 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::gateway::phira_gateway_error;
 use crate::app::AppState;
-#[allow(unused_imports)]
+use crate::auth::extractor::OptionalAuthPrincipal;
+use crate::error::extractors::{ApiPath, ApiQuery};
 use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -38,6 +39,12 @@ pub struct ChartListParams {
     #[serde(rename = "pageNum")]
     pub page_num: Option<i64>,
     pub search: Option<String>,
+    #[serde(rename = "type")]
+    pub chart_type: Option<i64>,
+    pub rating_min: Option<f64>,
+    pub rating_max: Option<f64>,
+    pub tags: Option<String>,
+    pub order: Option<String>,
 }
 
 /// GET /api/v1/charts — chart list (paginated).
@@ -53,7 +60,7 @@ pub struct ChartListParams {
 )]
 pub async fn chart_list(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<ChartListParams>,
+    ApiQuery(params): ApiQuery<ChartListParams>,
 ) -> Result<Json<Value>, ApiError> {
     let mut result = state
         .phira_gateway
@@ -61,6 +68,11 @@ pub async fn chart_list(
             params.page.unwrap_or(1),
             params.page_num.unwrap_or(20).min(30),
             params.search.as_deref(),
+            params.chart_type,
+            params.rating_min,
+            params.rating_max,
+            params.tags.as_deref(),
+            params.order.as_deref(),
         )
         .await
         .map_err(phira_gateway_error)?;
@@ -111,7 +123,7 @@ pub async fn chart_popular(State(state): State<Arc<AppState>>) -> Result<Json<Va
 )]
 pub async fn chart_detail(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    ApiPath(id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.chart(id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
@@ -132,7 +144,7 @@ pub async fn chart_detail(
 )]
 pub async fn chart_preview(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    ApiPath(id): ApiPath<i64>,
 ) -> Result<axum::response::Response, ApiError> {
     let (bytes, content_type) = state
         .phira_gateway
@@ -166,7 +178,7 @@ pub async fn chart_preview(
 )]
 pub async fn chart_viewer(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    ApiPath(id): ApiPath<i64>,
 ) -> Result<axum::response::Response, ApiError> {
     let bytes = state
         .phira_gateway
@@ -207,8 +219,8 @@ pub struct RecordQueryParams {
 )]
 pub async fn chart_records(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Query(params): Query<RecordQueryParams>,
+    ApiPath(id): ApiPath<i64>,
+    ApiQuery(params): ApiQuery<RecordQueryParams>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state
         .phira_gateway
@@ -231,7 +243,7 @@ pub async fn chart_records(
 )]
 pub async fn chart_top(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    ApiPath(id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.record_list15(id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
@@ -258,7 +270,7 @@ pub struct RecordByPlayerParams {
 )]
 pub async fn records_by_player(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<RecordByPlayerParams>,
+    ApiQuery(params): ApiQuery<RecordByPlayerParams>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state
         .phira_gateway
@@ -281,8 +293,8 @@ pub async fn records_by_player(
 )]
 pub async fn records_query(
     State(state): State<Arc<AppState>>,
-    Path(chart_id): Path<i64>,
-    Query(params): Query<RecordQueryParams>,
+    ApiPath(chart_id): ApiPath<i64>,
+    ApiQuery(params): ApiQuery<RecordQueryParams>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state
         .phira_gateway
@@ -305,7 +317,7 @@ pub async fn records_query(
 )]
 pub async fn records_list15(
     State(state): State<Arc<AppState>>,
-    Path(chart_id): Path<i64>,
+    ApiPath(chart_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.record_list15(chart_id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
@@ -324,7 +336,7 @@ pub async fn records_list15(
 )]
 pub async fn records_pool(
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.record_get_pool(user_id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
@@ -343,7 +355,7 @@ pub async fn records_pool(
 )]
 pub async fn record_detail(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    ApiPath(id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.record(id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))
@@ -370,7 +382,7 @@ pub struct UserSearchParams {
 )]
 pub async fn users_search(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<UserSearchParams>,
+    ApiQuery(params): ApiQuery<UserSearchParams>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state
         .phira_gateway
@@ -380,23 +392,84 @@ pub async fn users_search(
     Ok(Json(result))
 }
 
-/// GET /api/v1/users/{phira_id} — Phira user profile.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct PublicUserProfileResponse {
+    pub phira_id: i64,
+    pub username: String,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub background_url: Option<String>,
+    pub online_status: Option<String>,
+    pub profile_visibility: String,
+    pub rks: Option<f64>,
+    pub stats: Option<Value>,
+    pub friends_count: Option<i64>,
+    pub is_friend: bool,
+    pub is_blocked: bool,
+}
+
+/// GET /api/v1/users/{phira_id} — public community profile.
 #[utoipa::path(
     get,
     path = "/api/v1/users/{phira_id}",
     operation_id = "users_phira_id_get",
     responses(
-        (status = 200, description = "user profile", body = serde_json::Value),
+        (status = 200, description = "public community profile", body = PublicUserProfileResponse),
+        (status = 404, description = "user not found", body = ErrorEnvelope),
         (status = 502, description = "phira unavailable", body = ErrorEnvelope),
     ),
     tag = "phira"
 )]
 pub async fn user_detail(
+    auth: OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(phira_id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
-    let result = state.phira_gateway.user(phira_id).await.map_err(phira_gateway_error)?;
-    Ok(Json(result))
+    ApiPath(phira_id): ApiPath<i64>,
+) -> Result<Json<PublicUserProfileResponse>, ApiError> {
+    let phira = state.phira_gateway.user(phira_id).await.map_err(phira_gateway_error)?;
+    let username = phira.get("username").or_else(|| phira.get("name")).and_then(Value::as_str).unwrap_or("").to_string();
+    if username.is_empty() {
+        return Err(ApiError::new(crate::error::ErrorCode::UserNotFound, "user not found"));
+    }
+    let avatar = phira.get("avatar").and_then(Value::as_str).map(str::to_string);
+
+    let Some(db) = state.db.as_ref() else {
+        return Ok(Json(PublicUserProfileResponse {
+            phira_id, username, avatar, bio: None, background_url: None, online_status: None, profile_visibility: "public".into(),
+            rks: None, stats: None, friends_count: None, is_friend: false, is_blocked: false,
+        }));
+    };
+    let local = crate::users::repo::find_by_phira_id(db, phira_id).await?;
+    let Some(local) = local else {
+        let stats = state.phira_gateway.user_stats(phira_id).await.ok();
+        let rks = stats.as_ref().and_then(|v| v.get("rks")).and_then(Value::as_f64);
+        return Ok(Json(PublicUserProfileResponse {
+            phira_id, username, avatar, bio: None, background_url: None, online_status: None, profile_visibility: "public".into(),
+            rks, stats, friends_count: None, is_friend: false, is_blocked: false,
+        }));
+    };
+    let requester = auth.0.as_ref().filter(|principal| !principal.is_root()).map(|principal| principal.sub);
+    let is_self = requester == Some(local.id);
+    let is_friend = match requester { Some(id) if id != local.id => crate::social::are_friends(db, id, local.id).await?, _ => false };
+    let is_blocked = match requester { Some(id) if id != local.id => crate::social::is_blocked(db, id, local.id).await?, _ => false };
+    let profile = sqlx::query_as::<_, (Option<String>, Option<String>, String, bool, bool)>(
+        "SELECT bio, background_url, profile_visibility, show_online_status, show_recent_activity FROM user_profiles WHERE user_id = $1",
+    ).bind(local.id).fetch_optional(db).await.map_err(|error| { tracing::error!(%error, "public profile query failed"); ApiError::internal() })?;
+    let (bio, background_url, visibility, show_online, _show_recent) = profile.unwrap_or((None, None, "public".into(), true, true));
+    let can_view = is_self || visibility == "public" || (visibility == "friends" && is_friend);
+    let stats = if can_view { state.phira_gateway.user_stats(phira_id).await.ok() } else { None };
+    let rks = stats.as_ref().and_then(|v| v.get("rks")).and_then(Value::as_f64);
+    let online_status = if can_view && show_online {
+        state.player.info(phira_id as i32).await.ok().map(|p| {
+            let online = p.get("online").and_then(Value::as_bool).unwrap_or_else(|| p.get("room_id").and_then(Value::as_str).is_some_and(|v| !v.is_empty()));
+            if online { "online".to_string() } else { "offline".to_string() }
+        })
+    } else if can_view { Some("hidden".to_string()) } else { None };
+    let friends_count = if can_view { crate::social::list_friends(db, local.id).await.ok().map(|items| items.len() as i64) } else { None };
+    Ok(Json(PublicUserProfileResponse {
+        phira_id, username, avatar, bio: if can_view { bio } else { None },
+        background_url: if can_view { background_url } else { None },
+        online_status, profile_visibility: visibility, rks, stats, friends_count, is_friend, is_blocked,
+    }))
 }
 
 /// GET /api/v1/users/{phira_id}/stats — Phira user stats (rks).
@@ -412,7 +485,7 @@ pub async fn user_detail(
 )]
 pub async fn user_stats(
     State(state): State<Arc<AppState>>,
-    Path(phira_id): Path<i64>,
+    ApiPath(phira_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.phira_gateway.user_stats(phira_id).await.map_err(phira_gateway_error)?;
     Ok(Json(result))

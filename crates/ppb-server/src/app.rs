@@ -29,6 +29,7 @@ use crate::config::deployment::Secrets;
 use crate::config::RuntimeConfig;
 use crate::jobs::registry::JobRegistry;
 use crate::jobs::runner::JobRunner;
+use crate::error::extractors::{ApiJson, ApiPath};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 #[allow(unused_imports)]
@@ -73,6 +74,7 @@ pub struct AppState {
     pub join_intents: JoinIntentStore,
     pub push: Arc<PushService>,
     pub phira_gateway: Arc<PhiraGateway>,
+    pub deployment: Arc<crate::deployment::DeploymentAdapter>,
     /// Privacy-friendly aggregate visit counter (P-86); resets on restart, adds
     /// to the `site.visit_count` config baseline.
     pub visit_counter: std::sync::Arc<std::sync::atomic::AtomicI64>,
@@ -83,7 +85,7 @@ impl AppState {
     pub fn require_db(&self) -> Result<&sqlx::PgPool, ApiError> {
         self.db
             .as_ref()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "database not configured"))
+            .ok_or_else(|| ApiError::new(ErrorCode::InternalError, "database not configured"))
     }
 }
 
@@ -146,10 +148,12 @@ pub async fn build_state(
 
     let permissions = Arc::new(PermissionResolver::new());
     let actions = Arc::new(ActionRegistry::new());
+    let deployment = Arc::new(crate::deployment::DeploymentAdapter::from_env()?);
     let executor = Arc::new(PmpActionExecutor::new(
         Arc::clone(&openuds),
         Arc::clone(&actions),
         db.clone(),
+        Arc::clone(&deployment),
     ));
     let commands = CommandBroker::new(executor);
 
@@ -164,6 +168,7 @@ pub async fn build_state(
         events.clone(),
         Arc::clone(&openuds),
         Arc::clone(&job_registry),
+        Arc::clone(&deployment),
     );
     let join_intents = JoinIntentStore::new();
     let notifications_config = runtime.notifications.clone();
@@ -200,6 +205,7 @@ pub async fn build_state(
         join_intents,
         push,
         phira_gateway,
+        deployment,
         visit_counter: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
     });
 
@@ -369,12 +375,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(crate::replay::routes::routes())
         .merge(crate::social::routes::routes())
         .merge(crate::notifications::routes::routes())
+        .merge(crate::admin::coupons::user_routes())
         .merge(crate::preferences::routes::routes())
         .route("/friends/{phira_id}/remove", post(friend_remove))
         .route("/openapi.json", get(openapi_json))
         .route("/events", get(crate::public::routes::events_sse))
         .route("/me", get(me))
         .route("/me/profile", get(me_profile))
+        .route("/me/multiplayer", get(me_multiplayer))
+        .route("/me/sessions", get(me_sessions))
+        .route("/me/sessions/{session_id}", delete(me_session_revoke))
+        .route("/me/privacy", get(me_privacy).put(me_privacy_update))
         .route("/me/identities", get(me_identities))
         .route("/me/preferences", get(me_preferences))
         .route("/me/join-intents", get(me_join_intents).post(me_join_intent_create))
@@ -385,8 +396,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let cors = build_cors(&state);
 
     let middleware = ServiceBuilder::new()
-        .layer(crate::middleware::request_id::layers())
-        .layer(crate::middleware::request_id::propagate_layer())
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new())
         .layer(from_fn_with_state(state.clone(), csrf::csrf_middleware))
@@ -394,14 +403,15 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .nest("/api/v1", api)
-        .route("/ws/v1/rooms/{room_uuid}/live", get(crate::live::routes::live_ws))
+        .route("/ws/v1/rooms/{room_id}/live", get(crate::live::routes::live_ws))
         .route("/ws/v1/replays/{round_uuid}", get(crate::replay::routes::replay_ws))
         .route("/auth/phira/login", get(crate::auth::gateway::phira_login_page))
         .route("/healthz", get(healthz))
         .with_state(state.clone())
+        .fallback(not_found)
         .layer(cors)
         .layer(middleware)
-        .fallback(not_found)
+        .layer(axum::middleware::from_fn(crate::middleware::request_id::request_context))
 }
 
 fn build_cors(state: &Arc<AppState>) -> CorsLayer {
@@ -545,6 +555,192 @@ async fn session_created_at(
     Ok(row.and_then(|(c,)| c))
 }
 
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct MySessionItem {
+    pub id: uuid::Uuid,
+    pub client_type: String,
+    pub device_name: String,
+    pub ip: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub last_seen_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct MySessionsResponse {
+    pub items: Vec<MySessionItem>,
+}
+
+/// GET /api/v1/me/sessions — active sessions for the current account.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/sessions",
+    operation_id = "me_sessions_get",
+    responses(
+        (status = 200, description = "active sessions", body = MySessionsResponse),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
+pub async fn me_sessions(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<MySessionsResponse>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let rows = sqlx::query_as::<_, crate::auth::session::Session>(
+        "SELECT id, principal_type, user_id, client_type, refresh_hash, device_name, ip,
+                created_at, expires_at, revoked_at, last_seen_at
+         FROM sessions
+         WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+         ORDER BY last_seen_at DESC NULLS LAST, created_at DESC",
+    )
+    .bind(auth.sub)
+    .fetch_all(db)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "my session list failed");
+        ApiError::internal()
+    })?;
+    Ok(Json(MySessionsResponse {
+        items: rows.into_iter().map(|row| MySessionItem {
+            id: row.id,
+            client_type: row.client_type,
+            device_name: row.device_name,
+            ip: row.ip,
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+            last_seen_at: row.last_seen_at,
+            current: row.id == auth.sid,
+        }).collect(),
+    }))
+}
+
+/// DELETE /api/v1/me/sessions/{session_id} — revoke another active session.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/me/sessions/{session_id}",
+    operation_id = "me_sessions_session_id_delete",
+    responses(
+        (status = 204, description = "session revoked"),
+        (status = 409, description = "cannot revoke current session", body = ErrorEnvelope),
+        (status = 404, description = "session not found", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
+pub async fn me_session_revoke(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    ApiPath(session_id): ApiPath<uuid::Uuid>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    if session_id == auth.sid {
+        return Err(ApiError::new(ErrorCode::CurrentSessionRevokeForbidden, "current session must use logout"));
+    }
+    let db = state.require_db()?;
+    let target = crate::auth::session::find_by_id(db, session_id).await?
+        .ok_or_else(|| ApiError::new(ErrorCode::ResourceNotFound, "session not found"))?;
+    if target.user_id != Some(auth.sub) || !target.is_active() {
+        return Err(ApiError::new(ErrorCode::ResourceNotFound, "session not found"));
+    }
+    crate::auth::session::revoke(db, session_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct MyPrivacyResponse {
+    pub profile_visibility: String,
+    pub show_online_status: bool,
+    pub show_recent_activity: bool,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, utoipa::ToSchema)]
+pub struct UpdateMyPrivacyBody {
+    pub profile_visibility: String,
+    pub show_online_status: bool,
+    pub show_recent_activity: bool,
+}
+
+async fn load_my_privacy(db: &sqlx::PgPool, user_id: uuid::Uuid) -> Result<MyPrivacyResponse, ApiError> {
+    let row = sqlx::query_as::<_, (String, bool, bool)>(
+        "SELECT profile_visibility, show_online_status, show_recent_activity
+         FROM user_profiles WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "privacy query failed");
+        ApiError::internal()
+    })?;
+    let (profile_visibility, show_online_status, show_recent_activity) = row
+        .unwrap_or_else(|| ("public".to_string(), true, true));
+    Ok(MyPrivacyResponse { profile_visibility, show_online_status, show_recent_activity })
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/privacy",
+    operation_id = "me_privacy_get",
+    responses((status = 200, description = "privacy settings", body = MyPrivacyResponse)),
+    tag = "me"
+)]
+pub async fn me_privacy(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<MyPrivacyResponse>, ApiError> {
+    if auth.is_root() { return Err(ApiError::permission_denied()); }
+    Ok(Json(load_my_privacy(state.require_db()?, auth.sub).await?))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/me/privacy",
+    operation_id = "me_privacy_put",
+    request_body = UpdateMyPrivacyBody,
+    responses(
+        (status = 200, description = "privacy settings saved", body = MyPrivacyResponse),
+        (status = 422, description = "invalid visibility", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
+pub async fn me_privacy_update(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    ApiJson(body): ApiJson<UpdateMyPrivacyBody>,
+) -> Result<Json<MyPrivacyResponse>, ApiError> {
+    if auth.is_root() { return Err(ApiError::permission_denied()); }
+    if !matches!(body.profile_visibility.as_str(), "public" | "friends" | "private") {
+        return Err(ApiError::new(ErrorCode::ValidationFailed, "profile visibility must be public|friends|private"));
+    }
+    let db = state.require_db()?;
+    sqlx::query(
+        "INSERT INTO user_profiles (user_id, profile_visibility, show_online_status, show_recent_activity)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id) DO UPDATE SET
+           profile_visibility = EXCLUDED.profile_visibility,
+           show_online_status = EXCLUDED.show_online_status,
+           show_recent_activity = EXCLUDED.show_recent_activity,
+           updated_at = now()",
+    )
+    .bind(auth.sub)
+    .bind(&body.profile_visibility)
+    .bind(body.show_online_status)
+    .bind(body.show_recent_activity)
+    .execute(db)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "privacy update failed");
+        ApiError::internal()
+    })?;
+    Ok(Json(load_my_privacy(db, auth.sub).await?))
+}
+
 /// GET /api/v1/me/profile — community profile (defaults when unset).
 #[utoipa::path(
     get,
@@ -624,6 +820,110 @@ pub async fn me_profile(
         "online_status": online_status,
         "friends_count": friends_count,
     })))
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct MyMultiplayerRound {
+    pub round_uuid: String,
+    pub room_id: String,
+    pub chart_id: i32,
+    pub chart_name: String,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct MyMultiplayerResponse {
+    pub phira_id: i64,
+    pub rounds_total: i64,
+    pub completed_rounds: i64,
+    pub rooms_visited: i64,
+    pub playtime_ms: i64,
+    pub recent_rounds: Vec<MyMultiplayerRound>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MyMultiplayerRoundUpstream {
+    round_uuid: String,
+    room_id: String,
+    chart_id: i32,
+    chart_name: String,
+    started_at: i64,
+    #[serde(default)]
+    finished_at: Option<i64>,
+}
+
+/// GET /api/v1/me/multiplayer — durable multiplayer history derived from PMP.
+///
+/// Only facts that PMP persisted are summarized here. `playtime_ms` is the
+/// sum of completed round durations, not a fabricated "time in app" metric.
+#[utoipa::path(
+    get,
+    path = "/api/v1/me/multiplayer",
+    operation_id = "me_multiplayer_get",
+    responses(
+        (status = 200, description = "multiplayer summary", body = MyMultiplayerResponse),
+        (status = 401, description = "unauthenticated", body = ErrorEnvelope),
+        (status = 503, description = "PMP unavailable", body = ErrorEnvelope),
+    ),
+    tag = "me"
+)]
+pub async fn me_multiplayer(
+    auth: AuthPrincipal,
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<MyMultiplayerResponse>, ApiError> {
+    if auth.is_root() {
+        return Err(ApiError::permission_denied());
+    }
+    let db = state.require_db()?;
+    let user = crate::users::repo::find_by_id(db, auth.sub)
+        .await?
+        .ok_or_else(|| ApiError::new(crate::error::ErrorCode::UserNotFound, "user not found"))?;
+    let mut rounds = crate::replay::persist::fetch_all_rounds(
+        &state.openuds,
+        None,
+        Some(user.phira_id as i32),
+    )
+    .await
+    .map_err(ApiError::from)?
+    .into_iter()
+    .filter_map(|value| serde_json::from_value::<MyMultiplayerRoundUpstream>(value).ok())
+    .collect::<Vec<_>>();
+
+    let rounds_total = rounds.len() as i64;
+    let completed_rounds = rounds.iter().filter(|round| round.finished_at.is_some()).count() as i64;
+    let rooms_visited = rounds
+        .iter()
+        .map(|round| round.room_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len() as i64;
+    let playtime_ms = rounds
+        .iter()
+        .filter_map(|round| round.finished_at.map(|finished| finished.saturating_sub(round.started_at).max(0)))
+        .sum();
+
+    rounds.sort_by_key(|round| std::cmp::Reverse(round.started_at));
+    let recent_rounds = rounds
+        .into_iter()
+        .take(50)
+        .map(|round| MyMultiplayerRound {
+            round_uuid: round.round_uuid,
+            room_id: round.room_id,
+            chart_id: round.chart_id,
+            chart_name: round.chart_name,
+            started_at: round.started_at,
+            finished_at: round.finished_at,
+        })
+        .collect();
+
+    Ok(Json(MyMultiplayerResponse {
+        phira_id: user.phira_id,
+        rounds_total,
+        completed_rounds,
+        rooms_visited,
+        playtime_ms,
+        recent_rounds,
+    }))
 }
 
 /// GET /api/v1/me/identities — identity bindings for the current user.
@@ -731,7 +1031,7 @@ pub struct JoinIntentBody {
 pub async fn me_join_intent_create(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    Json(body): Json<JoinIntentBody>,
+    ApiJson(body): ApiJson<JoinIntentBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -760,7 +1060,7 @@ pub async fn me_join_intent_create(
 pub async fn me_join_intent_cancel(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    axum::extract::Path(intent_id): axum::extract::Path<uuid::Uuid>,
+    ApiPath(intent_id): ApiPath<uuid::Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -784,7 +1084,7 @@ pub async fn me_join_intent_cancel(
 pub async fn me_join_intent_get(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    axum::extract::Path(intent_id): axum::extract::Path<uuid::Uuid>,
+    ApiPath(intent_id): ApiPath<uuid::Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -807,7 +1107,7 @@ pub async fn me_join_intent_get(
 pub async fn friend_remove(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    axum::extract::Path(phira_id): axum::extract::Path<i64>,
+    ApiPath(phira_id): ApiPath<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -868,7 +1168,7 @@ pub struct PushEndpointBody {
 pub async fn me_push_endpoint_register(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    Json(body): Json<PushEndpointBody>,
+    ApiJson(body): ApiJson<PushEndpointBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -878,7 +1178,7 @@ pub async fn me_push_endpoint_register(
     }
     let db = state.require_db()?;
     let plaintext = serde_json::to_vec(&body.subscription)
-        .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+        .map_err(|error| { tracing::error!(%error, "application operation failed"); ApiError::internal() })?;
     let ct = state.credential_cipher.encrypt(&plaintext)?;
     crate::notifications::register_push_endpoint(
         db,
@@ -906,7 +1206,7 @@ pub async fn me_push_endpoint_register(
 pub async fn me_push_endpoint_delete(
     auth: AuthPrincipal,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    axum::extract::Path(endpoint_id): axum::extract::Path<uuid::Uuid>,
+    ApiPath(endpoint_id): ApiPath<uuid::Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -930,7 +1230,7 @@ async fn healthz() -> Json<serde_json::Value> {
 
 /// Fallback for unknown routes.
 async fn not_found() -> ApiError {
-    ApiError::new(ErrorCode::NotFound, "route not found")
+    ApiError::new(ErrorCode::ResourceNotFound, "route not found")
 }
 
 #[cfg(test)]
@@ -948,10 +1248,12 @@ impl AppState {
         };
         let openuds = Arc::new(OpenUdsClient::new(openuds_config));
         let actions = Arc::new(ActionRegistry::new());
+        let deployment = Arc::new(crate::deployment::DeploymentAdapter::disabled());
         let executor = Arc::new(PmpActionExecutor::new(
             Arc::clone(&openuds),
             Arc::clone(&actions),
             None,
+            Arc::clone(&deployment),
         ));
         let rooms = RoomService::new(Arc::clone(&openuds));
         let player = PlayerService::new(Arc::clone(&openuds));
@@ -961,6 +1263,7 @@ impl AppState {
             EventBus::new(16, 8),
             Arc::clone(&openuds),
             Arc::clone(&job_registry),
+            Arc::clone(&deployment),
         );
         let join_intents = JoinIntentStore::new();
         let push = Arc::new(PushService::new(
@@ -1000,6 +1303,7 @@ impl AppState {
             join_intents,
             push,
             phira_gateway,
+            deployment,
             visit_counter: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
         }
     }

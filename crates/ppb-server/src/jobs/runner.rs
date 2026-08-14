@@ -1,7 +1,7 @@
 //! Job runner (design §9.4). Long tasks: pmp.update / ppf.build / backup.
 //!
 //! Job state transitions: queued → running(stage,progress) →
-//! succeeded/failed/cancelled/not_implemented.
+//! succeeded/failed/cancelled.
 //! State changes are published to the EventBus (SSE `job.updated`) and persisted.
 //!
 //! Executors come from the Job Policy Registry (`super::registry`) — a
@@ -26,6 +26,7 @@ pub struct JobRunner {
     events: crate::pmp::events::EventBus,
     openuds: Arc<crate::pmp::openuds::client::OpenUdsClient>,
     registry: Arc<JobRegistry>,
+    deployment: Arc<crate::deployment::DeploymentAdapter>,
     cancels: Arc<DashMap<Uuid, Arc<AtomicBool>>>,
 }
 
@@ -35,12 +36,14 @@ impl JobRunner {
         events: crate::pmp::events::EventBus,
         openuds: Arc<crate::pmp::openuds::client::OpenUdsClient>,
         registry: Arc<JobRegistry>,
+        deployment: Arc<crate::deployment::DeploymentAdapter>,
     ) -> Self {
         Self {
             db,
             events,
             openuds,
             registry,
+            deployment,
             cancels: Arc::new(DashMap::new()),
         }
     }
@@ -51,7 +54,7 @@ impl JobRunner {
         let job = self.lookup(db, job_id).await?;
         self.registry
             .get(&job.r#type)
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "job type missing from registry"))
+            .ok_or_else(|| ApiError::new(ErrorCode::InternalError, "job type missing from registry"))
     }
 
     /// Start a job of `job_type`; returns the created job row.
@@ -59,7 +62,10 @@ impl JobRunner {
         let descriptor = self
             .registry
             .get(job_type)
-            .ok_or_else(|| ApiError::validation("unknown job type"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::JobTypeUnknown, "unknown job type"))?;
+        if matches!(descriptor.executor, JobExecutor::Deployment) && !self.deployment.job_configured(job_type) {
+            return Err(ApiError::new(ErrorCode::CapabilityNotSupported, "deployment capability is not configured"));
+        }
         let db = self.require_db()?;
         // No application-level `COUNT active` here: the partial UNIQUE INDEX
         // (migration 0007) enforces mutual exclusion atomically. `create` maps
@@ -88,7 +94,7 @@ impl JobRunner {
         let descriptor = self
             .registry
             .get(&job.r#type)
-            .ok_or_else(|| ApiError::validation("unknown job type"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::JobTypeUnknown, "unknown job type"))?;
 
         match descriptor.cancel_mode {
             CancelMode::BeforeDispatch => match job.state.as_str() {
@@ -99,14 +105,14 @@ impl JobRunner {
                     Ok(())
                 }
                 "running" => Err(ApiError::new(
-                    ErrorCode::Conflict,
+                    ErrorCode::JobNotCancellable,
                     "job already dispatched; cannot cancel",
                 )),
                 "succeeded" | "failed" | "cancelled" | "not_implemented" => Err(ApiError::new(
-                    ErrorCode::Conflict,
+                    ErrorCode::JobNotCancellable,
                     "job already finished",
                 )),
-                _ => Err(ApiError::new(ErrorCode::Conflict, "job cannot be cancelled")),
+                _ => Err(ApiError::new(ErrorCode::JobNotCancellable, "job cannot be cancelled")),
             },
         }
     }
@@ -118,14 +124,14 @@ impl JobRunner {
         let job = self.lookup(db, job_id).await?;
         if job.state != "failed" && job.state != "cancelled" {
             return Err(ApiError::new(
-                ErrorCode::Conflict,
+                ErrorCode::JobNotRetryable,
                 "only failed or cancelled jobs can be retried",
             ));
         }
         let descriptor = self
             .registry
             .get(&job.r#type)
-            .ok_or_else(|| ApiError::validation("unknown job type"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::JobTypeUnknown, "unknown job type"))?;
         self.ensure_resource_free(db, descriptor.resource_key).await?;
 
         sqlx::query(
@@ -139,7 +145,7 @@ impl JobRunner {
             if super::is_unique_violation(&e) {
                 // Atomic guard (migration 0007): another job already holds this
                 // resource_key — the re-queue would violate the partial unique index.
-                return ApiError::new(ErrorCode::Conflict, "job already running for this resource");
+                return ApiError::new(ErrorCode::JobAlreadyRunning, "job already running for this resource");
             }
             tracing::error!(error = %e, "job retry reset failed");
             ApiError::internal()
@@ -195,24 +201,31 @@ impl JobRunner {
             .registry
             .get(job_type)
             .ok_or_else(|| format!("unknown job type: {job_type}"))?;
-        let cmd = match descriptor.executor {
-            JobExecutor::FixedCli(cmd) => cmd,
-            JobExecutor::NotImplemented => return Err("not_implemented".to_string()),
-        };
-
-        // Cancel is only honoured before dispatch (§23): the flag is checked
-        // here, then never again once `cli_execute` starts.
+        // Cancel is only honoured before dispatch (§23).
         self.tick_stage(job_id, descriptor.stage, cancel).await?;
 
-        // No short overall timeout: `cli.execute` is already in flight with PMP.
-        // A PPB-side timeout would only stop waiting while PMP keeps running,
-        // making "timeout → retry" overlap two update chains. The connection
-        // dropping is the only explicit failure; the real download timeout is
-        // PMP's own concern. progress stays null until PMP actually returns.
-        crate::pmp::cli::cli_execute(&self.openuds, cmd)
-            .await
-            .map(|_| (descriptor.terminal.to_string(), None))
-            .map_err(|e| format!("failed: {e}"))
+        match descriptor.executor {
+            JobExecutor::FixedCli(cmd) => crate::pmp::cli::cli_execute(&self.openuds, cmd)
+                .await
+                .map(|_| (descriptor.terminal.to_string(), None))
+                .map_err(|e| format!("failed: {e}")),
+            JobExecutor::Deployment => {
+                let ppf_config = if job_type == "ppf.build" {
+                    match &self.db {
+                        Some(db) => crate::config::repo::get_ppf_config(db)
+                            .await
+                            .map_err(|error| format!("failed to load PPF build config: {error}"))?
+                            .map(|(_, content)| content),
+                        None => None,
+                    }
+                } else {
+                    None
+                };
+                self.deployment.run_job(job_type, ppf_config.as_ref())
+                    .await
+                    .map(|_| (descriptor.terminal.to_string(), None))
+            },
+        }
     }
 
     /// Advance a job's stage without faking a numeric progress value (§22:
@@ -252,7 +265,7 @@ impl JobRunner {
                 })?;
         if active > 0 {
             return Err(ApiError::new(
-                ErrorCode::Conflict,
+                ErrorCode::JobAlreadyRunning,
                 "job already running for this resource",
             ));
         }
@@ -262,7 +275,7 @@ impl JobRunner {
     fn require_db(&self) -> Result<&sqlx::PgPool, ApiError> {
         self.db
             .as_ref()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "database not configured"))
+            .ok_or_else(|| ApiError::new(ErrorCode::InternalError, "database not configured"))
     }
 
     async fn lookup(&self, db: &sqlx::PgPool, job_id: Uuid) -> Result<Job, ApiError> {
@@ -277,7 +290,7 @@ impl JobRunner {
             tracing::error!(error = %e, "job lookup failed");
             ApiError::internal()
         })?
-        .ok_or_else(|| ApiError::not_found("job"))
+        .ok_or_else(|| ApiError::new(ErrorCode::JobNotFound, "job not found"))
     }
 
     fn publish(&self, job_id: Uuid, state: &str, stage: &str, progress: Option<f32>) {

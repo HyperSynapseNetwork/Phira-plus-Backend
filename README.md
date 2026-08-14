@@ -17,7 +17,7 @@
 
 > [!IMPORTANT]
 > **Phira+ 三件套之一**：`ppb`（本仓库，后端）· `ppf`（Phira-plus-frontend，公开伴生站）· `panel`（Phira-plus-panel，管理控制台）。
-> **跨仓冻结契约见 [`contracts/README.md`](../contracts/README.md)（Contract-Freeze v0）** —— 先改契约，再实现；禁止三边猜字段。
+> **跨仓冻结契约以三仓工作区的 `contracts/README.md`（Contract-Freeze v0）与本仓 [OpenAPI](contracts/openapi.json) 为准** —— 先改契约，再实现；禁止三边猜字段。
 > 本仓库采用 **Apache License, Version 2.0**，详见 [LICENSE](LICENSE)。
 
 > [!TIP]
@@ -33,7 +33,7 @@
 - **权限系统**：Permission Manifest（`/api/v1/admin/permissions/manifest`）+ User → Groups → Permissions 三级解析；`admin_scope` 自动映射全部非 Root-only 权限；`*:*` 仅 Root（API + DB CHECK 双重拒绝）
 - **Action Registry + Command Broker**：统一执行模型（`openuds | cli.execute | internal`），按 `queue_key` 串行执行，`command_runs` 全程记录；`host_allowed` 动作每次执行重查真实 host
 - **OpenUDS 集成**：token / direct 双模式认证（无 token 时按 socket 文件权限直接放行），typed 命令封装（room/player/server/plugin），断线自动重连（指数退避 + 抖动），版本映射 + capability detection
-- **实时通道**：PMP 事件 → PPB SSE 信封（`GET /api/v1/events`）；Live WS（`/ws/v1/rooms/{room_uuid}/live`）与 Replay WS（`/ws/v1/replays/{round_uuid}`）JSON 信封
+- **实时通道**：PMP 事件 → PPB SSE 信封（`GET /api/v1/events`）；Live WS（`/ws/v1/rooms/{room_id}/live`）与 Replay WS（`/ws/v1/replays/{round_uuid}`）JSON 信封
 - **Phira 数据网关**：已确认公开数据子集（charts/records/users，typed 方法）TTL 缓存 + 速率限制；TopChart 聚合 worker（每小时快照）
 - **统一错误契约**：`{"error":{"code","message","request_id","details"}}`，code 全 UPPER_SNAKE_CASE；分页统一 `page`（1-based）/`pageNum`（≤100）
 
@@ -45,7 +45,7 @@
 | **配置** | [docs/configuration.md](docs/configuration.md)（TOML + `PPB_*` 环境变量表） |
 | **部署与运维** | [docs/deployment.md](docs/deployment.md)（Docker / Native + systemd / 反代模板 / 更新 / 故障排查） |
 | **PMP 集成** | [docs/pmp-integration.md](docs/pmp-integration.md)（OpenUDS 命令 / 事件 / 高频流 / 能力集） |
-| **对外 API** | [docs/api.md](docs/api.md)（命名空间 + 端点清单；OpenAPI 生成后以生成物为准） |
+| **对外 API** | [docs/api.md](docs/api.md)（当前接口导航；完整 REST 以已提交 OpenAPI 为准，Router/实时通道另有可执行 Surface Contract） |
 | **开发** | [docs/development.md](docs/development.md)（架构 / 模块布局 / 测试 / 数据模型） |
 | **历史计划** | [docs/history/PHASE_A_PLAN.md](docs/history/PHASE_A_PLAN.md)（Phase A 实施计划存档） |
 
@@ -67,7 +67,7 @@
 ## 快速开始
 
 > [!NOTE]
-> **关于本地构建**：Phase A 时本地 aarch64 工具链损坏，`cargo` 只作为 CI 验证门。本仓库代码已由 CI 全量验证（`cargo check + test + clippy`），若你的本机工具链可用，也可直接编译。
+> **关于构建证据**：发布候选必须由目标 commit 的 CI/Release evidence 证明 `cargo check + test + clippy` 通过；README 不把历史某次 CI 结果当作当前源码的永久事实。本机 Rust 工具链可用时也可直接执行同一组检查。
 
 ### 一键安装（推荐）
 
@@ -173,4 +173,3 @@ ppctl root reset-password
 ## 许可证
 
 Phira+ Backend 采用 **Apache License, Version 2.0** — 详见 [LICENSE](LICENSE)。
-

@@ -10,6 +10,61 @@ use crate::pmp::openuds::client::{OpenUdsClient, OpenUdsError};
 
 pub const MAX_PAGE: i64 = 500;
 
+/// Fetch durable round metadata. PMP owns the round/chart/room relationship;
+/// PPB only relays it and never persists a duplicate Replay index.
+pub async fn fetch_rounds(
+    openuds: &OpenUdsClient,
+    round_uuid: Option<&str>,
+    player_id: Option<i32>,
+    limit: i64,
+) -> Result<Vec<Value>, OpenUdsError> {
+    let mut params = json!({ "limit": limit.clamp(1, 1000) });
+    if let Some(round) = round_uuid {
+        params["round_uuid"] = json!(round);
+    }
+    if let Some(player) = player_id {
+        params["player_id"] = json!(player);
+    }
+    let value = openuds
+        .command_with_timeout("persist.rounds", params, Some(60_000))
+        .await?;
+    Ok(value
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .or_else(|| value.as_array().cloned())
+        .unwrap_or_default())
+}
+
+/// Traverse every `persist.rounds` page. PMP page size remains bounded at 1000;
+/// callers that need the complete inventory must not confuse that page size with
+/// a global history limit.
+pub async fn fetch_all_rounds(
+    openuds: &OpenUdsClient,
+    round_uuid: Option<&str>,
+    player_id: Option<i32>,
+) -> Result<Vec<Value>, OpenUdsError> {
+    const PAGE: i64 = 1000;
+    let mut all = Vec::new();
+    let mut offset = 0i64;
+    loop {
+        let mut params = json!({ "limit": PAGE, "offset": offset });
+        if let Some(round) = round_uuid { params["round_uuid"] = json!(round); }
+        if let Some(player) = player_id { params["player_id"] = json!(player); }
+        let value = openuds.command_with_timeout("persist.rounds", params, Some(60_000)).await?;
+        let items = value.get("items").and_then(Value::as_array).cloned().or_else(|| value.as_array().cloned()).unwrap_or_default();
+        let count = items.len() as i64;
+        all.extend(items);
+        let next = value.get("next_offset").and_then(Value::as_i64);
+        match next {
+            Some(next) if next > offset => offset = next,
+            _ if count == PAGE => offset += count, // legacy-compatible fallback
+            _ => break,
+        }
+    }
+    Ok(all)
+}
+
 /// Fetch a page of persist batches.
 pub async fn fetch_batches(
     openuds: &OpenUdsClient,
@@ -31,6 +86,44 @@ pub async fn fetch_batches(
     openuds
         .command_with_timeout(&format!("persist.{stream}"), params, Some(60_000))
         .await
+}
+
+/// Fetch every page for one replay stream. The sequence cursor must advance;
+/// otherwise the loop stops to avoid repeating a malformed upstream page.
+pub async fn fetch_all_batches(
+    openuds: &OpenUdsClient,
+    stream: &str,
+    round_uuid: &str,
+    player_id: i32,
+) -> Result<Vec<Value>, OpenUdsError> {
+    let mut all = Vec::new();
+    let mut since = 0i64;
+    loop {
+        let page = fetch_batches(
+            openuds,
+            stream,
+            since,
+            MAX_PAGE,
+            Some(round_uuid),
+            Some(player_id),
+        )
+        .await?;
+        let batches = batches_of(&page);
+        if batches.is_empty() {
+            break;
+        }
+        let next = batches
+            .iter()
+            .filter_map(|batch| batch.get("sequence").and_then(Value::as_i64))
+            .max()
+            .unwrap_or(since);
+        all.extend(batches);
+        if next <= since || all.len() % MAX_PAGE as usize != 0 {
+            break;
+        }
+        since = next;
+    }
+    Ok(all)
 }
 
 /// Normalize the persist response to a `Vec<Value>` of batch objects

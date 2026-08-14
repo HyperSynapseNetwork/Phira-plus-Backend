@@ -89,7 +89,7 @@ impl PermissionResolver {
         }
         let pool = db
             .as_ref()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "database not configured"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::InternalError, "database not configured"))?;
         self.permissions_for_user(pool, auth.sub)
             .await
             .map_err(|e| {
@@ -127,7 +127,7 @@ impl PermissionResolver {
     pub fn validate_group_permission(permission: &str) -> Result<(), ApiError> {
         if permission == ROOT_WILDCARD {
             return Err(ApiError::new(
-                ErrorCode::Validation,
+                ErrorCode::ValidationFailed,
                 "*:* 仅允许授予 Root，普通用户组禁止",
             ));
         }

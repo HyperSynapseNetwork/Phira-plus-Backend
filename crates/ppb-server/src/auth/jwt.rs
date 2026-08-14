@@ -59,7 +59,7 @@ pub fn encode_access(claims: &AccessClaims, secret: &str) -> Result<String, ApiE
         claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|e| ApiError::new(ErrorCode::Internal, format!("jwt encode failed: {e}")))
+    .map_err(|error| { tracing::error!(%error, "JWT encode failed"); ApiError::internal() })
 }
 
 /// Verify and decode an access token.
@@ -73,7 +73,7 @@ pub fn decode_access(token: &str, secret: &str) -> Result<AccessClaims, ApiError
         &validation,
     )
     .map(|data| data.claims)
-    .map_err(|_| ApiError::new(ErrorCode::Session, "invalid or expired access token"))
+    .map_err(|_| ApiError::new(ErrorCode::SessionExpired, "invalid or expired access token"))
 }
 
 #[cfg(test)]

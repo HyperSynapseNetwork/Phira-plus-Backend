@@ -1,15 +1,7 @@
-# Phira+ 后端部署模板（PPB 侧）。
-#
-# 三件套 = PPB（API/控制面）+ PPF build/static + Panel build/static。
-# PPF/Panel 各自独立构建发布；此处提供引用它们发布镜像/静态产物的模板。
-# 更新流程：先 stage 校验 → 原子激活，禁止半部署中间态（见 ppctl update）。
-#
-# 用法：
-#   cp deploy/docker-compose.yml docker-compose.yml
-#   PPB_IMAGE=ghcr.io/your-org/ppb-server:0.1.x docker compose up -d
-#
-# 生产请务必：TLS 反代（nginx/caddy 模板在 deploy/nginx、deploy/caddy）、
-# 强 PostgreSQL 口令（经环境变量注入，勿写死）、secret 走 secret store。
+# Phira+ V3 Golden Deployment — clean-source build of the three public services.
+# Run from the bundle root with:
+#   docker compose --env-file repos/ppb/Phira-plus-Backend-main/deploy/.env \
+#     -f repos/ppb/Phira-plus-Backend-main/deploy/docker-compose.yml build --no-cache
 
 services:
   postgres:
@@ -25,10 +17,12 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
   ppb:
-    image: ${PPB_IMAGE:?set PPB_IMAGE (e.g. ghcr.io/your-org/ppb-server)}
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -39,31 +33,81 @@ services:
       PPB_PHIRA_CREDENTIAL_KEY: ${PPB_PHIRA_CREDENTIAL_KEY:?set PPB_PHIRA_CREDENTIAL_KEY}
       PPB_PMP_OPENUDS_TOKEN: ${PPB_PMP_OPENUDS_TOKEN:-}
       PPB_RUNTIME_CONFIG: /etc/ppb/ppb.toml
-      # Push / GitHub optional:
-      # PPB_GITHUB_CLIENT_ID / PPB_GITHUB_CLIENT_SECRET
-      # Web Push VAPID: env PPB_VAPID_PRIVATE_KEY_PEM / PPB_VAPID_SUBJECT (wins over ppb.toml)
+      PPB_GITHUB_CLIENT_ID: ${PPB_GITHUB_CLIENT_ID:-}
+      PPB_GITHUB_CLIENT_SECRET: ${PPB_GITHUB_CLIENT_SECRET:-}
+      PPB_VAPID_PRIVATE_KEY_PEM: ${PPB_VAPID_PRIVATE_KEY_PEM:-}
+      PPB_VAPID_SUBJECT: ${PPB_VAPID_SUBJECT:-}
+      # Optional controlled deployment adapters. Values are fixed JSON argv,
+      # never shell snippets. Keep unset to hide the corresponding capability.
+      PPB_PMP_SUPERVISOR_START_JSON: ${PPB_PMP_SUPERVISOR_START_JSON:-}
+      PPB_PMP_SUPERVISOR_STOP_JSON: ${PPB_PMP_SUPERVISOR_STOP_JSON:-}
+      PPB_PMP_SUPERVISOR_ARG_SCHEMA_JSON: ${PPB_PMP_SUPERVISOR_ARG_SCHEMA_JSON:-}
+      PPB_PMP_SUPERVISOR_WORKDIR: ${PPB_PMP_SUPERVISOR_WORKDIR:-}
+      PPB_PPF_BUILD_COMMAND_JSON: ${PPB_PPF_BUILD_COMMAND_JSON:-}
+      PPB_PPF_BUILD_WORKDIR: ${PPB_PPF_BUILD_WORKDIR:-}
+      PPB_BACKUP_COMMAND_JSON: ${PPB_BACKUP_COMMAND_JSON:-}
+      PPB_BACKUP_WORKDIR: ${PPB_BACKUP_WORKDIR:-}
+      PPB_DEPLOYMENT_COMMAND_TIMEOUT_SECS: ${PPB_DEPLOYMENT_COMMAND_TIMEOUT_SECS:-120}
+      PPB_DEPLOYMENT_ENV_ALLOWLIST: ${PPB_DEPLOYMENT_ENV_ALLOWLIST:-}
     volumes:
-      - ./config:/etc/ppb:ro
-      # PMP OpenUDS socket（宿主机挂载，PMP 以 systemd/docker 同机运行）
-      - ${PMP_OPENUDS_SOCKET_DIR:-/var/run/pmp}:/var/run/pmp:ro
-    ports:
-      - "${PPB_HTTP_PORT:-8080}:8080"
+      - ./ppb.toml:/etc/ppb/ppb.toml:ro
+      # The host source must already be a Unix socket before compose starts.
+      - ${PMP_OPENUDS_SOCKET:?set PMP_OPENUDS_SOCKET to the host socket file}:/var/run/pmp-openuds.sock
+    expose:
+      - "8080"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 5s
-      retries: 6
+      retries: 12
 
-  # PPF / Panel：引用各自发布镜像（Phase C/D 产出后填充）。
-  # ppf:
-  #   image: ${PPF_IMAGE:-ghcr.io/your-org/ppf}
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ppf-static:/usr/share/nginx/html:ro
-  # panel:
-  #   image: ${PANEL_IMAGE:-ghcr.io/your-org/panel}
-  #   restart: unless-stopped
+  ppf:
+    build:
+      context: ../../../ppf/Phira-plus-frontend-main
+      dockerfile: Dockerfile
+      args:
+        NUXT_PUBLIC_API_BASE: https://${API_DOMAIN}
+        NUXT_PUBLIC_AUTH_BASE: https://${API_DOMAIN}
+        NUXT_PUBLIC_SITE_URL: https://${PPF_DOMAIN}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  panel:
+    build:
+      context: ../../../panel/Phira-plus-panel-main
+      dockerfile: Dockerfile
+      args:
+        NUXT_PUBLIC_API_BASE: https://${API_DOMAIN}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      ppb:
+        condition: service_healthy
+      ppf:
+        condition: service_started
+      panel:
+        condition: service_started
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+      PPF_DOMAIN: ${PPF_DOMAIN:?set PPF_DOMAIN}
+      PANEL_DOMAIN: ${PANEL_DOMAIN:?set PANEL_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./caddy/compose.Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
 
 volumes:
   pgdata:
-  # ppf-static:
+  caddy_data:
+  caddy_config:

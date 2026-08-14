@@ -54,7 +54,7 @@ pub enum PhiraError {
 impl From<PhiraError> for ApiError {
     fn from(e: PhiraError) -> Self {
         match e {
-            PhiraError::InvalidCredentials => ApiError::new(ErrorCode::Auth, "invalid credentials"),
+            PhiraError::InvalidCredentials => ApiError::new(ErrorCode::PhiraAuthFailed, "invalid credentials"),
             PhiraError::ReauthRequired(m) => ApiError::with_details(
                 ErrorCode::PhiraReauthRequired,
                 "需要重新验证 Phira 身份",
@@ -64,7 +64,7 @@ impl From<PhiraError> for ApiError {
                 ApiError::new(ErrorCode::PhiraApiUnavailable, m)
             }
             PhiraError::Unavailable(m) => ApiError::new(ErrorCode::PhiraApiUnavailable, m),
-            PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimit, "phira api rate limited"),
+            PhiraError::RateLimited => ApiError::new(ErrorCode::RateLimited, "phira api rate limited"),
         }
     }
 }
@@ -94,7 +94,7 @@ impl PhiraClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
             .build()
-            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reqwest client: {e}")))?;
+            .map_err(|error| { tracing::error!(%error, "Phira HTTP client build failed"); ApiError::internal() })?;
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -259,6 +259,6 @@ mod tests {
         let err = rt.block_on(mock.login_email("a@b.c", "wrong")).unwrap_err();
         assert!(matches!(err, PhiraError::InvalidCredentials));
         let api: ApiError = err.into();
-        assert_eq!(api.code, ErrorCode::Auth);
+        assert_eq!(api.code, ErrorCode::AuthRequired);
     }
 }

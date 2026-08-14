@@ -1,6 +1,6 @@
-//! Automation / Runbook domain (design §10). Phase A: schema + safety invariants.
+//! Automation / Runbook domain (design §10).
 //!
-//! V1 rules enforced later in Phase B:
+//! Current safety invariants:
 //! - No arbitrary `/bin/bash` / PowerShell / host commands (no shell executor).
 //! - Each step re-authorizes with the current principal.
 //! - Runs store a `definition_snapshot` for audit.

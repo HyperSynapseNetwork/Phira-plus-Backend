@@ -172,7 +172,7 @@ pub struct GroupListResponse {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "group not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "group not found")
     } else {
         tracing::error!(error = %e, "group db error");
         ApiError::internal()

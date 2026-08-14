@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
@@ -14,7 +14,7 @@ use super::model::AuditEvent;
 use super::repo;
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiPath, ApiQuery};
 use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -60,7 +60,7 @@ pub struct AuditListResponse {
 pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<AuditFilterParams>,
+    ApiQuery(params): ApiQuery<AuditFilterParams>,
 ) -> Result<Json<AuditListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "audit:view").await?;
     let db = state.require_db()?;
@@ -105,7 +105,7 @@ pub async fn list(
 pub async fn detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<AuditEvent>, ApiError> {
     state.permissions.require(&state.db, &auth, "audit:view").await?;
     let db = state.require_db()?;
@@ -135,7 +135,7 @@ pub struct ExportParams {
 pub async fn export(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<ExportParams>,
+    ApiQuery(params): ApiQuery<ExportParams>,
 ) -> Result<axum::response::Response, ApiError> {
     let db = state.require_db()?;
     let events = repo::list_filtered(
@@ -176,7 +176,7 @@ pub async fn export(
 pub async fn export_csv(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<AuditFilterParams>,
+    ApiQuery(params): ApiQuery<AuditFilterParams>,
 ) -> Result<axum::response::Response, ApiError> {
     state.permissions.require(&state.db, &auth, "audit:export").await?;
     let db = state.require_db()?;

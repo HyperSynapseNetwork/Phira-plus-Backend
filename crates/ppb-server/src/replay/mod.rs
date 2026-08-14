@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::error::{ApiError, ErrorCode};
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, utoipa::ToSchema)]
 pub struct ReplayOverride {
     pub id: Uuid,
     pub pmp_replay_id: String,
@@ -121,16 +121,16 @@ pub async fn resolve_share_token(
     match row {
         Some((round, player, expires_at, revoked_at)) => {
             if revoked_at.is_some() {
-                return Err(ApiError::new(ErrorCode::NotFound, "share link revoked"));
+                return Err(ApiError::new(ErrorCode::ReplayShareRevoked, "share link revoked"));
             }
             if let Some(exp) = expires_at {
                 if Utc::now() > exp {
-                    return Err(ApiError::new(ErrorCode::NotFound, "share link expired"));
+                    return Err(ApiError::new(ErrorCode::ReplayShareExpired, "share link expired"));
                 }
             }
             Ok((round, player))
         }
-        None => Err(ApiError::new(ErrorCode::NotFound, "invalid share token")),
+        None => Err(ApiError::new(ErrorCode::ReplayShareInvalid, "invalid share token")),
     }
 }
 
@@ -145,7 +145,7 @@ pub async fn revoke_share_link(db: &sqlx::PgPool, link_id: Uuid) -> Result<(), A
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ReplayNotFound, "replay not found")
     } else {
         tracing::error!(error = %e, "replay db error");
         ApiError::internal()

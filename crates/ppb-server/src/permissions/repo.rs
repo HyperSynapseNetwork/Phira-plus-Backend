@@ -30,7 +30,7 @@ pub async fn create_group(
     .map_err(|e| {
         if let sqlx::Error::Database(dbe) = &e {
             if dbe.is_unique_violation() {
-                return ApiError::new(ErrorCode::Conflict, "group name already exists");
+                return ApiError::new(ErrorCode::ResourceConflict, "group name already exists");
             }
         }
         db_err(e)
@@ -338,13 +338,13 @@ pub async fn delete_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), ApiEr
 
     if group.protected {
         return Err(ApiError::new(
-            ErrorCode::Conflict,
+            ErrorCode::ResourceConflict,
             format!("protected group '{}' cannot be deleted", group.name),
         ));
     }
     if group.is_default {
         return Err(ApiError::new(
-            ErrorCode::Conflict,
+            ErrorCode::ResourceConflict,
             "current default group cannot be deleted; switch default first",
         ));
     }
@@ -358,7 +358,7 @@ pub async fn delete_group(db: &sqlx::PgPool, group_id: Uuid) -> Result<(), ApiEr
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "not found")
     } else {
         tracing::error!(error = %e, "group db error");
         ApiError::internal()

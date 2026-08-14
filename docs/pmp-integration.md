@@ -38,16 +38,17 @@ PPB 通过 **OpenUDS（Unix domain socket）** 控制 [phira-mp-plus](https://gi
 
 ## 高频流（`live/`、`replay/`）
 
-- `subscribe_stream touches|judges` → PPB jitter buffer → `WSS /ws/v1/rooms/{room_uuid}/live`。
+- `subscribe_stream touches|judges` → PPB jitter buffer → `WSS /ws/v1/rooms/{room_id}/live`。
   - 帧：`{"type":"stream","stream":"touches|judges","user_id","frames","sequence","room","round","timestamp"}`；
   - touch 项 `{time,finger,x,y}`；judge 项 `{time,line_id,note_id,judgement}`。
-  - PPB 转发 JSON 信封（`stream/player/sequence/round/timestamp/frames`）+ `resync`/`round_switch`/`heartbeat`。
+  - PPB 转发顶层 `touches` / `judges` JSON 信封（`player/sequence/round/timestamp/frames|judges`）+ `resync`/`round_switch`/`heartbeat`。
 - `persist.touches/judges {since, limit, round_uuid, player_id}` → 裸批次数组 `[{sequence,round_uuid,player_id,count,first_game_time,last_game_time,payload,created_at}]`。
-  - Replay REST + `WSS /ws/v1/replays/{round_uuid}` 分页拉取（游标 `sequence`）。
+  - Replay REST `/manifest` 与 `/frames` 全量分页拉取（游标 `sequence`）。
+- `persist.rounds {limit, round_uuid?, player_id?}` → PMP 持久化的 round/chart/room/player/time 元数据；PPB 不复制 Replay 索引。
 
 ## 能力集（PMP 1.0.38 已核实）
 
-`persist.touches, persist.judges, room.chat_send, stream.touches, stream.judges`
+`persist.touches, persist.judges, persist.rounds, room.chat_send, stream.touches, stream.judges`
 
 缺失能力 → `CAPABILITY_NOT_SUPPORTED`，前端隐藏/禁用；**不**静默走危险替代路径。
 

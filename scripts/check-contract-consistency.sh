@@ -40,21 +40,18 @@ doc = json.loads(open(openapi_path).read())
 paths = doc.get("paths", {})
 
 # Built-in WS endpoint allowlist (contract §1/§4): REST OpenAPI does not list WS.
-WS_ALLOW = [
-    "/ws/v1/rooms/{room_uuid}/live",
-    "/ws/v1/replays/{round_uuid}",
-]
+realtime_path = pathlib.Path(openapi_path).with_name("realtime.json")
+if not realtime_path.exists():
+    print(f"ERROR: realtime contract missing next to OpenAPI: {realtime_path}", file=sys.stderr)
+    sys.exit(2)
+realtime = json.loads(realtime_path.read_text())
+WS_ALLOW = [v["path"] for v in realtime.get("channels", {}).values() if v.get("kind") == "websocket"]
 
 # Runtime alias paths PPB serves for the same handler as a canonical path
 # (spec: "PPB 别名不计为必需匹配"). These are accepted (WARN) so frontends
 # can migrate to canonical paths without breaking the gate.
-ALIAS_ALLOW = {
-    "/api/v1/admin/auth/reauth",        # canonical: /api/v1/auth/phira/reauth
-    "/api/v1/admin/server",              # canonical: /api/v1/admin/server/status
-    "/api/v1/admin/permissions",         # canonical: /api/v1/admin/permissions/manifest
-    "/api/v1/admin/runbook-runs",        # canonical: /api/v1/admin/automation/runbook-runs
-    "/api/v1/admin/commands/history",    # canonical: /api/v1/admin/commands
-}
+ALIAS_ALLOW = set()
+
 
 def norm_params(p: str) -> str:
     return re.sub(r"\{[^}]+\}", "{}", p)
@@ -77,7 +74,11 @@ def seg_loose_match(call: str, op: str) -> bool:
 def path_matches(call: str, op: str) -> bool:
     if norm_params(call) == norm_params(op):
         return True
-    if "{param}" in call:
+    # A frontend may call a parameterized OpenAPI path with a fixed literal
+    # segment (for example /me/preferences/ppf vs /me/preferences/{namespace}).
+    # Segment-wise matching is safe in both directions because it requires the
+    # same segment count and treats only declared placeholders as wildcards.
+    if "{param}" in call or re.search(r"\{[^}]+\}", op):
         return seg_loose_match(call, op)
     return False
 
@@ -239,7 +240,10 @@ for dirpath, dirnames, filenames in os.walk(src_dir):
         # only app source; ignore generated types and test/mock files
         if f.suffix not in {".ts", ".vue", ".js"}:
             continue
-        if "types/generated.ts" in str(f) or fn.endswith((".spec.ts", ".test.ts", ".spec.js", ".test.js")):
+        # Generated OpenAPI/type mirrors contain URL literals as declarations,
+        # not runtime calls. Never feed them into the call-site gate.
+        rel = f.relative_to(src_dir).as_posix()
+        if rel.endswith("generated.ts") or rel.endswith("contracts/types.ts") or fn.endswith((".spec.ts", ".test.ts", ".spec.js", ".test.js")):
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="ignore")

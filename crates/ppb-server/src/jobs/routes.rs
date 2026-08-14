@@ -2,20 +2,74 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::Job;
 use crate::app::AppState;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
+
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct JobRetryResponse {
+    pub ok: bool,
+    pub job_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct AdminTaskItem {
+    pub id: Uuid,
+    pub source: String,
+    #[serde(rename = "type")]
+    pub task_type: String,
+    pub status: String,
+    pub payload: Value,
+    pub created_by: Option<Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminTaskListParams {
+    pub page: Option<i64>,
+    #[serde(rename = "pageNum")]
+    pub page_num: Option<i64>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct AdminTaskListResponse {
+    pub items: Vec<AdminTaskItem>,
+    pub total: i64,
+    pub page: i64,
+    #[serde(rename = "pageNum")]
+    pub page_num: i64,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct AdminTaskCompleteResponse {
+    pub ok: bool,
+    pub task_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct CreateJobResponse {
+    pub job: Job,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct JobCancelResponse {
+    pub cancelled: Uuid,
+}
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -36,7 +90,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     path = "/api/v1/admin/jobs/{job_id}/retry",
     operation_id = "admin_jobs_job_id_retry_post",
     responses(
-        (status = 200, description = "job re-queued", body = serde_json::Value),
+        (status = 200, description = "job re-queued", body = JobRetryResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
         (status = 409, description = "job not retryable", body = ErrorEnvelope),
     ),
@@ -46,8 +100,8 @@ pub async fn retry_job(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(job_id): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(job_id): ApiPath<Uuid>,
+) -> Result<Json<JobRetryResponse>, ApiError> {
     let descriptor = state.jobs.descriptor(job_id).await?;
     state
         .permissions
@@ -57,10 +111,10 @@ pub async fn retry_job(
         check_reauth_header(&state, &auth, &headers, risk)?;
     }
     if !descriptor.retryable {
-        return Err(ApiError::new(ErrorCode::Conflict, "job type is not retryable"));
+        return Err(ApiError::new(ErrorCode::JobNotRetryable, "job type is not retryable"));
     }
     state.jobs.retry(job_id).await?;
-    Ok(Json(json!({ "ok": true, "job_id": job_id })))
+    Ok(Json(JobRetryResponse { ok: true, job_id }))
 }
 
 /// GET /api/v1/admin/jobs/tasks — manual admin tasks (paginated).
@@ -69,7 +123,7 @@ pub async fn retry_job(
     path = "/api/v1/admin/jobs/tasks",
     operation_id = "admin_jobs_tasks_get",
     responses(
-        (status = 200, description = "admin tasks", body = serde_json::Value),
+        (status = 200, description = "admin tasks", body = AdminTaskListResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -77,28 +131,42 @@ pub async fn retry_job(
 pub async fn list_tasks(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, ApiError> {
+    ApiQuery(params): ApiQuery<AdminTaskListParams>,
+) -> Result<Json<AdminTaskListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "coupon:view").await?;
     let db = state.require_db()?;
+    let page = params.page.unwrap_or(1).max(1);
+    let page_num = params.page_num.unwrap_or(50).clamp(1, 200);
+    let status = params.status.as_deref().filter(|v| matches!(*v, "pending" | "completed"));
+    if params.status.is_some() && status.is_none() {
+        return Err(ApiError::new(ErrorCode::ValidationFailed, "status must be pending or completed"));
+    }
+    let offset = (page - 1) * page_num;
+    let total = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM admin_tasks WHERE ($1::text IS NULL OR status = $1)",
+    )
+    .bind(status)
+    .fetch_one(db)
+    .await
+    .map_err(db_err)?;
     let rows = sqlx::query_as::<_, (Uuid, String, String, String, Value, Option<Uuid>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)>(
         "SELECT id, source, task_type, status, payload, created_by, created_at, completed_at
-         FROM admin_tasks ORDER BY created_at DESC LIMIT 200",
+         FROM admin_tasks WHERE ($1::text IS NULL OR status = $1)
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
+    .bind(status)
+    .bind(page_num)
+    .bind(offset)
     .fetch_all(db)
     .await
     .map_err(db_err)?;
-    let items: Vec<Value> = rows
+    let items = rows
         .into_iter()
-        .map(|(id, source, task_type, status, payload, created_by, created_at, completed_at)| {
-            json!({
-                "id": id, "source": source, "type": task_type, "status": status,
-                "payload": payload, "created_by": created_by, "created_at": created_at,
-                "completed_at": completed_at,
-            })
+        .map(|(id, source, task_type, status, payload, created_by, created_at, completed_at)| AdminTaskItem {
+            id, source, task_type, status, payload, created_by, created_at, completed_at,
         })
         .collect();
-    let total = items.len() as i64;
-    Ok(Json(json!({ "items": items, "total": total, "page": 1, "pageNum": 200 })))
+    Ok(Json(AdminTaskListResponse { items, total, page, page_num }))
 }
 
 /// POST /api/v1/admin/jobs/tasks/{task_id}/complete — mark an admin task done.
@@ -107,7 +175,7 @@ pub async fn list_tasks(
     path = "/api/v1/admin/jobs/tasks/{task_id}/complete",
     operation_id = "admin_jobs_tasks_task_id_complete_post",
     responses(
-        (status = 200, description = "task completed", body = serde_json::Value),
+        (status = 200, description = "task completed", body = AdminTaskCompleteResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -115,8 +183,8 @@ pub async fn list_tasks(
 pub async fn complete_task(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(task_id): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(task_id): ApiPath<Uuid>,
+) -> Result<Json<AdminTaskCompleteResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "coupon:manage").await?;
     let db = state.require_db()?;
     sqlx::query(
@@ -127,7 +195,7 @@ pub async fn complete_task(
     .execute(db)
     .await
     .map_err(db_err)?;
-    Ok(Json(json!({ "ok": true, "task_id": task_id })))
+    Ok(Json(AdminTaskCompleteResponse { ok: true, task_id }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,7 +229,7 @@ pub struct JobListResponse {
 pub async fn list(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<JobListParams>,
+    ApiQuery(params): ApiQuery<JobListParams>,
 ) -> Result<Json<JobListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "dashboard:view").await?;
     let db = state.require_db()?;
@@ -212,7 +280,7 @@ pub struct CreateJobBody {
     operation_id = "admin_jobs_post",
     request_body = CreateJobBody,
     responses(
-        (status = 200, description = "job started", body = serde_json::Value),
+        (status = 200, description = "job started", body = CreateJobResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -221,12 +289,12 @@ pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<CreateJobBody>,
-) -> Result<Json<Value>, ApiError> {
+    ApiJson(body): ApiJson<CreateJobBody>,
+) -> Result<Json<CreateJobResponse>, ApiError> {
     let descriptor = state
         .job_registry
         .get(&body.job_type)
-        .ok_or_else(|| ApiError::validation("unknown job type"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::JobTypeUnknown, "unknown job type"))?;
     state
         .permissions
         .require(&state.db, &auth, descriptor.permission)
@@ -235,7 +303,7 @@ pub async fn create(
         check_reauth_header(&state, &auth, &headers, risk)?;
     }
     let job = state.jobs.start(&body.job_type).await?;
-    Ok(Json(json!({ "job": job })))
+    Ok(Json(CreateJobResponse { job }))
 }
 
 /// GET /api/v1/admin/jobs/{job_id} — job detail.
@@ -252,7 +320,7 @@ pub async fn create(
 pub async fn get_job(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(job_id): Path<Uuid>,
+    ApiPath(job_id): ApiPath<Uuid>,
 ) -> Result<Json<Job>, ApiError> {
     state.permissions.require(&state.db, &auth, "dashboard:view").await?;
     let db = state.require_db()?;
@@ -267,7 +335,7 @@ pub async fn get_job(
         tracing::error!(error = %e, "job query failed");
         ApiError::internal()
     })?
-    .ok_or_else(|| ApiError::not_found("job"))?;
+    .ok_or_else(|| ApiError::new(ErrorCode::JobNotFound, "job not found"))?;
     Ok(Json(job))
 }
 
@@ -280,7 +348,7 @@ pub async fn get_job(
     path = "/api/v1/admin/jobs/{job_id}/cancel",
     operation_id = "admin_jobs_job_id_cancel_post",
     responses(
-        (status = 200, description = "cancelled", body = serde_json::Value),
+        (status = 200, description = "cancelled", body = JobCancelResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
         (status = 409, description = "cannot cancel dispatched/finished job", body = ErrorEnvelope),
     ),
@@ -289,20 +357,20 @@ pub async fn get_job(
 pub async fn cancel(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(job_id): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
+    ApiPath(job_id): ApiPath<Uuid>,
+) -> Result<Json<JobCancelResponse>, ApiError> {
     let descriptor = state.jobs.descriptor(job_id).await?;
     state
         .permissions
         .require(&state.db, &auth, descriptor.permission)
         .await?;
     state.jobs.cancel(job_id).await?;
-    Ok(Json(json!({ "cancelled": job_id })))
+    Ok(Json(JobCancelResponse { cancelled: job_id }))
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::not_found("job")
+        ApiError::new(ErrorCode::JobNotFound, "job not found")
     } else {
         tracing::error!(error = %e, "jobs db error");
         ApiError::internal()

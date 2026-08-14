@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "fields": [
+    "accepted",
+    "terms_version",
+    "privacy_version"
+  ],
+  "persistence": {
+    "table": "account_legal_acceptances",
+    "versionRegistry": true,
+    "perLoginHistory": false,
+    "acceptedAt": "server timestamp",
+    "client": "first acceptance client type",
+    "rule": "current Terms/Privacy version pair is accepted once; re-accept only on a version change"
+  },
+  "publicAuthRule": "public auth is disabled unless approved terms/privacy versions and URLs are configured",
+  "cookieConsentIsNotAccountLegalAcceptance": true
+}

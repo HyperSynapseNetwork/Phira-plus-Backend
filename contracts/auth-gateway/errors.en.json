@@ -1,0 +1,18 @@
+{
+  "PHIRA_AUTH_FAILED": "The Phira email or password is invalid.",
+  "AUTH_REQUIRED": "Sign-in is required.",
+  "SESSION_EXPIRED": "Your session expired. Sign in again.",
+  "PHIRA_API_UNAVAILABLE": "Phira is temporarily unavailable. Try again later.",
+  "PHIRA_REAUTH_REQUIRED": "Your Phira identity must be verified again.",
+  "RATE_LIMITED": "Too many requests. Try again later.",
+  "VALIDATION_FAILED": "The sign-in data is invalid.",
+  "GITHUB_IDENTITY_NOT_BOUND": "This GitHub identity is not linked to a Phira+ account.",
+  "GITHUB_OAUTH_NOT_CONFIGURED": "GitHub sign-in is not configured for this deployment.",
+  "AUTH_LEGAL_CONSENT_REQUIRED": "You must explicitly accept the current Terms of Service and Privacy Policy.",
+  "AUTH_LEGAL_DOCUMENTS_UNAVAILABLE": "Approved legal document versions are not configured; public sign-in is disabled.",
+  "GITHUB_OAUTH_FAILED": "GitHub sign-in could not be completed. Try again.",
+  "GITHUB_API_UNAVAILABLE": "GitHub is temporarily unavailable. Try again later.",
+  "GITHUB_OAUTH_STATE_INVALID": "The GitHub sign-in state is invalid or expired. Start sign-in again.",
+  "INTERNAL_ERROR": "The sign-in service could not complete the request. Try again later.",
+  "RESOURCE_CONFLICT": "This GitHub identity is already linked to another account."
+}

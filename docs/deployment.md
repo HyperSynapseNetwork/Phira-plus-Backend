@@ -120,6 +120,20 @@ PPB_VERSION=0.1.x ./deploy/update.sh
 
 `ppctl update [--check-config PATH]` 会校验暂存配置并打印同一套标准流程。
 
+## Golden Bootstrap 顺序
+
+部署成功不等于普通账户立即可登录。默认 `legal.public_auth_enabled=false`，官方顺序固定为：
+
+1. PostgreSQL / PPB / PPF / Panel / Proxy + PMP OpenUDS；
+2. Root 首登、改密、health / `ppctl doctor`；
+3. 配置 Owner-approved Terms / Privacy 的当前 version + URL；
+4. 启用 `legal.public_auth_enabled=true` 并校验/reload；
+5. 第一个 Phira 用户通过 Auth Gateway 创建/进入 PPB account；
+6. Root 把该用户加入普通管理员组；
+7. 退出 Root，使用普通管理员完成授权 smoke。
+
+如果法律配置未满足，public account auth 保持 fail closed；不要通过临时 placeholder 文本或跳过 consent 来绕过。
+
 ## 运维与故障排查
 
 ```bash

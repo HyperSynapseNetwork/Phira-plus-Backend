@@ -341,23 +341,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/config/ppb": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /api/v1/admin/config/ppb — effective PPB config (merged with overrides). */
-        get: operations["admin_config_ppb_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/config/ppf": {
         parameters: {
             query?: never;
@@ -367,7 +350,7 @@ export interface paths {
         };
         /** GET /api/v1/admin/config/ppf — PPF build/SEO config. */
         get: operations["admin_config_ppf_get"];
-        put?: never;
+        put: operations["admin_config_ppf_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1204,7 +1187,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/server/status — scaffold summary. */
+        /** GET /api/v1/admin/server/status — runtime and deployment capability summary. */
         get: operations["admin_server_status_get"];
         put?: never;
         post?: never;
@@ -2062,6 +2045,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/replays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List public replays for a player */
+        get: operations["replays_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/replays/share/{token}": {
         parameters: {
             query?: never;
@@ -2279,6 +2279,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/replays/{round_uuid}/frames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Full typed telemetry for a Replay viewer. */
+        get: operations["replays_round_uuid_frames_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/github/start": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["auth_github_start_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/auth/github/login/start": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["auth_github_login_start_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/auth/github/unbind": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["auth_github_unbind_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/me/sessions": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_sessions_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/me/sessions/{session_id}": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post?: never; delete: operations["me_sessions_session_id_delete"]; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/me/multiplayer": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_multiplayer_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/me/privacy": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_privacy_get"]; put: operations["me_privacy_put"]; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/me/replays": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_replays_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/replays/{round_uuid}/visibility": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["replays_round_uuid_visibility_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/replays/{round_uuid}/share": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["replays_round_uuid_share_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/replays/{round_uuid}/share/{link_id}": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post?: never; delete: operations["replays_round_uuid_share_link_id_delete"]; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/friends/{phira_id}/room-invite": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["friends_phira_id_room_invite_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
+    "/api/v1/coupons/redeem": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["coupons_redeem_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2491,10 +2521,14 @@ export interface components {
             errors: components["schemas"]["ConfigValidationError"][];
             ok: boolean;
         };
-        /** @description One field validation error `{ path, message }`. */
+        /** @description Stable field-level config validation reason. Product UI localizes this code; debug message is not formal UI copy. */
+        ConfigValidationIssueCode: "VALUES_MUST_BE_OBJECT" | "EXPECTED_TYPE";
+        /** @description Stable machine-readable field validation issue. `message` is a debug/legacy fallback only. */
         ConfigValidationError: {
-            message: string;
             path: string;
+            code: components["schemas"]["ConfigValidationIssueCode"];
+            params: unknown;
+            message?: string | null;
         };
         /**
          * @description Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB
@@ -2513,11 +2547,17 @@ export interface components {
             version: number;
         };
         CreateCouponBody: {
-            action_type: string;
+            action_type: "account_unlock" | "account_role" | "admin_alert" | "custom_hook";
             code?: string;
+            args?: unknown;
+            holder_mode?: "creator" | "manual";
+            /** Format: int64 */
+            holder_phira_id?: number | null;
+            note?: string;
             /** Format: int32 */
             max_uses?: number | null;
-            payload?: unknown;
+            /** Format: date-time */
+            expires_at?: string | null;
         };
         CreateGroupBody: {
             description?: string;
@@ -2540,10 +2580,16 @@ export interface components {
             description?: string;
             name: string;
         };
+        /** @description Stable machine-readable REST error code. Frontends localize by this value, never by message. */
+        ErrorCode: "INVALID_JSON" | "INVALID_QUERY" | "INVALID_PATH_PARAM" | "METHOD_NOT_ALLOWED" | "REQUEST_BODY_TOO_LARGE" | "INVALID_CONTENT_TYPE" | "VALIDATION_FAILED" | "RATE_LIMITED" | "AUTH_REQUIRED" | "SESSION_EXPIRED" | "PERMISSION_DENIED" | "CSRF_INVALID" | "RESOURCE_NOT_FOUND" | "RESOURCE_CONFLICT" | "CAPABILITY_NOT_SUPPORTED" | "INTERNAL_ERROR" | "LONG_JOB_ACCEPTED" | "LONG_RUNNING_ACTION_REQUIRES_JOB" | "PHIRA_AUTH_FAILED" | "PHIRA_REAUTH_REQUIRED" | "PHIRA_API_UNAVAILABLE" | "GITHUB_OAUTH_NOT_CONFIGURED" | "GITHUB_IDENTITY_NOT_BOUND" | "GITHUB_OAUTH_FAILED" | "GITHUB_API_UNAVAILABLE" | "GITHUB_OAUTH_STATE_INVALID" | "AUTH_LEGAL_CONSENT_REQUIRED" | "AUTH_LEGAL_DOCUMENTS_UNAVAILABLE" | "ROOT_PASSWORD_INVALID" | "ROOT_PASSWORD_CHANGE_REQUIRED" | "CURRENT_SESSION_REVOKE_FORBIDDEN" | "PMP_UNAVAILABLE" | "PMP_COMMAND_FAILED" | "PMP_COMMAND_TIMEOUT" | "PMP_CAPABILITY_MISSING" | "PMP_CONFIG_NOT_AVAILABLE" | "PMP_INVALID_RESPONSE" | "ROOM_NOT_FOUND" | "ROOM_ID_REQUIRED" | "ROOM_HOST_REQUIRED" | "ROOM_USER_NOT_PRESENT" | "ROOM_BATCH_TARGET_REQUIRED" | "ROOM_BATCH_ACTION_UNSUPPORTED" | "ROOM_MOVE_TARGET_REQUIRED" | "ROOM_CHAT_EMPTY" | "ROOM_CHAT_TOO_LONG" | "USER_NOT_FOUND" | "ALREADY_FRIENDS" | "FRIEND_REQUEST_ALREADY_SENT" | "FRIEND_REQUEST_NOT_FOUND" | "FRIEND_RELATION_REQUIRED" | "USER_BLOCKED" | "REPLAY_NOT_FOUND" | "REPLAY_ACCESS_DENIED" | "REPLAY_VISIBILITY_INVALID" | "REPLAY_PLAYER_REQUIRED" | "REPLAY_SHARE_INVALID" | "REPLAY_SHARE_EXPIRED" | "REPLAY_SHARE_REVOKED" | "NOTIFICATION_NOT_FOUND" | "NOTIFICATION_ACTION_NOT_AVAILABLE" | "NOTIFICATION_ACTION_TARGET_INVALID" | "NOTIFICATION_INPUT_NOT_ALLOWED" | "NOTIFICATION_INPUT_EMPTY" | "NOTIFICATION_INPUT_TOO_LONG" | "CONFIG_VALIDATION_FAILED" | "CONFIG_SNAPSHOT_NOT_FOUND" | "CONFIG_SCOPE_INVALID" | "JOB_NOT_FOUND" | "JOB_TYPE_UNKNOWN" | "JOB_ALREADY_RUNNING" | "JOB_NOT_RETRYABLE" | "JOB_NOT_CANCELLABLE" | "REDEMPTION_CODE_NOT_FOUND" | "REDEMPTION_CODE_ALREADY_USED" | "REDEMPTION_CODE_REVOKED" | "REDEMPTION_CODE_EXPIRED" | "REDEMPTION_CODE_LIMIT_REACHED" | "REDEMPTION_ACTION_UNSUPPORTED" | "GROUP_NOT_FOUND" | "GROUP_NAME_REQUIRED" | "USER_ACTION_TARGET_INVALID";
+        /** @description Sanitized frontend-consumable error parameters. */
+        ErrorDetails: {
+            params: Record<string, string | number | boolean | null>;
+        };
         /** @description Serializable error body (`error` member). */
         ErrorBody: {
-            code: string;
-            details: unknown;
+            code: components["schemas"]["ErrorCode"];
+            details: components["schemas"]["ErrorDetails"];
             message: string;
             request_id: string;
         };
@@ -2639,6 +2685,46 @@ export interface components {
             pageNum: number;
             /** Format: int64 */
             total: number;
+        };
+        JobRetryResponse: {
+            ok: boolean;
+            /** Format: uuid */
+            job_id: string;
+        };
+        AdminTaskItem: {
+            /** Format: uuid */
+            id: string;
+            source: string;
+            type: string;
+            status: string;
+            payload: unknown;
+            /** Format: uuid */
+            created_by?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string | null;
+        };
+        AdminTaskListResponse: {
+            items: components["schemas"]["AdminTaskItem"][];
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+        };
+        AdminTaskCompleteResponse: {
+            ok: boolean;
+            /** Format: uuid */
+            task_id: string;
+        };
+        CreateJobResponse: {
+            job: components["schemas"]["Job"];
+        };
+        JobCancelResponse: {
+            /** Format: uuid */
+            cancelled: string;
         };
         JoinIntentBody: {
             room_id: string;
@@ -2749,11 +2835,14 @@ export interface components {
             root_only: boolean;
         };
         PhiraLoginRequest: {
+            accepted?: boolean | null;
             client_type?: string | null;
             device_name?: string | null;
             email: string;
             password: string;
+            privacy_version?: string | null;
             return_to?: string | null;
+            terms_version?: string | null;
         };
         PluginCallBody: {
             args?: unknown[];
@@ -2796,22 +2885,45 @@ export interface components {
         ReplacePermissionsBody: {
             permissions: string[];
         };
-        /** @description Replay detail (summary + visibility). */
+        /** @description Replay detail (metadata, summary, visibility). */
         ReplayDetail: {
-            judges: unknown;
+            round_uuid: string;
             /** Format: int64 */
             player_phira_id: number;
-            round_uuid: string;
-            touches: unknown;
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            room_id: string;
+            /** Format: int64 */
+            started_at: number;
+            /** Format: int64 */
+            finished_at?: number | null;
             visibility: string;
-        };
-        /** @description Replay manifest summary (per `(round_uuid, player_phira_id)` pair). */
-        ReplayManifest: {
+            touches: unknown;
             judges: unknown;
+        };
+        ReplayListResponse: {
+            /** Format: int32 */
+            player_id: number;
+            items: components["schemas"]["ReplaySummary"][];
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description Replay manifest summary for one (round_uuid, player_phira_id). */
+        ReplayManifest: {
+            round_uuid: string;
             /** Format: int64 */
             player_phira_id: number;
-            round_uuid: string;
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            room_id: string;
+            /** Format: int64 */
+            started_at: number;
+            /** Format: int64 */
+            finished_at?: number | null;
             touches: unknown;
+            judges: unknown;
         };
         /** @description Resolved share token `{round_uuid, player_phira_id}` (S-3). */
         ResolveShareResponse: {
@@ -2915,9 +3027,32 @@ export interface components {
             /** Format: int64 */
             users_online: number;
         };
+        DeploymentCapabilities: {
+            supervisor_start: boolean;
+            supervisor_stop: boolean;
+            startup_args: components["schemas"]["StartupArgSpec"][];
+            ppf_build: boolean;
+            backup: boolean;
+        };
+        StartupArgSpec: {
+            key: string;
+            flag: string;
+            kind: string;
+            required: boolean;
+            min?: number | null;
+            max?: number | null;
+            max_len?: number | null;
+            allowed_values: string[];
+        };
+        MyMultiplayerRound: { round_uuid: string; room_id: string; chart_id: number; chart_name: string; started_at: number; finished_at?: number | null };
+        MyMultiplayerResponse: { phira_id: number; rounds_total: number; completed_rounds: number; rooms_visited: number; playtime_ms: number; recent_rounds: components["schemas"]["MyMultiplayerRound"][] };
+        PpConfigBody2: { content: unknown };
+        PpfBuildConfigResponse: { revision: number; content: unknown };
+        PpfBuildConfigSaveResponse: { ok: boolean; revision: number };
         /** @description Typed server status response (§22). */
         ServerStatusResponse: {
             db_configured: boolean;
+            deployment: components["schemas"]["DeploymentCapabilities"];
             metrics: unknown;
             pmp: components["schemas"]["PmpStatus"];
             ppb_version: string;
@@ -3039,6 +3174,75 @@ export interface components {
         UserSessionsResponse: {
             items: components["schemas"]["SessionItem"][];
         };
+        /** @description Public Replay inventory item backed by PMP round metadata. */
+        ReplaySummary: {
+            round_uuid: string;
+            /** Format: int64 */
+            player_phira_id: number;
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            room_id: string;
+            /** Format: int64 */
+            played_at: number;
+            /** Format: int64 */
+            finished_at?: number | null;
+            visibility: string;
+        };
+        ReplayTouchPoint: {
+            /** Format: float */
+            time: number;
+            /** Format: int8 */
+            finger: number;
+            /** Format: float */
+            x: number;
+            /** Format: float */
+            y: number;
+        };
+        ReplayJudgeFrame: {
+            /** Format: float */
+            time: number;
+            /** Format: uint32 */
+            line_id: number;
+            /** Format: uint32 */
+            note_id: number;
+            judgement: string;
+        };
+        ReplayFramesResponse: {
+            round_uuid: string;
+            /** Format: int64 */
+            player_phira_id: number;
+            touches: components["schemas"]["ReplayTouchPoint"][];
+            judges: components["schemas"]["ReplayJudgeFrame"][];
+        };
+        RunbookRunRow: { id: string; runbook_id: string; definition_snapshot: unknown; arguments_redacted: unknown; actor: string; status: string; started_at?: string | null; finished_at?: string | null };
+        AutomationStepError: { code: components["schemas"]["ErrorCode"]; message: string };
+        AutomationStepResult: { step: string; ok: boolean; result?: unknown; error?: components["schemas"]["AutomationStepError"]; wait_secs?: number };
+        RunbookExecutionResponse: { run_id: string; status: string; results: components["schemas"]["AutomationStepResult"][] };
+        RunbookCancelResponse: { cancelled: string };
+        MySessionItem: { id: string; client_type: string; device_name: string; ip: string; created_at: string; expires_at: string; last_seen_at?: string | null; current: boolean };
+        MySessionsResponse: { items: components["schemas"]["MySessionItem"][] };
+        MyPrivacyResponse: { profile_visibility: string; show_online_status: boolean; show_recent_activity: boolean };
+        UpdateMyPrivacyBody: { profile_visibility: string; show_online_status: boolean; show_recent_activity: boolean };
+        OwnerReplayShareLink: { id: string; expires_at?: string | null; revoked_at?: string | null };
+        OwnerReplaySummary: { round_uuid: string; player_phira_id: number; chart_id: number; chart_name: string; room_id: string; played_at: number; finished_at?: number | null; visibility: "inherit" | "public" | "friends" | "private" | "unlisted" | "custom"; share_links: components["schemas"]["OwnerReplayShareLink"][] };
+        OwnerReplayListResponse: { player_id: number; items: components["schemas"]["OwnerReplaySummary"][]; total: number };
+        ReplayOverride: { id: string; pmp_replay_id: string; player_phira_id: number; owner_user_id?: string | null; visibility: string; updated_at: string };
+        ReplayVisibilityResponse: { override: components["schemas"]["ReplayOverride"] };
+        VisibilityBody: { visibility: "inherit" | "public" | "friends" | "private" | "unlisted" | "custom" };
+        ReplayCreatedShareLink: { id: string; expires_at?: string | null };
+        ReplayShareCreatedResponse: { link: components["schemas"]["ReplayCreatedShareLink"]; token: string };
+        ShareBody: { expires_at?: string | null };
+        RoomInviteBody: { room_id: string };
+        RoomInviteResponse: { event_id: string; status: string };
+        RedeemCodeBody: { code: string };
+        RedeemCodeResponse: { ok: boolean; action_type: string; result: unknown; redeemed_at: string };
+        PublicUserProfileResponse: {
+            background_url?: string | null; phira_id: number; username: string; avatar?: string | null; bio?: string | null; online_status?: string | null; profile_visibility: "public" | "friends" | "private"; rks?: number | null; stats?: unknown; friends_count?: number | null; is_friend: boolean; is_blocked: boolean };
+        NotificationActionKind: "join_room" | "friend_accept" | "friend_reject" | "open_chart" | "open_replay" | "open_room" | "open_user" | "open_profile";
+        NotificationActionTarget: { room_id?: string | null; chart_id?: number | null; phira_id?: number | null; round_uuid?: string | null; friend_request_id?: string | null };
+        NotificationActionDraft: { label?: string; label_key?: string | null; action: components["schemas"]["NotificationActionKind"]; data?: components["schemas"]["NotificationActionTarget"]; danger?: boolean };
+        NotificationActionWire: { id: string; label?: string; label_key?: string | null; action: components["schemas"]["NotificationActionKind"]; data?: components["schemas"]["NotificationActionTarget"]; danger?: boolean };
     };
     responses: never;
     parameters: never;
@@ -3063,7 +3267,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PpfBuildConfigResponse"];
                 };
             };
             /** @description permission denied */
@@ -3737,35 +3941,6 @@ export interface operations {
             };
         };
     };
-    admin_config_ppb_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description effective PPB config */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
     admin_config_ppf_get: {
         parameters: {
             query?: never;
@@ -3795,6 +3970,7 @@ export interface operations {
             };
         };
     };
+    admin_config_ppf_put: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["PpConfigBody2"] } }; responses: { 200: { content: { "application/json": components["schemas"]["PpfBuildConfigSaveResponse"] } }; 403: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 422: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
     admin_config_raw_get: {
         parameters: {
             query?: never;
@@ -4343,7 +4519,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CreateJobResponse"];
                 };
             };
             /** @description permission denied */
@@ -4359,7 +4535,13 @@ export interface operations {
     };
     admin_jobs_tasks_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** Format: int64 */
+                page?: number;
+                /** Format: int64 */
+                pageNum?: number;
+                status?: "pending" | "completed";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4372,7 +4554,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminTaskListResponse"];
                 };
             };
             /** @description permission denied */
@@ -4403,7 +4585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminTaskCompleteResponse"];
                 };
             };
             /** @description permission denied */
@@ -4465,7 +4647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JobCancelResponse"];
                 };
             };
             /** @description permission denied */
@@ -4505,7 +4687,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JobRetryResponse"];
                 };
             };
             /** @description permission denied */
@@ -5813,6 +5995,24 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            /** @description current Terms/Privacy versions were not explicitly accepted */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description approved legal documents are not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     auth_phira_reauth_post: {
@@ -7102,6 +7302,37 @@ export interface operations {
             };
         };
     };
+    replays_get: {
+        parameters: {
+            query: {
+                player_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description public replay list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayListResponse"];
+                };
+            };
+            /** @description pmp unavailable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     replays_share_token_get: {
         parameters: {
             query?: never;
@@ -7135,7 +7366,10 @@ export interface operations {
     };
     replays_round_uuid_get: {
         parameters: {
-            query?: never;
+            query: {
+                player_id: number;
+                token?: string;
+            };
             header?: never;
             path: {
                 round_uuid: string;
@@ -7166,7 +7400,10 @@ export interface operations {
     };
     replays_round_uuid_manifest_get: {
         parameters: {
-            query?: never;
+            query: {
+                player_id: number;
+                token?: string;
+            };
             header?: never;
             path: {
                 round_uuid: string;
@@ -7516,4 +7753,53 @@ export interface operations {
             };
         };
     };
+    replays_round_uuid_frames_get: {
+        parameters: {
+            query: {
+                player_id: number;
+                token?: string;
+            };
+            header?: never;
+            path: {
+                round_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description typed Replay telemetry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayFramesResponse"];
+                };
+            };
+            /** @description access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_github_start_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": unknown } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    auth_github_login_start_get: { parameters: { query?: { return_to?: string | null; client_type?: string | null; accepted?: boolean | null; terms_version?: string | null; privacy_version?: string | null }; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 302: { content?: never }; 422: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    auth_github_unbind_post: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 204: { content?: never }; 401: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    me_sessions_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MySessionsResponse"] } } } };
+    me_sessions_session_id_delete: { parameters: { query?: never; header?: never; path: { session_id: string }; cookie?: never }; requestBody?: never; responses: { 204: { content?: never }; 404: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 409: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    me_multiplayer_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MyMultiplayerResponse"] } }; 401: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    me_privacy_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MyPrivacyResponse"] } } } };
+    me_privacy_put: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["UpdateMyPrivacyBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["MyPrivacyResponse"] } } } };
+    me_replays_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["OwnerReplayListResponse"] } } } };
+    replays_round_uuid_visibility_post: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["VisibilityBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["ReplayVisibilityResponse"] } } } };
+    replays_round_uuid_share_post: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["ShareBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["ReplayShareCreatedResponse"] } } } };
+    replays_round_uuid_share_link_id_delete: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string; link_id: string }; cookie?: never }; requestBody?: never; responses: { 204: { content?: never } } };
+    friends_phira_id_room_invite_post: { parameters: { query?: never; header?: never; path: { phira_id: number }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["RoomInviteBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["RoomInviteResponse"] } } } };
+    coupons_redeem_post: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["RedeemCodeBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["RedeemCodeResponse"] } } } };
+
 }

@@ -11,9 +11,10 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson};
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 use crate::notifications::push::PushSummary;
+use crate::notifications::NotificationActionDraft;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -35,6 +36,10 @@ pub struct SendBody {
     #[serde(default)]
     pub target: Value,
     #[serde(default)]
+    pub actions: Vec<NotificationActionDraft>,
+    #[serde(default)]
+    pub dedup_key: String,
+    #[serde(default)]
     pub payload: Value,
 }
 
@@ -46,14 +51,19 @@ pub struct NotificationSendResponse {
     pub push: PushSummary,
 }
 
-/// One delivery row `{event_id, type, created_at, delivered}`.
+/// One delivery row consumed by Panel. `status` describes in-app fanout; push
+/// delivery has a separate per-send summary and is not backfilled here.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct NotificationDeliveryItem {
-    pub event_id: Uuid,
+    pub id: Uuid,
     #[serde(rename = "type")]
     pub notification_type: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub delivered: i64,
+    pub title: String,
+    pub target_summary: String,
+    pub status: String,
+    pub delivered_count: i64,
+    pub failed_count: i64,
+    pub sent_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Typed `GET /admin/notifications/delivery` response `{items}`.
@@ -77,24 +87,40 @@ pub struct NotificationDeliveryResponse {
 pub async fn send(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<SendBody>,
+    ApiJson(body): ApiJson<SendBody>,
 ) -> Result<Json<NotificationSendResponse>, ApiError> {
     state
         .permissions
         .require(&state.db, &auth, "notification:send_system")
         .await?;
     let db = state.require_db()?;
-    let payload = if body.payload.is_null() {
-        json!({
-            "type": body.notification_type,
-            "priority": body.priority,
-            "title": body.title,
-            "body": body.body,
-        })
-    } else {
+    let actions = crate::notifications::normalize_action_drafts(body.actions)?;
+    let mut payload = if body.payload.is_null() {
+        json!({})
+    } else if body.payload.is_object() {
         body.payload
+    } else {
+        return Err(ApiError::new(
+            ErrorCode::ValidationFailed,
+            "notification payload must be an object",
+        ));
     };
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("type".into(), json!(body.notification_type));
+        object.insert("priority".into(), json!(body.priority));
+        object.insert("title".into(), json!(body.title));
+        object.insert("body".into(), json!(body.body));
+        object.insert("actions".into(), json!(actions));
+        object.insert("dedup_key".into(), json!(body.dedup_key));
+        object.insert("admin_target".into(), body.target.clone());
+    }
     let recipients = resolve_recipients(db, &body.target).await?;
+    if recipients.is_empty() {
+        return Err(ApiError::new(
+            ErrorCode::ValidationFailed,
+            "notification target resolves to no users",
+        ));
+    }
     let event = crate::notifications::publish_to_users(
         db,
         &body.notification_type,
@@ -144,8 +170,8 @@ pub async fn delivery(
         .require(&state.db, &auth, "notification:send_system")
         .await?;
     let db = state.require_db()?;
-    let rows = sqlx::query_as::<_, (Uuid, String, chrono::DateTime<chrono::Utc>, i64)>(
-        "SELECT ev.id, ev.type, ev.created_at, COUNT(un.id) AS delivered
+    let rows = sqlx::query_as::<_, (Uuid, String, Value, chrono::DateTime<chrono::Utc>, i64)>(
+        "SELECT ev.id, ev.type, ev.payload, ev.created_at, COUNT(un.id) AS delivered
          FROM notification_events ev
          LEFT JOIN user_notifications un ON un.event_id = ev.id
          GROUP BY ev.id
@@ -155,16 +181,38 @@ pub async fn delivery(
     .fetch_all(db)
     .await
     .map_err(db_err)?;
-    let items: Vec<NotificationDeliveryItem> = rows
+    let items = rows
         .into_iter()
-        .map(|(id, typ, created_at, delivered)| NotificationDeliveryItem {
-            event_id: id,
-            notification_type: typ,
-            created_at,
-            delivered,
+        .map(|(id, typ, payload, created_at, delivered)| {
+            let title = payload.get("title").and_then(Value::as_str).unwrap_or("").to_string();
+            let target_summary = summarize_target(payload.get("admin_target"));
+            NotificationDeliveryItem {
+                id,
+                notification_type: typ,
+                title,
+                target_summary,
+                status: if delivered > 0 { "delivered".to_string() } else { "queued".to_string() },
+                delivered_count: delivered,
+                failed_count: 0,
+                sent_at: created_at,
+            }
         })
         .collect();
     Ok(Json(NotificationDeliveryResponse { items }))
+}
+
+fn summarize_target(target: Option<&Value>) -> String {
+    let Some(target) = target else { return "—".to_string(); };
+    if target.get("all").and_then(Value::as_bool).unwrap_or(false) {
+        return "all".to_string();
+    }
+    let groups = target.get("group_ids").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+    let users = target.get("user_ids").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+    if groups == 0 && users == 0 {
+        "—".to_string()
+    } else {
+        format!("groups:{groups}; users:{users}")
+    }
 }
 
 async fn resolve_recipients(db: &sqlx::PgPool, target: &Value) -> Result<Vec<Uuid>, ApiError> {
@@ -174,6 +222,23 @@ async fn resolve_recipients(db: &sqlx::PgPool, target: &Value) -> Result<Vec<Uui
             .await
             .map_err(db_err)?;
         return Ok(rows.into_iter().map(|r| r.0).collect());
+    }
+    if let Some(group_ids) = target.get("group_ids").and_then(Value::as_array) {
+        let mut out = Vec::new();
+        for value in group_ids {
+            let Some(group_id) = value.as_str().and_then(|raw| Uuid::parse_str(raw).ok()) else {
+                continue;
+            };
+            let rows = sqlx::query_as::<_, (Uuid,)>("SELECT user_id FROM group_members WHERE group_id = $1")
+                .bind(group_id)
+                .fetch_all(db)
+                .await
+                .map_err(db_err)?;
+            out.extend(rows.into_iter().map(|row| row.0));
+        }
+        out.sort_unstable();
+        out.dedup();
+        return Ok(out);
     }
     if let Some(gid) = target.get("group_id").and_then(Value::as_str) {
         if let Ok(group_id) = Uuid::parse_str(gid) {
@@ -199,7 +264,7 @@ async fn resolve_recipients(db: &sqlx::PgPool, target: &Value) -> Result<Vec<Uui
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "not found")
     } else {
         tracing::error!(error = %e, "notifications db error");
         ApiError::internal()

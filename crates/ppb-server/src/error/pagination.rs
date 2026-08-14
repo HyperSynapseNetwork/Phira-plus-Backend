@@ -27,7 +27,7 @@ impl PaginationParams {
         let page_num = self.page_num.unwrap_or(DEFAULT_PAGE_NUM);
         if !(1..=MAX_PAGE_NUM).contains(&page_num) {
             return Err(ApiError::new(
-                ErrorCode::Pagination,
+                ErrorCode::InvalidQuery,
                 format!("pageNum must be between 1 and {MAX_PAGE_NUM}"),
             ));
         }

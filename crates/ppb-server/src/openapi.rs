@@ -4,10 +4,10 @@
 //! `contracts/types.ts` is generated from this JSON (snake_case, §20) and is
 //! consumed by PPF/Panel instead of hand-written duplicate types.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
-use crate::admin::coupons::CreateCouponBody;
+use crate::admin::coupons::{CreateCouponBody, RedeemCodeBody, RedeemCodeResponse};
 use crate::admin::notifications::{
     NotificationDeliveryItem, NotificationDeliveryResponse, NotificationSendResponse, SendBody,
 };
@@ -15,18 +15,20 @@ use crate::admin::plugins::PluginCallBody;
 use crate::admin::server::{BroadcastBody, RoomCreationBody, ServerActionBody, ServerGatesResponse};
 use crate::auth::routes::{ChangePasswordRequest, PhiraLoginRequest, ReauthRequest, RootLoginRequest};
 use crate::actions::routes::{ExecuteActionBody, ExecuteCommandBody};
-use crate::app::{JoinIntentBody, PreferencesListResponse, PushEndpointBody};
+use crate::app::{JoinIntentBody, PreferencesListResponse, PushEndpointBody, MySessionItem, MySessionsResponse, MyPrivacyResponse, UpdateMyPrivacyBody, MyMultiplayerRound, MyMultiplayerResponse};
 use crate::commands::model::{CommandRun, CommandRunListResponse};
-use crate::automation::routes::CreateRunbookBody;
+use crate::automation::routes::{AutomationStepError, AutomationStepResult, CreateRunbookBody, RunbookCancelResponse, RunbookExecutionResponse, RunbookRunRow};
 use crate::automation::{RunbookDefinition, RunbookStep};
 use crate::config::pmp::{ConfigFieldDescriptor, ConfigFieldGroup};
 use crate::config::repo::ConfigSnapshot;
 use crate::config::routes::{
     ConfigDescriptorsResponse, ConfigDiffChange, ConfigDiffResponse,
     ConfigRollbackResponse, ConfigSaveResponse, ConfigSnapshotsResponse, ConfigValidateResponse,
-    ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody,
+    ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody, PpConfigBody2,
+    PpfBuildConfigResponse, PpfBuildConfigSaveResponse,
 };
-use crate::error::{ErrorBody, ErrorEnvelope};
+use crate::error::{ErrorBody, ErrorCode, ErrorEnvelope};
+use crate::deployment::{DeploymentCapabilities, StartupArgSpec};
 use crate::jobs::routes::{CreateJobBody, JobListResponse};
 use crate::jobs::Job;
 use crate::audit::model::AuditEvent;
@@ -36,6 +38,7 @@ use crate::logs::routes::{LogInputBody, LogListResponse, TranslateParams, Transl
 use crate::logs::translator::TranslatedError;
 use crate::logs::LogEntry;
 use crate::notifications::push::{PushSummary, SubscriptionWire};
+use crate::notifications::{NotificationActionKind, NotificationActionTarget, NotificationActionDraft, NotificationActionWire, NotificationPayload};
 use crate::notifications::routes::{
     ActionBody as NotificationActionBody, AppNotificationWire, InputBody,
     NotificationInboxResponse,
@@ -47,7 +50,7 @@ use crate::permissions::routes::{
     CreateGroupBody, PatchGroupBody, ReplaceMembersBody, ReplacePermissionsBody,
 };
 use crate::preferences::routes::UpdatePreferencesBody;
-use crate::social::routes::SendRequestBody;
+use crate::social::routes::{SendRequestBody, RoomInviteBody, RoomInviteResponse};
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
     RoomListResponse,
@@ -59,6 +62,8 @@ use crate::users::model::{
 use crate::users::routes::UserActionBody;
 use crate::admin::routes::{PmpStatus, ServerStatusResponse};
 use crate::admin::server::ServerStatsResponse;
+use crate::replay::routes::{OwnerReplayShareLink, OwnerReplaySummary, OwnerReplayListResponse, ReplayCreatedShareLink, ReplayShareCreatedResponse, ReplayVisibilityResponse, VisibilityBody, ShareBody};
+use crate::phira::routes::PublicUserProfileResponse;
 
 /// `GET /api/v1/me` session-probe response (S-4).
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -93,8 +98,35 @@ pub struct PaginationResponse {
 pub struct ReplayManifest {
     pub round_uuid: String,
     pub player_phira_id: i64,
+    pub chart_id: i32,
+    pub chart_name: String,
+    pub room_id: String,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
     pub touches: serde_json::Value,
     pub judges: serde_json::Value,
+}
+
+/// Public Replay inventory item backed by PMP round metadata.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReplaySummary {
+    pub round_uuid: String,
+    pub player_phira_id: i64,
+    pub chart_id: i32,
+    pub chart_name: String,
+    pub room_id: String,
+    pub played_at: i64,
+    pub finished_at: Option<i64>,
+    pub visibility: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReplayListResponse {
+    pub player_id: i32,
+    pub items: Vec<ReplaySummary>,
+    pub total: i64,
 }
 
 /// Replay detail (summary + visibility).
@@ -103,9 +135,41 @@ pub struct ReplayManifest {
 pub struct ReplayDetail {
     pub round_uuid: String,
     pub player_phira_id: i64,
+    pub chart_id: i32,
+    pub chart_name: String,
+    pub room_id: String,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
     pub visibility: String,
     pub touches: serde_json::Value,
     pub judges: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReplayTouchPoint {
+    pub time: f32,
+    pub finger: i8,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReplayJudgeFrame {
+    pub time: f32,
+    pub line_id: u32,
+    pub note_id: u32,
+    pub judgement: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReplayFramesResponse {
+    pub round_uuid: String,
+    pub player_phira_id: i64,
+    pub touches: Vec<ReplayTouchPoint>,
+    pub judges: Vec<ReplayJudgeFrame>,
 }
 
 /// Resolved share token `{round_uuid, player_phira_id}` (S-3).
@@ -138,8 +202,16 @@ pub struct RoomActionRequest {
         crate::auth::routes::phira_reauth,
         crate::auth::routes::refresh,
         crate::auth::routes::logout,
+        crate::auth::routes::github_start,
+        crate::auth::routes::github_login_start,
+        crate::auth::routes::github_unbind,
         crate::app::me,
         crate::app::me_profile,
+        crate::app::me_multiplayer,
+        crate::app::me_sessions,
+        crate::app::me_session_revoke,
+        crate::app::me_privacy,
+        crate::app::me_privacy_update,
         crate::app::me_preferences,
         crate::app::me_join_intents,
         crate::app::me_join_intent_get,
@@ -150,14 +222,21 @@ pub struct RoomActionRequest {
         crate::rooms::routes::room_chat_history,
         crate::rooms::routes::send_chat,
         crate::rooms::routes::room_action_body,
+        crate::replay::routes::list_replays,
+        crate::replay::routes::list_my_replays,
         crate::replay::routes::detail,
         crate::replay::routes::manifest,
+        crate::replay::routes::frames,
         crate::replay::routes::resolve_share,
+        crate::replay::routes::set_replay_visibility,
+        crate::replay::routes::create_share,
+        crate::replay::routes::revoke_share,
         crate::admin::notifications::send,
         crate::admin::notifications::delivery,
         crate::admin::coupons::list,
         crate::admin::coupons::create,
         crate::admin::coupons::revoke,
+        crate::admin::coupons::redeem,
         crate::audit::routes::list,
         crate::audit::routes::detail,
         crate::audit::routes::export,
@@ -174,8 +253,8 @@ pub struct RoomActionRequest {
         crate::config::routes::snapshots,
         crate::config::routes::raw,
         crate::config::routes::rollback,
-        crate::config::routes::ppb_config,
         crate::config::routes::ppf_config,
+        crate::config::routes::ppf_config_update,
         crate::logs::routes::history,
         crate::logs::routes::submit_input,
         crate::logs::routes::translate_endpoint,
@@ -261,6 +340,7 @@ pub struct RoomActionRequest {
         crate::social::routes::list,
         crate::social::routes::list_requests,
         crate::social::routes::send_request,
+        crate::social::routes::invite_to_room,
         crate::social::routes::respond_accept,
         crate::social::routes::respond_reject,
         crate::social::routes::block,
@@ -284,11 +364,34 @@ pub struct RoomActionRequest {
         schemas(
             ErrorEnvelope,
             ErrorBody,
+            ErrorCode,
+            DeploymentCapabilities,
+            StartupArgSpec,
+            PublicUserProfileResponse,
+            MySessionItem,
+            MySessionsResponse,
+            MyPrivacyResponse,
+            UpdateMyPrivacyBody,
+            MyMultiplayerRound,
+            MyMultiplayerResponse,
             MeResponse,
             PaginationResponse,
             ReplayManifest,
+            ReplaySummary,
+            ReplayListResponse,
             ReplayDetail,
+            ReplayTouchPoint,
+            ReplayJudgeFrame,
+            ReplayFramesResponse,
             ResolveShareResponse,
+            OwnerReplayShareLink,
+            OwnerReplaySummary,
+            OwnerReplayListResponse,
+            ReplayCreatedShareLink,
+            ReplayShareCreatedResponse,
+            ReplayVisibilityResponse,
+            VisibilityBody,
+            ShareBody,
             RoomActionRequest,
             PhiraLoginRequest,
             ReauthRequest,
@@ -296,6 +399,8 @@ pub struct RoomActionRequest {
             RoomActionBody2,
             SendBody,
             CreateCouponBody,
+            RedeemCodeBody,
+            RedeemCodeResponse,
             CreateJobBody,
             ConfigValuesBody,
             ConfigFieldDescriptor,
@@ -311,6 +416,9 @@ pub struct RoomActionRequest {
             ConfigSaveResponse,
             ConfigSnapshotsResponse,
             ConfigRollbackResponse,
+            PpConfigBody2,
+            PpfBuildConfigResponse,
+            PpfBuildConfigSaveResponse,
             Job,
             JobListResponse,
             AuditEvent,
@@ -331,6 +439,11 @@ pub struct RoomActionRequest {
             CommandRun,
             CommandRunListResponse,
             CreateRunbookBody,
+            RunbookRunRow,
+            AutomationStepError,
+            AutomationStepResult,
+            RunbookExecutionResponse,
+            RunbookCancelResponse,
             RunbookDefinition,
             RunbookStep,
             RootLoginRequest,
@@ -371,6 +484,13 @@ pub struct RoomActionRequest {
             ServerStatsResponse,
             ServerGatesResponse,
             SendRequestBody,
+            RoomInviteBody,
+            RoomInviteResponse,
+            NotificationActionKind,
+            NotificationActionTarget,
+            NotificationActionDraft,
+            NotificationActionWire,
+            NotificationPayload,
             NotificationActionBody,
             InputBody,
             AppNotificationWire,

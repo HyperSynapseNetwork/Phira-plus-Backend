@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use crate::app::AppState;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson, ApiPath};
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -44,7 +44,7 @@ fn validate_namespace(namespace: &str) -> Result<(), ApiError> {
 pub async fn get_one(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(namespace): Path<String>,
+    ApiPath(namespace): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -79,8 +79,8 @@ pub struct UpdatePreferencesBody {
 pub async fn update(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(namespace): Path<String>,
-    Json(body): Json<UpdatePreferencesBody>,
+    ApiPath(namespace): ApiPath<String>,
+    ApiJson(body): ApiJson<UpdatePreferencesBody>,
 ) -> Result<Json<Value>, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());
@@ -105,7 +105,7 @@ pub async fn update(
 pub async fn delete_one(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(namespace): Path<String>,
+    ApiPath(namespace): ApiPath<String>,
 ) -> Result<StatusCode, ApiError> {
     if auth.is_root() {
         return Err(ApiError::permission_denied());

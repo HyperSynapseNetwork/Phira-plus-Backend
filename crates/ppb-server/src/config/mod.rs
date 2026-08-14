@@ -30,6 +30,7 @@ pub struct RuntimeConfig {
     pub metrics: MetricsConfig,
     pub security: SecurityConfig,
     pub github: GithubConfig,
+    pub legal: LegalConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +116,9 @@ impl Default for SessionConfig {
         Self {
             access_ttl_secs: 3600,
             refresh_ttl_secs: 2592000,
-            cookie_domain: "api-phira.htadiy.com".to_string(),
+            // Empty means host-only, which is both safer and portable across
+            // official and self-hosted API domains.
+            cookie_domain: String::new(),
             cookie_secure: true,
             cookie_samesite: "lax".to_string(),
             csrf_cookie_name: "ppb_csrf".to_string(),
@@ -153,6 +156,7 @@ impl Default for PmpConfig {
             capabilities: vec![
                 "persist.touches".to_string(),
                 "persist.judges".to_string(),
+                "persist.rounds".to_string(),
                 "room.chat_send".to_string(),
                 "stream.touches".to_string(),
                 "stream.judges".to_string(),
@@ -199,8 +203,11 @@ impl Default for PhiraConfig {
 pub struct RateLimitConfig {
     pub login_per_minute: u32,
     pub reauth_per_minute: u32,
+    pub github_start_per_minute: u32,
     pub github_callback_per_minute: u32,
+    pub github_provider_per_minute: u32,
     pub chat_send_per_minute: u32,
+    pub social_per_minute: u32,
     pub raw_cli_per_minute: u32,
 }
 
@@ -209,8 +216,11 @@ impl Default for RateLimitConfig {
         Self {
             login_per_minute: 10,
             reauth_per_minute: 10,
+            github_start_per_minute: 10,
             github_callback_per_minute: 20,
+            github_provider_per_minute: 120,
             chat_send_per_minute: 60,
+            social_per_minute: 30,
             raw_cli_per_minute: 30,
         }
     }
@@ -277,6 +287,30 @@ impl Default for SecurityConfig {
     }
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LegalConfig {
+    /// Public user authentication stays disabled until approved legal documents are configured.
+    pub public_auth_enabled: bool,
+    pub terms_version: String,
+    pub privacy_version: String,
+    pub terms_url: String,
+    pub privacy_url: String,
+}
+
+impl Default for LegalConfig {
+    fn default() -> Self {
+        Self {
+            public_auth_enabled: false,
+            terms_version: String::new(),
+            privacy_version: String::new(),
+            terms_url: String::new(),
+            privacy_url: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GithubConfig {
@@ -337,6 +371,30 @@ impl RuntimeConfig {
         let samesite = self.session.cookie_samesite.to_ascii_lowercase();
         if !matches!(samesite.as_str(), "lax" | "strict" | "none") {
             anyhow::bail!("session.cookie_samesite must be lax|strict|none");
+        }
+        if self.legal.public_auth_enabled {
+            for (name, value) in [
+                ("legal.terms_version", self.legal.terms_version.trim()),
+                ("legal.privacy_version", self.legal.privacy_version.trim()),
+                ("legal.terms_url", self.legal.terms_url.trim()),
+                ("legal.privacy_url", self.legal.privacy_url.trim()),
+            ] {
+                if value.is_empty() {
+                    anyhow::bail!("{name} is required when legal.public_auth_enabled=true");
+                }
+            }
+            for (name, value) in [
+                ("legal.terms_url", self.legal.terms_url.trim()),
+                ("legal.privacy_url", self.legal.privacy_url.trim()),
+            ] {
+                let safe_relative = value.starts_with('/') && !value.starts_with("//") && !value.contains('\\');
+                let safe_absolute = value.starts_with("https://")
+                    || value.starts_with("http://localhost")
+                    || value.starts_with("http://127.0.0.1");
+                if !safe_relative && !safe_absolute {
+                    anyhow::bail!("{name} must be HTTPS, localhost HTTP, or a safe relative path");
+                }
+            }
         }
         Ok(())
     }

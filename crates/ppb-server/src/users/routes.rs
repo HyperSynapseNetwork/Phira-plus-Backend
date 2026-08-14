@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -25,6 +25,7 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 
@@ -37,10 +38,6 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
         .route("/users/{phira_id}/security", get(user_security))
         .route("/users/{phira_id}/audit", get(user_audit))
         .route("/users/{phira_id}/actions", post(user_actions))
-        .route("/users/{phira_id}/ban", post(ban_user))
-        .route("/users/{phira_id}/unban", post(unban_user))
-        .route("/users/{phira_id}/kick", post(kick_user))
-        .route("/users/{phira_id}/ip-history", get(ip_history))
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,7 +63,7 @@ pub struct UserListParams {
 pub async fn list_users(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<UserListParams>,
+    ApiQuery(params): ApiQuery<UserListParams>,
 ) -> Result<Json<UserListResponse>, ApiError> {
     state
         .permissions
@@ -143,7 +140,7 @@ pub async fn list_users(
 pub async fn user_detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<UserDetailResponse>, ApiError> {
     state
         .permissions
@@ -186,12 +183,13 @@ pub struct BanBody {
     pub reason: Option<String>,
 }
 
+#[allow(dead_code)]
 async fn ban_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
     headers: HeaderMap,
-    Json(body): Json<BanBody>,
+    ApiJson(body): ApiJson<BanBody>,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
@@ -221,10 +219,11 @@ async fn ban_user(
     Ok(Json(result))
 }
 
+#[allow(dead_code)]
 async fn unban_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
     state
@@ -241,10 +240,11 @@ async fn unban_user(
     Ok(Json(result))
 }
 
+#[allow(dead_code)]
 async fn kick_user(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
@@ -258,10 +258,11 @@ async fn kick_user(
     Ok(Json(result))
 }
 
+#[allow(dead_code)]
 async fn ip_history(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
@@ -291,7 +292,7 @@ async fn ip_history(
 pub async fn user_multiplayer(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<UserMultiplayerResponse>, ApiError> {
     state
         .permissions
@@ -336,7 +337,7 @@ pub async fn user_multiplayer(
 pub async fn user_sessions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<UserSessionsResponse>, ApiError> {
     state
         .permissions
@@ -382,7 +383,7 @@ pub async fn user_sessions(
 pub async fn user_security(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<UserSecurityResponse>, ApiError> {
     state
         .permissions
@@ -441,7 +442,7 @@ pub async fn user_security(
 pub async fn user_audit(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
+    ApiPath(user_id): ApiPath<i64>,
 ) -> Result<Json<Value>, ApiError> {
     state
         .permissions
@@ -490,13 +491,28 @@ pub async fn user_actions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(user_id): Path<i64>,
-    Json(body): Json<UserActionBody>,
+    ApiPath(user_id): ApiPath<i64>,
+    ApiJson(body): ApiJson<UserActionBody>,
 ) -> Result<axum::response::Response, ApiError> {
     let action = state
         .actions
         .get(&body.action)
         .ok_or_else(|| ApiError::not_found("action"))?;
+    // Generic/scoped Action endpoints are not an alternate execution plane.
+    // Update actions belong to Jobs; raw PMP CLI belongs to CommandRun.
+    if crate::actions::registry::is_job_only_action(action.id) {
+        return Err(ApiError::new(
+            ErrorCode::LongRunningActionRequiresJob,
+            "long-running action requires the Job API",
+        ));
+    }
+    if action.id == "pmp.cli.execute" {
+        return Err(ApiError::new(
+            ErrorCode::ResourceConflict,
+            "raw PMP CLI requires the dedicated CommandRun endpoint",
+        ));
+    }
+
     let mut args = body.args;
     if args.get("user_id").is_none() {
         if let Value::Object(map) = &mut args {
@@ -594,7 +610,7 @@ fn user_agent_from_headers(headers: &HeaderMap) -> String {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(crate::error::ErrorCode::NotFound, "user not found")
+        ApiError::new(crate::error::ErrorCode::UserNotFound, "user not found")
     } else {
         tracing::error!(error = %e, "user db error");
         ApiError::internal()

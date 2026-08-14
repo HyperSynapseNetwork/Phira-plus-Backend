@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "method": "GET",
+      "path": "/api/v1/openapi.json",
+      "kind": "infrastructure",
+      "owner": "ppb",
+      "security": "public generated contract document"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/github/callback",
+      "kind": "browser-oauth-callback",
+      "owner": "auth",
+      "security": "server-owned OAuth state; safe errors redirect to Auth Gateway"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/events",
+      "kind": "sse",
+      "owner": "public-events",
+      "security": "public event stream; no management mutation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/events",
+      "kind": "sse",
+      "owner": "admin-events",
+      "security": "AuthPrincipal + dashboard:view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/logs/stream",
+      "kind": "sse",
+      "owner": "logs",
+      "security": "AuthPrincipal + logs:view"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/phira/login",
+      "kind": "browser-auth-html",
+      "owner": "auth-gateway",
+      "security": "nonce CSP + no-store + no-referrer + frame deny"
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "kind": "health",
+      "owner": "ppb-runtime",
+      "security": "public liveness only"
+    },
+    {
+      "method": "GET",
+      "path": "/ws/v1/rooms/{room_id}/live",
+      "kind": "websocket",
+      "owner": "live-room",
+      "security": "room_id semantic = pmp_room_id; token/session checked by handler"
+    },
+    {
+      "method": "GET",
+      "path": "/ws/v1/replays/{round_uuid}",
+      "kind": "websocket",
+      "owner": "replay",
+      "security": "round_uuid semantic = replay round UUID; access checked by handler"
+    }
+  ],
+  "compatibility_aliases": []
+}

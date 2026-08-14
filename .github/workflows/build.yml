@@ -69,6 +69,23 @@ jobs:
           cache-on-failure: true
       - name: Workspace version consistency
         run: python scripts/sync-workspace-version.py --check
+      - name: Static contract, provider-surface and config-security gates
+        run: |
+          python3 scripts/check-error-contract.py
+          python3 scripts/check-auth-gateway-contract.py
+          python3 scripts/check-auth-rate-limit.py
+          python3 scripts/check-rest-extractors.py --self-test
+          python3 scripts/check-rest-extractors.py
+          python3 scripts/check-route-surface.py --self-test
+          python3 scripts/check-route-surface.py
+          python3 scripts/check-realtime-contract.py --self-test
+          python3 scripts/check-realtime-contract.py
+          python3 scripts/check-config-security.py --self-test
+          python3 scripts/check-config-security.py
+          python3 scripts/verify-contract-bundle.py
+      - name: Current documentation truthfulness
+        run: python3 scripts/check-current-docs.py
+
       - name: Check
         run: cargo check --locked --workspace --all-targets --all-features
       - name: Tests
@@ -123,12 +140,13 @@ jobs:
           if-no-files-found: error
 
   contract-types:
-    # Contract §21: regenerate contracts/types.ts from the OpenAPI doc and
-    # commit it. Runs after `check` so the rust-cache is warm.
+    # Contract §21: the exact source commit must already contain matching
+    # generated artifacts. Generation is a verifier here, never an auto-fix
+    # that silently changes main after this commit was tested.
     needs: [auto-patch, check]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -137,13 +155,39 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - name: Verify committed Error Contract before generation
+        run: python3 scripts/check-error-contract.py
+      - name: Verify Auth Gateway product contract
+        run: python3 scripts/check-auth-gateway-contract.py
+          python3 scripts/check-auth-rate-limit.py
+      - name: Verify provider runtime/config boundaries
+        run: |
+          python3 scripts/check-rest-extractors.py --self-test
+          python3 scripts/check-rest-extractors.py
+          python3 scripts/check-route-surface.py --self-test
+          python3 scripts/check-route-surface.py
+          python3 scripts/check-realtime-contract.py --self-test
+          python3 scripts/check-realtime-contract.py
+          python3 scripts/check-config-security.py --self-test
+          python3 scripts/check-config-security.py
       - name: Generate OpenAPI JSON + TS types
         run: |
           bash scripts/gen-types.sh
-          git diff --stat contracts/types.ts contracts/openapi.json || true
-      - name: Type-check generated TS (no duplicate identifiers)
+          git diff --stat contracts/types.ts contracts/openapi.json contracts/error-codes.json contracts/contract-version.json || true
+      - name: Verify generated Contract bundle
         run: |
-          npx --yes -p typescript tsc --noEmit --skipLibCheck contracts/types.ts
+          python3 scripts/check-error-contract.py
+          python3 scripts/check-route-surface.py
+          python3 scripts/check-realtime-contract.py
+          python3 scripts/check-config-security.py
+          python3 scripts/verify-contract-bundle.py
+          if ! git diff --quiet -- contracts/types.ts contracts/openapi.json contracts/error-codes.json contracts/contract-version.json; then
+            echo "Committed contract artifacts are stale for this exact source commit." >&2
+            git diff -- contracts/types.ts contracts/openapi.json contracts/error-codes.json contracts/contract-version.json
+            exit 1
+          fi
+      - name: Type-check generated TS
+        run: npx --yes -p typescript tsc --noEmit --skipLibCheck contracts/types.ts
       - name: Clone frontends for consistency check
         run: |
           git clone --depth 1 https://github.com/HyperSynapseNetwork/Phira-plus-frontend.git /tmp/ppf
@@ -156,13 +200,43 @@ jobs:
         run: bash scripts/check-action-ids.sh crates/ppb-server/src/actions/registry.rs /tmp/ppf/src
       - name: Action ID consistency check (Panel)
         run: bash scripts/check-action-ids.sh crates/ppb-server/src/actions/registry.rs /tmp/panel
-      - name: Commit generated types (if changed)
+
+  provenance:
+    needs: [auto-patch, build, contract-types]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-patch.outputs.build_ref }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ppb-server-*
+          path: artifacts
+      - name: Write exact build provenance
+        env:
+          SOURCE_EVENT_SHA: ${{ github.sha }}
+          BUILD_REF: ${{ needs.auto-patch.outputs.build_ref }}
         run: |
-          git checkout -B main   # checkout is a detached HEAD (ref = build_ref)
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add contracts/types.ts contracts/openapi.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: sync contracts/types.ts + openapi.json [skip ci]"
-            git push origin main
-          fi
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          artifacts={str(p.relative_to('artifacts')):sha(p) for p in sorted(Path('artifacts').rglob('*')) if p.is_file()}
+          data={
+            'source_event_sha': os.environ['SOURCE_EVENT_SHA'],
+            'build_ref': os.environ['BUILD_REF'],
+            'contract_version_sha256': sha(Path('contracts/contract-version.json')),
+            'openapi_sha256': sha(Path('contracts/openapi.json')),
+            'artifacts': artifacts,
+          }
+          Path('ppb-build-provenance.json').write_text(json.dumps(data, indent=2)+'\n')
+          print(json.dumps(data, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ppb-build-provenance
+          path: ppb-build-provenance.json
+          if-no-files-found: error

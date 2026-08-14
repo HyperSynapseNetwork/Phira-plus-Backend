@@ -153,7 +153,7 @@ pub async fn list_recent(
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "command run not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "command run not found")
     } else {
         tracing::error!(error = %e, "command_runs db error");
         ApiError::internal()

@@ -1,5 +1,4 @@
-//! Metrics domain. Phase A: in-memory counters + retention config scaffold.
-//! Short-term high-resolution, old data rolled up (Phase B/C).
+//! Metrics domain: in-memory operational counters exposed through a stable snapshot.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

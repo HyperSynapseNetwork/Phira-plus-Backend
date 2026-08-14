@@ -45,7 +45,7 @@ pub async fn create(
         // makes the exclusion atomic. A concurrent create for the same resource
         // hits this unique violation — report 409 instead of a generic 500.
         if is_unique_violation(&e) {
-            ApiError::new(ErrorCode::Conflict, "job already running for this resource")
+            ApiError::new(ErrorCode::JobAlreadyRunning, "job already running for this resource")
         } else {
             db_err(e)
         }

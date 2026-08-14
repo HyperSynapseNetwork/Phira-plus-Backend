@@ -21,7 +21,7 @@ pub struct CredentialCipher {
 impl CredentialCipher {
     pub fn new(key: &[u8]) -> Result<Self, ApiError> {
         let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|_| ApiError::new(ErrorCode::Internal, "invalid credential key length"))?;
+            .map_err(|_| ApiError::new(ErrorCode::InternalError, "invalid credential key length"))?;
         Ok(Self { cipher })
     }
 
@@ -33,7 +33,7 @@ impl CredentialCipher {
         let ct = self
             .cipher
             .encrypt(nonce, plaintext)
-            .map_err(|_| ApiError::new(ErrorCode::Internal, "credential encryption failed"))?;
+            .map_err(|_| ApiError::new(ErrorCode::InternalError, "credential encryption failed"))?;
         let mut blob = Vec::with_capacity(NONCE_LEN + ct.len());
         blob.extend_from_slice(&nonce_bytes);
         blob.extend_from_slice(&ct);
@@ -43,13 +43,13 @@ impl CredentialCipher {
     /// Decrypt `nonce || ciphertext`.
     pub fn decrypt(&self, blob: &[u8]) -> Result<Vec<u8>, ApiError> {
         if blob.len() < NONCE_LEN {
-            return Err(ApiError::new(ErrorCode::Internal, "credential blob too short"));
+            return Err(ApiError::new(ErrorCode::InternalError, "credential blob too short"));
         }
         let (nonce_bytes, ct) = blob.split_at(NONCE_LEN);
         let nonce = Nonce::from_slice(nonce_bytes);
         self.cipher
             .decrypt(nonce, ct)
-            .map_err(|_| ApiError::new(ErrorCode::Internal, "credential decryption failed"))
+            .map_err(|_| ApiError::new(ErrorCode::InternalError, "credential decryption failed"))
     }
 }
 

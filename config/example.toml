@@ -28,7 +28,8 @@ dev_origins = ["http://localhost:3000", "http://localhost:5173"]
 [session]
 access_ttl_secs = 3600
 refresh_ttl_secs = 2592000 # 30d
-cookie_domain = "api-phira.htadiy.com"
+# Empty = host-only cookie (recommended for official and self-host installs).
+cookie_domain = ""
 cookie_secure = true
 cookie_samesite = "lax"
 csrf_cookie_name = "ppb_csrf"
@@ -44,7 +45,7 @@ reconnect_base_ms = 500
 reconnect_max_ms = 30000
 request_timeout_ms = 10000
 # Hard capability set for PMP 1.0.38 (verified). Extended per version map in code.
-capabilities = ["persist.touches", "persist.judges", "room.chat_send", "stream.touches", "stream.judges"]
+capabilities = ["persist.touches", "persist.judges", "persist.rounds", "room.chat_send", "stream.touches", "stream.judges"]
 
 [phira]
 base_url = "https://phira.5wyxi.com"
@@ -62,8 +63,11 @@ aggregator_top_n = 50
 [rate_limit]
 login_per_minute = 10
 reauth_per_minute = 10
+github_start_per_minute = 10
 github_callback_per_minute = 20
+github_provider_per_minute = 120
 chat_send_per_minute = 60
+social_per_minute = 30
 raw_cli_per_minute = 30
 
 [audit]
@@ -86,3 +90,12 @@ return_to_allowlist = ["https://phira.htadiy.com", "https://panel-phira.htadiy.c
 [github]
 # client_id lives in deployment env. Callback URL is fixed by contract.
 callback_url = "https://api-phira.htadiy.com/api/v1/auth/github/callback"
+
+# Public user auth must remain disabled until the deployment owner provides
+# approved legal text + version identifiers. Cookie/analytics consent is separate.
+[legal]
+public_auth_enabled = false
+terms_version = ""
+privacy_version = ""
+terms_url = ""
+privacy_url = ""

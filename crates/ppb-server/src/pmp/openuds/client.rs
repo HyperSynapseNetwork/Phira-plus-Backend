@@ -446,11 +446,14 @@ impl From<OpenUdsError> for ApiError {
     fn from(e: OpenUdsError) -> Self {
         match e {
             OpenUdsError::CapabilityNotSupported(cap) => ApiError::with_details(
-                ErrorCode::CapabilityNotSupported,
+                ErrorCode::PmpCapabilityMissing,
                 format!("capability not supported: {cap}"),
                 json!({ "capability": cap }),
             ),
-            OpenUdsError::Command { message, .. } => ApiError::new(ErrorCode::PmpUnavailable, message),
+            OpenUdsError::Command { message, .. } => {
+                tracing::warn!(error = %message, "PMP command failed");
+                ApiError::new(ErrorCode::PmpCommandFailed, "PMP command failed")
+            },
             OpenUdsError::Unavailable(m)
             | OpenUdsError::Protocol(m)
             | OpenUdsError::Io(m) => ApiError::new(ErrorCode::PmpUnavailable, m),

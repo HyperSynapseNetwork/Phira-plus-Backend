@@ -22,7 +22,7 @@ fn main() -> ExitCode {
         },
         "doctor" => run_doctor(rest),
         "config" if rest.first().map(String::as_str) == Some("check") => run_config_check(rest),
-        "root" if rest.first().map(String::as_str) == Some("reset-password") => run_root_reset(),
+        "root" if rest.first().map(String::as_str) == Some("reset-password") => run_root_reset(&rest[1..]),
         "update" => run_update(rest),
         _ => {
             print_usage();
@@ -38,7 +38,7 @@ fn print_usage() {
          ppctl init [--output-dir DIR] [--non-interactive] [urls...]\n  \
          ppctl doctor [--report PATH]\n  \
          ppctl config check\n  \
-         ppctl root reset-password\n  \
+         ppctl root reset-password [--env-file PATH]\n  \
          ppctl update [--check-config PATH]\n\n\
          NOTE: secrets are auto-generated; never pass passwords as arguments."
     );
@@ -241,10 +241,16 @@ async fn doctor_checks(args: &[String]) -> Vec<Check> {
         Err(e) => check_result("config schema", false, e.clone()),
     });
 
-    // 2. filesystem
-    let config_dir = Path::new("config");
-    let fs_ok = config_dir.is_dir();
-    checks.push(check_result("filesystem config/", fs_ok, "config/ present".into()));
+    // 2. runtime config file. Do not require a source-tree `config/` directory
+    // inside production containers; verify the config source actually used.
+    checks.push(match &cfg {
+        Ok((_, src)) if src == "<defaults>" => check_result("runtime config file", true, "using defaults".into()),
+        Ok((_, src)) => {
+            let ok = Path::new(src).is_file();
+            check_result("runtime config file", ok, if ok { format!("loaded: {src}") } else { format!("missing: {src}") })
+        }
+        Err(e) => check_result("runtime config file", false, e.clone()),
+    });
 
     // 3. PostgreSQL
     let db_url = Secrets::from_env().ok().and_then(|s| s.database_url);
@@ -263,19 +269,55 @@ async fn doctor_checks(args: &[String]) -> Vec<Check> {
         None => checks.push(check_result("postgresql", false, "PPB_DATABASE_URL not set".into())),
     }
 
-    // 4. OpenUDS socket
+    // 4. OpenUDS socket + real authenticate handshake.
     let openuds_path = cfg
         .as_ref()
         .ok()
         .map(|(c, _)| c.pmp.openuds_path.clone())
         .unwrap_or_else(|| PathBuf::from("/var/run/pmp-openuds.sock"));
     if openuds_path.exists() {
-        match tokio::net::UnixStream::connect(&openuds_path).await {
-            Ok(_) => checks.push(check_result("openuds socket", true, openuds_path.display().to_string())),
-            Err(e) => checks.push(check_result("openuds socket", false, e.to_string())),
+        let handshake = async {
+            let mut stream = tokio::net::UnixStream::connect(&openuds_path)
+                .await
+                .map_err(|e| format!("connect failed: {e}"))?;
+            let token = env::var("PPB_PMP_OPENUDS_TOKEN").ok().filter(|v| !v.is_empty());
+            let frame = match token {
+                Some(token) => serde_json::json!({"type":"authenticate","token":token}),
+                None => serde_json::json!({"type":"authenticate"}),
+            };
+            ppb_server::pmp::openuds::protocol::write_frame_async(&mut stream, &frame)
+                .await
+                .map_err(|e| format!("auth write failed: {e}"))?;
+            let response = tokio::time::timeout(
+                std::time::Duration::from_secs(4),
+                ppb_server::pmp::openuds::protocol::read_frame_async(&mut stream),
+            )
+            .await
+            .map_err(|_| "authentication timed out".to_string())?
+            .map_err(|e| format!("auth read failed: {e}"))?;
+            match response.get("type").and_then(serde_json::Value::as_str) {
+                Some("authenticated") => Ok(format!(
+                    "authenticated; server_version={}",
+                    response.get("server_version").and_then(serde_json::Value::as_str).unwrap_or("unknown")
+                )),
+                Some("auth_error") => Err("authentication failed (token/direct mode mismatch)".to_string()),
+                other => Err(format!("unexpected auth response: {}", other.unwrap_or("missing type"))),
+            }
+        }
+        .await;
+        match handshake {
+            Ok(msg) => checks.push(check_result("openuds handshake", true, msg)),
+            Err(msg) => checks.push(check_result("openuds handshake", false, msg)),
         }
     } else {
-        checks.push(check_result("openuds socket", false, format!("missing: {}", openuds_path.display())));
+        checks.push(check_result(
+            "openuds handshake",
+            false,
+            format!(
+                "missing: {}\nPMP server_config.yml:\nopenuds:\n  enabled: true\n  socket_path: \"{}\"\n  auth_token: \"\"\n  max_connections: 4\n  event_buffer_size: 1024\n  heartbeat_interval_secs: 60",
+                openuds_path.display(), openuds_path.display()
+            ),
+        ));
     }
 
     // 5. capabilities (configured set)
@@ -394,8 +436,19 @@ fn run_config_check(args: &[String]) -> ExitCode {
 
 // ── root reset-password ────────────────────────────────────────
 
-fn run_root_reset() -> ExitCode {
-    // 重置口令只连数据库，不碰 JWT/凭据密钥，故只读 PPB_DATABASE_URL。
+fn run_root_reset(args: &[String]) -> ExitCode {
+    let env_file = flag_value(args, "--env-file")
+        .map(PathBuf::from)
+        .or_else(|| {
+            let standard = PathBuf::from("/etc/ppb/ppb.env");
+            standard.exists().then_some(standard)
+        });
+    if let Some(path) = env_file {
+        if let Err(error) = load_env_file(&path) {
+            eprintln!("ppctl root reset-password: env file {}: {error}", path.display());
+            return ExitCode::FAILURE;
+        }
+    }
     let url = match env::var("PPB_DATABASE_URL") {
         Ok(u) if !u.is_empty() => u,
         _ => {
@@ -430,6 +483,29 @@ fn run_root_reset() -> ExitCode {
             }
         }
     })
+}
+
+fn load_env_file(path: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    for (line_number, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").unwrap_or(line);
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(format!("invalid assignment on line {}", line_number + 1));
+        };
+        let key = key.trim();
+        if key.is_empty() || !key.chars().all(|c| c == '_' || c.is_ascii_alphanumeric()) {
+            return Err(format!("invalid variable name on line {}", line_number + 1));
+        }
+        if env::var_os(key).is_none() {
+            let value = value.trim().trim_matches(|c| c == '\'' || c == '"');
+            env::set_var(key, value);
+        }
+    }
+    Ok(())
 }
 
 // ── update ─────────────────────────────────────────────────────

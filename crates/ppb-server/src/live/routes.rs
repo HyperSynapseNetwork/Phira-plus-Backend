@@ -1,4 +1,4 @@
-//! Live WebSocket route: `WSS /ws/v1/rooms/{room_uuid}/live`.
+//! Live WebSocket route: `WSS /ws/v1/rooms/{room_id}/live`.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
@@ -21,10 +21,10 @@ pub struct LiveWsParams {
     pub mode: Option<String>,
 }
 
-/// WSS /ws/v1/rooms/{room_uuid}/live
+/// WSS /ws/v1/rooms/{room_id}/live
 pub async fn live_ws(
     State(state): State<Arc<AppState>>,
-    Path(room_uuid): Path<String>,
+    Path(room_id): Path<String>,
     Query(params): Query<LiveWsParams>,
     ws: WebSocketUpgrade,
 ) -> Result<axum::response::Response, ApiError> {
@@ -32,10 +32,10 @@ pub async fn live_ws(
         Some("stable") => JitterMode::Stable,
         _ => JitterMode::LowLatency,
     };
-    Ok(ws.on_upgrade(move |socket| live_ws_task(socket, state, room_uuid, mode)))
+    Ok(ws.on_upgrade(move |socket| live_ws_task(socket, state, room_id, mode)))
 }
 
-async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String, mode: JitterMode) {
+async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_id: String, mode: JitterMode) {
     let (mut sink, mut stream) = socket.split();
     let mut rx = state.openuds.subscribe_stream_frames();
     let mut players: Option<BTreeSet<i64>> = None;
@@ -53,7 +53,7 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                     Ok(frame) => {
                         // The stream frame's `room` is the room id string; the WS
                         // path carries that identifier (see P-82 report note).
-                        let room_match = frame.room.as_deref() == Some(&room_uuid);
+                        let room_match = frame.room.as_deref() == Some(&room_id);
                         if !room_match {
                             continue;
                         }
@@ -90,15 +90,16 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
                                 continue;
                             }
                         }
-                        buffer.push(json!({
-                            "type": "stream",
-                            "stream": frame.stream,
+                        let event_type = if frame.stream == "judges" { "judges" } else { "touches" };
+                        let mut event = json!({
+                            "type": event_type,
                             "player": frame.user_id,
                             "sequence": frame.sequence,
                             "round": frame.round,
                             "timestamp": frame.timestamp,
-                            "frames": frame.frames,
-                        }));
+                        });
+                        event[if event_type == "judges" { "judges" } else { "frames" }] = frame.frames;
+                        buffer.push(event);
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         let _ = sink
@@ -111,9 +112,11 @@ async fn live_ws_task(socket: WebSocket, state: Arc<AppState>, room_uuid: String
             _ = interval.tick() => {
                 if !buffer.is_empty() {
                     let batch = std::mem::take(&mut buffer);
-                    let _ = sink
-                        .send(Message::text(json!({"type":"batch","frames":batch}).to_string()))
-                        .await;
+                    for event in batch {
+                        if sink.send(Message::text(event.to_string())).await.is_err() {
+                            return;
+                        }
+                    }
                 }
                 let _ = sink.send(Message::text(json!({"type":"heartbeat"}).to_string())).await;
             }

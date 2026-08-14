@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -20,6 +20,7 @@ use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
 use crate::commands::broker::{redact_args, CommandAudit, CommandTask};
 use crate::commands::repo as command_repo;
+use crate::error::extractors::{ApiJson, ApiPath, ApiQuery};
 #[allow(unused_imports)]
 use crate::error::{ApiError, ErrorCode, ErrorEnvelope};
 // `use crate::error::ErrorEnvelope` is referenced by utoipa path macros below.
@@ -30,10 +31,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/rooms", get(list_rooms))
         .route("/rooms/{room_id}", get(room_info))
         .route("/rooms/{room_id}/history", get(room_history))
-        .route("/rooms/{room_id}/chat-history", get(room_chat_history))
         .route("/rooms/{room_id}/chat", get(room_chat_history).post(send_chat))
         .route("/rooms/{room_id}/actions", post(room_action_body))
-        .route("/rooms/{room_id}/actions/{action}", post(room_action))
 }
 
 /// Admin room routes (permission-gated superset).
@@ -43,8 +42,6 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
         .route("/rooms/{room_id}", get(admin_room_info).delete(admin_close_room))
         .route("/rooms/{room_id}/actions", post(admin_room_action))
         .route("/rooms/actions/batch", post(admin_room_actions_batch))
-        .route("/rooms/{room_id}/banlist", get(room_banlist))
-        .route("/rooms/{room_id}/whitelist", get(room_whitelist))
 }
 
 // ── Public / host routes ───────────────────────────────────────
@@ -63,10 +60,12 @@ pub fn admin_routes() -> Router<Arc<AppState>> {
 pub async fn list_rooms(
     auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<RoomListParams>,
+    ApiQuery(params): ApiQuery<RoomListParams>,
 ) -> Result<Json<RoomListResponse>, ApiError> {
     let (page, page_num) = resolve_page(params.page, params.page_num)?;
-    let (rooms, total) = state.rooms.list().await.map_err(ApiError::from)?;
+    let (rooms, _) = state.rooms.list().await.map_err(ApiError::from)?;
+    let rooms = filter_room_items(rooms, &params);
+    let total = rooms.len() as i64;
     let my_phira = caller_phira_id_opt(&state, auth.0).await?;
     let items = paginate_room_items(rooms, page, page_num, my_phira);
     Ok(Json(RoomListResponse {
@@ -91,7 +90,7 @@ pub async fn list_rooms(
 pub async fn room_info(
     auth: crate::middleware::auth::OptionalAuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let mut result = state.rooms.info(&room_id).await.map_err(ApiError::from)?;
     let my_phira = caller_phira_id_opt(&state, auth.0).await?;
@@ -112,7 +111,7 @@ pub async fn room_info(
 )]
 pub async fn room_history(
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.rooms.history(&room_id).await.map_err(ApiError::from)?;
     Ok(Json(result))
@@ -131,7 +130,7 @@ pub async fn room_history(
 )]
 pub async fn room_chat_history(
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let result = state.rooms.chat_history(&room_id, None).await.map_err(ApiError::from)?;
     Ok(Json(result))
@@ -158,12 +157,15 @@ pub struct ChatSendBody {
 pub async fn send_chat(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
-    Json(body): Json<ChatSendBody>,
+    ApiPath(room_id): ApiPath<String>,
+    ApiJson(body): ApiJson<ChatSendBody>,
 ) -> Result<Json<Value>, ApiError> {
     let content = body.content.trim();
-    if content.is_empty() || content.chars().count() > 500 {
-        return Err(ApiError::validation("chat content must be 1..=500 chars"));
+    if content.is_empty() {
+        return Err(ApiError::new(ErrorCode::RoomChatEmpty, "room chat message is empty"));
+    }
+    if content.chars().count() > 500 {
+        return Err(ApiError::new(ErrorCode::RoomChatTooLong, "room chat message is too long"));
     }
     state
         .rate_limiter
@@ -207,19 +209,20 @@ pub async fn room_action_body(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(room_id): Path<String>,
-    Json(body): Json<RoomActionBody2>,
+    ApiPath(room_id): ApiPath<String>,
+    ApiJson(body): ApiJson<RoomActionBody2>,
 ) -> Result<axum::response::Response, ApiError> {
     execute_room_action(&state, &auth, &headers, &room_id, &body.action, body.args).await
 }
 
 /// POST /api/v1/rooms/{room_id}/actions/{action} — host-or-permission action.
+#[allow(dead_code)]
 async fn room_action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((room_id, action_id)): Path<(String, String)>,
-    Json(body): Json<RoomActionBody>,
+    ApiPath((room_id, action_id)): ApiPath<(String, String)>,
+    ApiJson(body): ApiJson<RoomActionBody>,
 ) -> Result<axum::response::Response, ApiError> {
     execute_room_action(&state, &auth, &headers, &room_id, &action_id, body.args).await
 }
@@ -239,6 +242,21 @@ async fn execute_room_action(
         .actions
         .get(action_id)
         .ok_or_else(|| ApiError::not_found("action"))?;
+    // Generic/scoped Action endpoints are not an alternate execution plane.
+    // Update actions belong to Jobs; raw PMP CLI belongs to CommandRun.
+    if crate::actions::registry::is_job_only_action(action.id) {
+        return Err(ApiError::new(
+            ErrorCode::LongRunningActionRequiresJob,
+            "long-running action requires the Job API",
+        ));
+    }
+    if action.id == "pmp.cli.execute" {
+        return Err(ApiError::new(
+            ErrorCode::ResourceConflict,
+            "raw PMP CLI requires the dedicated CommandRun endpoint",
+        ));
+    }
+
 
     // Merge room_id into args (host/resource checks need it).
     let mut args = body_args;
@@ -348,11 +366,13 @@ async fn execute_room_action(
 pub async fn admin_list_rooms(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Query(params): Query<RoomListParams>,
+    ApiQuery(params): ApiQuery<RoomListParams>,
 ) -> Result<Json<RoomListResponse>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:view").await?;
     let (page, page_num) = resolve_page(params.page, params.page_num)?;
-    let (rooms, total) = state.rooms.list().await.map_err(ApiError::from)?;
+    let (rooms, _) = state.rooms.list().await.map_err(ApiError::from)?;
+    let rooms = filter_room_items(rooms, &params);
+    let total = rooms.len() as i64;
     let items = paginate_room_items(rooms, page, page_num, None);
     Ok(Json(RoomListResponse {
         items,
@@ -370,6 +390,12 @@ pub struct RoomListParams {
     pub page: Option<i64>,
     #[serde(default, rename = "pageNum")]
     pub page_num: Option<i64>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub only_live: Option<bool>,
 }
 
 /// Paginated room list response (§22 `{items, total, page, pageNum}`).
@@ -412,7 +438,7 @@ pub struct CreateRoomBody {
 pub async fn admin_create_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<CreateRoomBody>,
+    ApiJson(body): ApiJson<CreateRoomBody>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:manage").await?;
     let result = state
@@ -437,7 +463,7 @@ pub async fn admin_create_room(
 pub async fn admin_room_info(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:view").await?;
     let result = state.rooms.info(&room_id).await.map_err(ApiError::from)?;
@@ -458,27 +484,29 @@ pub async fn admin_room_info(
 pub async fn admin_close_room(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:manage").await?;
     let result = state.rooms.close(&room_id).await.map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
+#[allow(dead_code)]
 async fn room_banlist(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:blacklist").await?;
     let result = state.rooms.banlist(&room_id).await.map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
+#[allow(dead_code)]
 async fn room_whitelist(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(room_id): Path<String>,
+    ApiPath(room_id): ApiPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     state.permissions.require(&state.db, &auth, "room:whitelist").await?;
     let result = state.rooms.whitelist(&room_id).await.map_err(ApiError::from)?;
@@ -509,13 +537,28 @@ pub async fn admin_room_action(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(room_id): Path<String>,
-    Json(body): Json<AdminRoomActionBody>,
+    ApiPath(room_id): ApiPath<String>,
+    ApiJson(body): ApiJson<AdminRoomActionBody>,
 ) -> Result<axum::response::Response, ApiError> {
     let action = state
         .actions
         .get(&body.action)
         .ok_or_else(|| ApiError::not_found("action"))?;
+    // Generic/scoped Action endpoints are not an alternate execution plane.
+    // Update actions belong to Jobs; raw PMP CLI belongs to CommandRun.
+    if crate::actions::registry::is_job_only_action(action.id) {
+        return Err(ApiError::new(
+            ErrorCode::LongRunningActionRequiresJob,
+            "long-running action requires the Job API",
+        ));
+    }
+    if action.id == "pmp.cli.execute" {
+        return Err(ApiError::new(
+            ErrorCode::ResourceConflict,
+            "raw PMP CLI requires the dedicated CommandRun endpoint",
+        ));
+    }
+
     let mut args = body.args;
     if args.get("room_id").is_none() {
         if let Value::Object(map) = &mut args {
@@ -599,12 +642,38 @@ pub async fn admin_room_action(
     }
 }
 
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct RoomBatchItemError {
+    pub code: ErrorCode,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct RoomBatchItemResult {
+    pub room_uuid: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<RoomBatchItemError>,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct RoomBatchResponse {
+    pub items: Vec<RoomBatchItemResult>,
+    pub succeeded: i64,
+    pub failed: i64,
+}
+
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RoomBatchBody {
     pub action: String,
     pub room_ids: Vec<String>,
     #[serde(default)]
     pub args: Value,
+    /// Validation-only preview. Kept compatible with older Panel payloads.
+    #[serde(default, alias = "preview")]
+    pub dry_run: bool,
 }
 
 /// POST /api/v1/admin/rooms/actions/batch — batch room action (kick/move/ban)
@@ -615,7 +684,7 @@ pub struct RoomBatchBody {
     operation_id = "admin_rooms_actions_batch_post",
     request_body = RoomBatchBody,
     responses(
-        (status = 200, description = "per-item results", body = serde_json::Value),
+        (status = 200, description = "per-item results", body = RoomBatchResponse),
         (status = 403, description = "permission denied", body = ErrorEnvelope),
     ),
     tag = "admin"
@@ -624,16 +693,35 @@ pub async fn admin_room_actions_batch(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<RoomBatchBody>,
-) -> Result<Json<Value>, ApiError> {
+    ApiJson(body): ApiJson<RoomBatchBody>,
+) -> Result<Json<RoomBatchResponse>, ApiError> {
     let action = state
         .actions
         .get(&body.action)
-        .ok_or_else(|| ApiError::not_found("action"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::RoomBatchActionUnsupported, "unsupported room batch action"))?;
     // Batch is limited to clearly safe room actions (design §18.3).
     if !matches!(action.id, "room.kick" | "room.force_move" | "room.ban" | "room.unban") {
-        return Err(ApiError::validation("batch only supports kick/move/ban"));
+        return Err(ApiError::new(ErrorCode::RoomBatchActionUnsupported, "unsupported room batch action"));
     }
+    if body.room_ids.is_empty() {
+        return Err(ApiError::new(
+            ErrorCode::RoomBatchTargetRequired,
+            "room batch requires at least one room",
+        ));
+    }
+    let phira_id = body
+        .args
+        .get("phira_id")
+        .or_else(|| body.args.get("user_id"))
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            ApiError::new(
+                ErrorCode::RoomBatchTargetRequired,
+                "room batch requires args.phira_id",
+            )
+        })?;
+
     state
         .permissions
         .require(&state.db, &auth, action.permission)
@@ -647,14 +735,62 @@ pub async fn admin_room_actions_batch(
         check_reauth_header(&state, &auth, &headers, risk)?;
     }
 
-    let mut results: Vec<Value> = Vec::new();
+    let mut results: Vec<RoomBatchItemResult> = Vec::new();
     let mut succeeded = 0i64;
     let mut failed = 0i64;
     for room_id in &body.room_ids {
         let mut args = body.args.clone();
         if let Value::Object(map) = &mut args {
             map.insert("room_id".to_string(), json!(room_id));
+            if map.get("user_id").is_none() {
+                map.insert("phira_id".to_string(), json!(phira_id));
+            }
         }
+
+        let room = match state.rooms.info(room_id).await {
+            Ok(room) => room,
+            Err(_) => {
+                failed += 1;
+                results.push(RoomBatchItemResult {
+                    room_uuid: room_id.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(RoomBatchItemError {
+                        code: ErrorCode::RoomNotFound,
+                        message: "room not found".to_string(),
+                    }),
+                });
+                continue;
+            }
+        };
+        if action.id == "room.kick" && !room_contains_player(&room, phira_id) {
+            failed += 1;
+            results.push(RoomBatchItemResult {
+                room_uuid: room_id.clone(),
+                ok: false,
+                result: None,
+                error: Some(RoomBatchItemError {
+                    code: ErrorCode::RoomUserNotPresent,
+                    message: "target player is not present in room".to_string(),
+                }),
+            });
+            continue;
+        }
+        if body.dry_run {
+            succeeded += 1;
+            results.push(RoomBatchItemResult {
+                room_uuid: room_id.clone(),
+                ok: true,
+                result: Some(json!({
+                    "dry_run": true,
+                    "action": action.id,
+                    "phira_id": phira_id,
+                })),
+                error: None,
+            });
+            continue;
+        }
+
         let db = state.require_db()?;
         let queue_key = state.actions.resolve_queue_key(action, &args);
         let command_id = Uuid::new_v4();
@@ -694,15 +830,66 @@ pub async fn admin_room_actions_batch(
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
             Ok(Ok(Ok(v))) => {
                 succeeded += 1;
-                results.push(json!({ "room_id": room_id, "ok": true, "result": v }));
+                results.push(RoomBatchItemResult {
+                    room_uuid: room_id.clone(),
+                    ok: true,
+                    result: Some(v),
+                    error: None,
+                });
             }
-            Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => {
+            Ok(Ok(Err(error))) => {
+                tracing::warn!(%command_id, room_id, error = %error, "room batch command failed");
                 failed += 1;
-                results.push(json!({ "room_id": room_id, "ok": false, "error": "command failed" }));
+                results.push(RoomBatchItemResult {
+                    room_uuid: room_id.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(RoomBatchItemError {
+                        code: ErrorCode::PmpCommandFailed,
+                        message: "command failed".to_string(),
+                    }),
+                });
+            }
+            Ok(Err(_)) => {
+                failed += 1;
+                results.push(RoomBatchItemResult {
+                    room_uuid: room_id.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(RoomBatchItemError {
+                        code: ErrorCode::PmpCommandFailed,
+                        message: "command completion channel closed".to_string(),
+                    }),
+                });
+            }
+            Err(_) => {
+                failed += 1;
+                results.push(RoomBatchItemResult {
+                    room_uuid: room_id.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(RoomBatchItemError {
+                        code: ErrorCode::PmpCommandTimeout,
+                        message: "command timed out".to_string(),
+                    }),
+                });
             }
         }
     }
-    Ok(Json(json!({ "items": results, "succeeded": succeeded, "failed": failed })))
+    Ok(Json(RoomBatchResponse { items: results, succeeded, failed }))
+}
+
+fn room_contains_player(room: &Value, phira_id: i64) -> bool {
+    room.get("players")
+        .and_then(Value::as_array)
+        .map(|players| {
+            players.iter().any(|player| {
+                ["phira_id", "user_id", "id"]
+                    .iter()
+                    .any(|key| player.get(*key).and_then(Value::as_i64) == Some(phira_id))
+            })
+        })
+        .unwrap_or(false)
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -711,7 +898,7 @@ async fn caller_phira_id(state: &Arc<AppState>, auth: &AuthPrincipal) -> Result<
     let db = state.require_db()?;
     let user = crate::users::repo::find_by_id(db, auth.sub)
         .await?
-        .ok_or_else(|| ApiError::not_found("user"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::UserNotFound, "user not found"))?;
     Ok(user.phira_id as i32)
 }
 
@@ -787,16 +974,56 @@ fn paginate_room_items(
     items
 }
 
+fn filter_room_items(rooms: Vec<Value>, params: &RoomListParams) -> Vec<Value> {
+    let search = params.search.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let state = params.state.as_deref().map(normalize_state_filter);
+    rooms
+        .into_iter()
+        .filter(|room| {
+            if params.only_live.unwrap_or(false) && room.get("live").and_then(Value::as_bool) != Some(true) {
+                return false;
+            }
+            if let Some(expected) = state.as_deref() {
+                let actual = room.get("state").and_then(Value::as_str).map(normalize_state_filter);
+                if actual.as_deref() != Some(expected) {
+                    return false;
+                }
+            }
+            if let Some(needle) = search {
+                let needle = needle.to_lowercase();
+                let matches = ["room_id", "name", "uuid", "chart_name"]
+                    .iter()
+                    .filter_map(|key| room.get(key).and_then(Value::as_str))
+                    .any(|value| value.to_lowercase().contains(&needle));
+                if !matches {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect()
+}
+
+fn normalize_state_filter(value: &str) -> String {
+    value.chars().filter(|ch| ch.is_ascii_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
 /// Map a PMP room object onto the `AdminRoom` wire contract (idempotent):
-/// `room_id`→`room_uuid`, `players`/`player_count`/`users`→`members`,
+/// `uuid`→`room_uuid`, `players`/`player_count`/`users`→`members`,
 /// `monitor_count`/`monitors`→`spectators`, `host.user_id`/`host.id`→`host_id`.
 /// Any unmapped PMP field is preserved with its original name.
 fn normalize_room(room: &mut Value) {
     let Value::Object(map) = room else { return };
 
-    if !map.contains_key("room_uuid") {
+    if !map.contains_key("name") {
         if let Some(room_id) = map.get("room_id").cloned() {
-            map.insert("room_uuid".to_string(), room_id);
+            map.insert("name".to_string(), room_id);
+        }
+    }
+
+    if !map.contains_key("room_uuid") {
+        if let Some(uuid) = map.get("uuid").cloned().or_else(|| map.get("room_id").cloned()) {
+            map.insert("room_uuid".to_string(), uuid);
         }
     }
 
@@ -829,6 +1056,31 @@ fn normalize_room(room: &mut Value) {
             }
         }
     }
+
+    if !map.contains_key("current_chart") {
+        let chart_id = map.get("chart_id").cloned();
+        let chart_name = map.get("chart_name").cloned();
+        if chart_id.as_ref().is_some_and(|value| !value.is_null())
+            || chart_name.as_ref().is_some_and(|value| !value.is_null())
+        {
+            map.insert(
+                "current_chart".to_string(),
+                json!({ "id": chart_id, "name": chart_name }),
+            );
+        }
+    }
+
+    if !map.contains_key("max_players") {
+        if let Some(max_users) = map.get("max_users").cloned() {
+            map.insert("max_players".to_string(), max_users);
+        }
+    }
+
+    if !map.contains_key("persistent") {
+        if let Some(persistent) = map.get("persistent_empty").cloned() {
+            map.insert("persistent".to_string(), persistent);
+        }
+    }
 }
 
 /// A member/spectator count that PMP may send as a number or as an array.
@@ -849,7 +1101,7 @@ async fn verify_real_host(
     let room_id = args
         .get("room_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| ApiError::validation("room_id required for host action"))?;
+        .ok_or_else(|| ApiError::new(ErrorCode::RoomIdRequired, "room_id required for host action"))?;
     let phira_id = caller_phira_id(state, auth).await?;
     let host = state.rooms.host_id(room_id).await.map_err(ApiError::from)?;
     Ok(host == Some(phira_id))

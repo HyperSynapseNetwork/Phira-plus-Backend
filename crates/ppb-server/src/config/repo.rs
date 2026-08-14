@@ -163,7 +163,7 @@ pub async fn mark_restored(db: &sqlx::PgPool, id: Uuid) -> Result<(), ApiError> 
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "not found")
     } else {
         tracing::error!(error = %e, "config db error");
         ApiError::internal()

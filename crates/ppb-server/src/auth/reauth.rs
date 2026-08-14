@@ -73,7 +73,7 @@ pub fn encode_reauth(claims: &ReauthClaims, secret: &str) -> Result<String, ApiE
         claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reauth encode: {e}")))
+    .map_err(|error| { tracing::error!(%error, "reauth token encode failed"); ApiError::internal() })
 }
 
 /// Decode and validate a reauth context for the given session.
@@ -84,17 +84,17 @@ pub fn decode_reauth(token: &str, secret: &str, expected_sid: Uuid) -> Result<Re
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     )
-    .map_err(|_| ApiError::new(ErrorCode::Session, "invalid reauth context"))?
+    .map_err(|_| ApiError::new(ErrorCode::SessionExpired, "invalid reauth context"))?
     .claims;
 
     if claims.purpose != "reauth" {
-        return Err(ApiError::new(ErrorCode::Session, "not a reauth context"));
+        return Err(ApiError::new(ErrorCode::SessionExpired, "not a reauth context"));
     }
     if claims.sid != expected_sid {
-        return Err(ApiError::new(ErrorCode::Session, "reauth context bound to another session"));
+        return Err(ApiError::new(ErrorCode::SessionExpired, "reauth context bound to another session"));
     }
     if Utc::now().timestamp() >= claims.exp {
-        return Err(ApiError::new(ErrorCode::Session, "reauth context expired"));
+        return Err(ApiError::new(ErrorCode::SessionExpired, "reauth context expired"));
     }
     Ok(claims)
 }

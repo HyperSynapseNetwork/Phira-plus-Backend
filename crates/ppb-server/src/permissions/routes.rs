@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -16,7 +16,7 @@ use crate::app::AppState;
 use crate::auth::reauth::ReauthRisk;
 use crate::auth::routes::check_reauth_header;
 use crate::auth::types::AuthPrincipal;
-#[allow(unused_imports)]
+use crate::error::extractors::{ApiJson, ApiPath};
 use crate::error::{ApiError, ErrorEnvelope};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -24,14 +24,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/permissions/manifest", get(manifest))
         .route("/groups", get(list).post(create))
         .route("/groups/{id}", get(detail).patch(patch_group).delete(delete_group))
-        .route("/groups/{id}/set-default", post(set_default))
-        .route("/groups/{id}/permissions", post(add_permission).put(replace_permissions))
-        .route(
-            "/groups/{id}/permissions/{permission}",
-            delete(remove_permission),
-        )
-        .route("/groups/{id}/members", post(add_member).put(replace_members))
-        .route("/groups/{id}/members/{user_id}", delete(remove_member))
+        .route("/groups/{id}/permissions", axum::routing::put(replace_permissions))
+        .route("/groups/{id}/members", axum::routing::put(replace_members))
 }
 
 /// GET /api/v1/admin/permissions/manifest
@@ -128,7 +122,7 @@ pub async fn create(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<CreateGroupBody>,
+    ApiJson(body): ApiJson<CreateGroupBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state
         .permissions
@@ -158,7 +152,7 @@ pub async fn create(
 pub async fn detail(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(group_id): Path<Uuid>,
+    ApiPath(group_id): ApiPath<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state
         .permissions
@@ -178,11 +172,12 @@ pub async fn detail(
 }
 
 /// POST /api/v1/admin/groups/{id}/set-default — switch the default group.
+#[allow(dead_code)]
 async fn set_default(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
+    ApiPath(group_id): ApiPath<Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -223,8 +218,8 @@ pub async fn patch_group(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
-    Json(body): Json<PatchGroupBody>,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<PatchGroupBody>,
 ) -> Result<Json<Group>, ApiError> {
     state
         .permissions
@@ -260,7 +255,7 @@ pub async fn patch_group(
 pub async fn delete_group(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
-    Path(group_id): Path<Uuid>,
+    ApiPath(group_id): ApiPath<Uuid>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -276,12 +271,13 @@ pub struct PermissionBody {
     pub permission: String,
 }
 
+#[allow(dead_code)]
 async fn add_permission(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
-    Json(body): Json<PermissionBody>,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<PermissionBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -293,11 +289,12 @@ async fn add_permission(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+#[allow(dead_code)]
 async fn remove_permission(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((group_id, permission)): Path<(Uuid, String)>,
+    ApiPath((group_id, permission)): ApiPath<(Uuid, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -340,8 +337,8 @@ pub async fn replace_members(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
-    Json(body): Json<ReplaceMembersBody>,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<ReplaceMembersBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -369,8 +366,8 @@ pub async fn replace_permissions(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
-    Json(body): Json<ReplacePermissionsBody>,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<ReplacePermissionsBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -382,12 +379,13 @@ pub async fn replace_permissions(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+#[allow(dead_code)]
 async fn add_member(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(group_id): Path<Uuid>,
-    Json(body): Json<MemberBody>,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(body): ApiJson<MemberBody>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions
@@ -399,11 +397,12 @@ async fn add_member(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+#[allow(dead_code)]
 async fn remove_member(
     auth: AuthPrincipal,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+    ApiPath((group_id, user_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     state
         .permissions

@@ -1,0 +1,18 @@
+{
+  "PHIRA_AUTH_FAILED": "Phira 账号或密码无效。",
+  "AUTH_REQUIRED": "需要重新登录。",
+  "SESSION_EXPIRED": "会话已过期，请重新登录。",
+  "PHIRA_API_UNAVAILABLE": "Phira 服务暂时不可用，请稍后重试。",
+  "PHIRA_REAUTH_REQUIRED": "需要重新验证 Phira 身份。",
+  "RATE_LIMITED": "请求过于频繁，请稍后重试。",
+  "VALIDATION_FAILED": "登录信息校验未通过。",
+  "GITHUB_IDENTITY_NOT_BOUND": "该 GitHub 身份尚未绑定 Phira+ 账户。",
+  "GITHUB_OAUTH_NOT_CONFIGURED": "当前部署未配置 GitHub 登录。",
+  "AUTH_LEGAL_CONSENT_REQUIRED": "必须明确同意当前版本的用户协议与隐私政策。",
+  "AUTH_LEGAL_DOCUMENTS_UNAVAILABLE": "当前部署尚未配置已批准的协议版本，公开登录已停用。",
+  "GITHUB_OAUTH_FAILED": "GitHub 登录验证失败，请重试。",
+  "GITHUB_API_UNAVAILABLE": "GitHub 服务暂时不可用，请稍后重试。",
+  "GITHUB_OAUTH_STATE_INVALID": "GitHub 登录状态已失效，请重新开始登录。",
+  "INTERNAL_ERROR": "登录服务暂时无法完成请求，请稍后重试。",
+  "RESOURCE_CONFLICT": "该 GitHub 身份已绑定到其他账户。"
+}

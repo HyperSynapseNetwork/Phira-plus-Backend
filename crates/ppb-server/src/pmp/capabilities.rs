@@ -1,7 +1,8 @@
 //! PMP capability detection.
 //!
 //! PMP 1.0.38 verified extended capability set (audit + Owner confirmation):
-//! `persist.touches, persist.judges, room.chat_send, stream.touches, stream.judges`.
+//! `persist.touches, persist.judges, persist.rounds, room.chat_send,
+//! stream.touches, stream.judges`.
 //! Capability detection is preferred over hardcoding version in business branches
 //! (design §11.2, contract §9). Missing capability → `CAPABILITY_NOT_SUPPORTED`.
 
@@ -11,6 +12,7 @@ use std::collections::HashSet;
 pub const PMP_1_0_38_CAPABILITIES: &[&str] = &[
     "persist.touches",
     "persist.judges",
+    "persist.rounds",
     "room.chat_send",
     "stream.touches",
     "stream.judges",
@@ -57,7 +59,8 @@ mod tests {
         let caps = capabilities_for_version("1.0.38");
         assert!(caps.contains(&"persist.touches".to_string()));
         assert!(caps.contains(&"stream.judges".to_string()));
-        assert_eq!(caps.len(), 5);
+        assert!(caps.contains(&"persist.rounds".to_string()));
+        assert_eq!(caps.len(), 6);
     }
 
     #[test]

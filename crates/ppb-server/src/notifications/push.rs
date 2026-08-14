@@ -346,7 +346,7 @@ impl PushService {
 
 fn db_err(e: sqlx::Error) -> ApiError {
     if matches!(&e, sqlx::Error::RowNotFound) {
-        ApiError::new(ErrorCode::NotFound, "push endpoint not found")
+        ApiError::new(ErrorCode::ResourceNotFound, "push endpoint not found")
     } else {
         tracing::error!(error = %e, "push db error");
         ApiError::internal()

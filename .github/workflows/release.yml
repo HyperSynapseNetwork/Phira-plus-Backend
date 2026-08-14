@@ -62,12 +62,37 @@ jobs:
           cache-on-failure: true
       - name: Workspace version consistency
         run: python scripts/sync-workspace-version.py --check
+      - name: Exact tag contract, provider-surface and config-security gates
+        run: |
+          python3 scripts/check-error-contract.py
+          python3 scripts/check-auth-gateway-contract.py
+          python3 scripts/check-auth-rate-limit.py
+          python3 scripts/check-rest-extractors.py --self-test
+          python3 scripts/check-rest-extractors.py
+          python3 scripts/check-route-surface.py --self-test
+          python3 scripts/check-route-surface.py
+          python3 scripts/check-realtime-contract.py --self-test
+          python3 scripts/check-realtime-contract.py
+          python3 scripts/check-config-security.py --self-test
+          python3 scripts/check-config-security.py
+          python3 scripts/verify-contract-bundle.py
+      - name: Current documentation truthfulness
+        run: python3 scripts/check-current-docs.py
+
       - name: Check
         run: cargo check --locked --workspace --all-targets --all-features
       - name: Tests
         run: cargo test --locked --workspace --all-features
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Regenerate exact contract and reject stale committed artifacts
+        run: |
+          bash scripts/gen-types.sh
+          python3 scripts/check-route-surface.py
+          python3 scripts/check-realtime-contract.py
+          python3 scripts/check-config-security.py
+          python3 scripts/verify-contract-bundle.py
+          git diff --exit-code -- contracts/openapi.json contracts/types.ts contracts/error-codes.json contracts/contract-version.json
 
   build:
     needs: [version, quality-gate]
