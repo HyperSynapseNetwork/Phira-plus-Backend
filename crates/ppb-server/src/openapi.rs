@@ -24,16 +24,20 @@ use crate::config::repo::ConfigSnapshot;
 use crate::config::routes::{
     ConfigDescriptorsResponse, ConfigDiffChange, ConfigDiffResponse,
     ConfigRollbackResponse, ConfigSaveResponse, ConfigSnapshotsResponse, ConfigValidateResponse,
-    ConfigValidationError, ConfigValuesBody, ConfigValuesResponse, RollbackBody, PpConfigBody2,
-    PpfBuildConfigResponse, PpfBuildConfigSaveResponse,
+    ConfigValidationError, ConfigValidationIssueCode, ConfigValuesBody, ConfigValuesResponse,
+    RollbackBody, PpConfigBody2, PpfBuildConfigResponse, PpfBuildConfigSaveResponse,
 };
-use crate::error::{ErrorBody, ErrorCode, ErrorEnvelope};
+use crate::error::{ErrorBody, ErrorCode, ErrorDetails, ErrorEnvelope};
 use crate::deployment::{DeploymentCapabilities, StartupArgSpec};
-use crate::jobs::routes::{CreateJobBody, JobListResponse};
+use crate::jobs::routes::{
+    AdminTaskCompleteResponse, AdminTaskItem, AdminTaskListResponse, CreateJobBody,
+    CreateJobResponse, JobCancelResponse, JobListResponse, JobRetryResponse,
+};
 use crate::jobs::Job;
 use crate::audit::model::AuditEvent;
 use crate::audit::routes::AuditListResponse;
 use crate::preferences::UserPreference;
+use crate::replay::ReplayOverride;
 use crate::logs::routes::{LogInputBody, LogListResponse, TranslateParams, TranslateResponse};
 use crate::logs::translator::TranslatedError;
 use crate::logs::LogEntry;
