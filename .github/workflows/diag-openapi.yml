@@ -1,0 +1,21 @@
+name: diag-openapi
+on:
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Dump OpenAPI from Rust
+        run: |
+          cargo run --quiet --bin ppb-server -- --openapi > /tmp/ppb-openapi.json
+          test -s /tmp/ppb-openapi.json
+          echo "size: $(wc -c < /tmp/ppb-openapi.json)"
+          grep -c '"ErrorDetails"' /tmp/ppb-openapi.json || echo "ErrorDetails NOT in dump"
+          grep -c '"RoomBatchResponse"' /tmp/ppb-openapi.json || echo "RoomBatchResponse NOT in dump"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ppb-openapi-dump
+          path: /tmp/ppb-openapi.json
+          if-no-files-found: error
