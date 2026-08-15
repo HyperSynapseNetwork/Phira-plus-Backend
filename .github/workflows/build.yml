@@ -181,7 +181,10 @@ jobs:
           python3 scripts/check-realtime-contract.py
           python3 scripts/check-config-security.py
           python3 scripts/verify-contract-bundle.py
-          if ! git diff --quiet -- contracts/types.ts contracts/openapi.json contracts/error-codes.json contracts/contract-version.json; then
+          # `contract-version.json.source_commit` is a moving per-commit marker
+          # (GITHUB_SHA of the auto-patched build_ref) and can never match a
+          # human-committed value — content is verified by verify-contract-bundle.py.
+          if ! git diff --quiet -- contracts/types.ts contracts/openapi.json contracts/error-codes.json; then
             echo "Committed contract artifacts are stale for this exact source commit." >&2
             git diff -- contracts/types.ts contracts/openapi.json contracts/error-codes.json contracts/contract-version.json
             exit 1
