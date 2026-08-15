@@ -39,8 +39,6 @@ impl PhiraGateway {
     pub fn new(base_url: &str, timeout_ms: u64, ttl_secs: i64, rate_per_minute: u32) -> Result<Self, PhiraError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
-            // Fixed known endpoints; do not follow redirects (see PhiraClient).
-            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
         Ok(Self {

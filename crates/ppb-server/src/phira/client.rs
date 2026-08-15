@@ -115,12 +115,30 @@ pub(crate) async fn sleep_backoff(
     Ok(())
 }
 
+/// Maximum manual redirect hops (Phira 偶发 302 → api.phira.cn).
+const MAX_REDIRECTS: u32 = 5;
+
+/// Resolve a `Location` header into an absolute URL (Phira redirects are
+/// cross-domain, e.g. `phira.5wyxi.com` → `api.phira.cn`).
+fn redirect_location(base_url: &str, resp: &reqwest::Response) -> Result<String, PhiraError> {
+    let location = resp
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| PhiraError::Api("redirect without Location".to_string()))?;
+    if location.starts_with("http://") || location.starts_with("https://") {
+        Ok(location.to_string())
+    } else {
+        Ok(format!("{}{}", base_url.trim_end_matches('/'), location))
+    }
+}
+
 impl PhiraClient {
     pub fn new(base_url: &str, timeout_ms: u64) -> Result<Self, ApiError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
-            // Phira endpoints are fixed/known; a 3xx would silently downgrade
-            // POST /login to GET and drop the body, so disable redirects.
+            // Phira 偶发 302 → api.phira.cn；reqwest 自动跟随时会把 POST 降级成
+            // GET 丢掉 body，所以禁用自动跟随，由 login_post/me 手动重定向保持方法。
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|error| { tracing::error!(%error, "Phira HTTP client build failed"); ApiError::internal() })?;
@@ -131,13 +149,23 @@ impl PhiraClient {
     }
 
     async fn login_post(&self, body: serde_json::Value) -> Result<PhiraLoginResponse, PhiraError> {
-        let url = format!("{}/login", self.base_url);
+        let mut url = format!("{}/login", self.base_url);
         let deadline = std::time::Instant::now() + Duration::from_millis(RETRY_TOTAL_BUDGET_MS);
         let mut attempt = 0u32;
+        let mut redirects = 0u32;
         loop {
             match self.http.post(&url).json(&body).send().await {
                 Ok(resp) => {
                     let status = resp.status();
+                    // 手动跟随重定向，保持 POST body（Phira 偶发 302 → api.phira.cn）。
+                    if status.is_redirection() {
+                        if redirects >= MAX_REDIRECTS {
+                            return Err(PhiraError::Api("login: too many redirects".to_string()));
+                        }
+                        url = redirect_location(&self.base_url, &resp)?;
+                        redirects += 1;
+                        continue;
+                    }
                     if status.is_server_error() && attempt < RETRY_MAX_ATTEMPTS {
                         attempt += 1;
                         sleep_backoff(attempt, deadline).await?;
@@ -205,13 +233,22 @@ impl PhiraApi for PhiraClient {
     }
 
     async fn me(&self, access_token: &str) -> Result<PhiraMe, PhiraError> {
-        let url = format!("{}/me", self.base_url);
+        let mut url = format!("{}/me", self.base_url);
         let deadline = std::time::Instant::now() + Duration::from_millis(RETRY_TOTAL_BUDGET_MS);
         let mut attempt = 0u32;
+        let mut redirects = 0u32;
         loop {
             match self.http.get(&url).bearer_auth(access_token).send().await {
                 Ok(resp) => {
                     let status = resp.status();
+                    if status.is_redirection() {
+                        if redirects >= MAX_REDIRECTS {
+                            return Err(PhiraError::Api("/me: too many redirects".to_string()));
+                        }
+                        url = redirect_location(&self.base_url, &resp)?;
+                        redirects += 1;
+                        continue;
+                    }
                     if status.is_server_error() && attempt < RETRY_MAX_ATTEMPTS {
                         attempt += 1;
                         sleep_backoff(attempt, deadline).await?;
