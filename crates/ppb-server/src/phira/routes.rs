@@ -62,20 +62,27 @@ pub async fn chart_list(
     State(state): State<Arc<AppState>>,
     ApiQuery(params): ApiQuery<ChartListParams>,
 ) -> Result<Json<Value>, ApiError> {
-    let mut result = state
-        .phira_gateway
-        .chart_list(
-            params.page.unwrap_or(1),
-            params.page_num.unwrap_or(20).min(30),
-            params.search.as_deref(),
-            params.chart_type,
-            params.rating_min,
-            params.rating_max,
-            params.tags.as_deref(),
-            params.order.as_deref(),
-        )
-        .await
-        .map_err(phira_gateway_error)?;
+    let page_num = params.page_num.unwrap_or(20).min(30);
+    // `order=popular` maps to Phira's dedicated /chart/popular endpoint — the
+    // /chart list endpoint rejects it with 400 (contract §15.1).
+    let mut result = if params.order.as_deref() == Some("popular") {
+        state.phira_gateway.chart_popular(page_num).await
+    } else {
+        state
+            .phira_gateway
+            .chart_list(
+                params.page.unwrap_or(1),
+                page_num,
+                params.search.as_deref(),
+                params.chart_type,
+                params.rating_min,
+                params.rating_max,
+                params.tags.as_deref(),
+                params.order.as_deref(),
+            )
+            .await
+    }
+    .map_err(phira_gateway_error)?;
     // Contract §18: chart list response always contains `total`.
     if result.get("total").is_none() {
         if let Some(map) = result.as_object_mut() {
