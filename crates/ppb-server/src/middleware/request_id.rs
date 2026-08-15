@@ -79,6 +79,10 @@ async fn normalize_error_response(response: Response, request_id: &str) -> Respo
         if envelope.error.code == ErrorCode::InternalError {
             envelope.error.message = "internal server error".to_string();
             envelope.error.details = Default::default();
+        } else {
+            // Non-internal REST errors are logged at WARN so a failing request
+            // (e.g. login) can be correlated with its error code + request id.
+            tracing::warn!(request_id, code = %envelope.error.code, "REST error response");
         }
         serde_json::to_vec(&envelope).unwrap_or_else(|_| fallback_internal(request_id))
     } else {
