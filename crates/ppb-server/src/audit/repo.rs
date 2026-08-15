@@ -124,7 +124,9 @@ pub async fn get(db: &sqlx::PgPool, id: uuid::Uuid) -> Result<Option<AuditEvent>
 }
 
 fn next_placeholder(sql: &str) -> usize {
-    sql.matches('$').count() + 1
+    // Called *after* `$` is already pushed, so the count of `$` is the index
+    // of the placeholder we're about to append (1-based) — no `+1` needed.
+    sql.matches('$').count()
 }
 
 fn db_err(e: sqlx::Error) -> ApiError {
