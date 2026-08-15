@@ -21,7 +21,7 @@ visit_count = 0
 # Credentialed CORS exact-origin allowlist. '*' is forbidden when credentials=true.
 [cors]
 credentials = true
-allowed_origins = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com"]
+allowed_origins = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com", "https://beta.htadiy.com"]
 # Local development origins (never enabled in production by config validation):
 dev_origins = ["http://localhost:3000", "http://localhost:5173"]
 

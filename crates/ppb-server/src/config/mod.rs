@@ -89,6 +89,7 @@ impl Default for CorsConfig {
             allowed_origins: vec![
                 "https://phira.htadiy.com".to_string(),
                 "https://panel-phira.htadiy.com".to_string(),
+                "https://beta.htadiy.com".to_string(),
             ],
             dev_origins: vec![
                 "http://localhost:3000".to_string(),
