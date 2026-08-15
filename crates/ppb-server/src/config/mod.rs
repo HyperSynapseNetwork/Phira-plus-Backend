@@ -283,6 +283,7 @@ impl Default for SecurityConfig {
             return_to_allowlist: vec![
                 "https://phira.htadiy.com".to_string(),
                 "https://panel-phira.htadiy.com".to_string(),
+                "https://beta.htadiy.com".to_string(),
             ],
         }
     }

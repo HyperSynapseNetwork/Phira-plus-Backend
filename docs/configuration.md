@@ -39,7 +39,7 @@ DB 覆盖（`ppb_runtime_overrides`，存于 PostgreSQL）合并到启动 TOML �
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `credentials` | `true` | 凭据 CORS；为 `true` 时禁止 `*` |
-| `allowed_origins` | `[phira, panel]` | 精确来源白名单 |
+| `allowed_origins` | `[phira, panel, beta]` | 精确来源白名单 |
 | `dev_origins` | `[localhost:3000, localhost:5173]` | 本地开发来源 |
 
 ## `[session]`
@@ -127,7 +127,7 @@ Golden bootstrap：先 Root-only health/doctor，再配置 `[legal]`，再创建
 
 ## `[security]`
 
-`return_to_allowlist`：OAuth return_to 白名单（防 open redirect），默认 `[phira, panel]`。
+`return_to_allowlist`：OAuth return_to 白名单（防 open redirect），默认 `[phira, panel, beta]`。
 
 ## `[github]`
 

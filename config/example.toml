@@ -85,7 +85,7 @@ retention_days = 30
 
 # return_to allowlist (anti open-redirect)
 [security]
-return_to_allowlist = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com"]
+return_to_allowlist = ["https://phira.htadiy.com", "https://panel-phira.htadiy.com", "https://beta.htadiy.com"]
 
 [github]
 # client_id lives in deployment env. Callback URL is fixed by contract.

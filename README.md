@@ -104,8 +104,9 @@ sudo PPB_NONINTERACTIVE=1 \
 
 - PostgreSQL 16+（PPB **不**直连 PMP 的 PostgreSQL，使用自己的库）
 - PMP（[phira-mp-plus](https://github.com/HyperSynapseNetwork/Phira-mp-plus)）已运行，OpenUDS Unix socket 可用
-- 三个固定域名（自部署时可替换，见 `config/example.toml`）：
+- 固定域名（自部署时可替换，见 `config/example.toml`）：
   - `api-phira.htadiy.com`（PPB）· `phira.htadiy.com`（PPF）· `panel-phira.htadiy.com`（Panel）
+  - `beta.htadiy.com`（PPF beta 预览，同 CORS / return_to 白名单）
 
 ### Docker 部署
 
