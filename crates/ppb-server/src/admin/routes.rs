@@ -18,7 +18,7 @@ use crate::auth::routes as auth_routes;
 use crate::auth::types::AuthPrincipal;
 #[allow(unused_imports)]
 use crate::deployment::DeploymentCapabilities;
-use crate::error::{ApiError, ErrorEnvelope};
+use crate::error::ApiError;
 use crate::permissions::routes as permission_routes;
 use crate::pmp::events::{PpbEvent, ReplayResult};
 
