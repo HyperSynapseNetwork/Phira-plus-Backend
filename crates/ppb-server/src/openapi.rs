@@ -57,7 +57,7 @@ use crate::preferences::routes::UpdatePreferencesBody;
 use crate::social::routes::{FriendRequestSendResponse, SendRequestBody, RoomInviteBody, RoomInviteResponse};
 use crate::rooms::routes::{
     AdminRoomActionBody, ChatSendBody, CreateRoomBody, RoomActionBody2, RoomBatchBody,
-    RoomBatchResponse, RoomListResponse,
+    RoomBatchItemResult, RoomBatchResponse, RoomListResponse,
 };
 use crate::users::model::{
     AdminUserItem, GroupRef, SessionItem, UserDetailResponse, UserListResponse,
@@ -510,6 +510,7 @@ pub struct RoomActionRequest {
             ConfigValidationIssueCode,
             ReplayOverride,
             RoomBatchResponse,
+            RoomBatchItemResult,
             NotificationActionResult,
             NotificationInputResponse,
             FriendRequestSendResponse,
