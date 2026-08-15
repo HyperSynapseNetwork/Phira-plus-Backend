@@ -67,12 +67,21 @@ pub struct ChartNote {
 
 /// Build the bincode `(ChartInfo, Chart)` blob from a chart file. Tries zip
 /// (`info.yml` + chart JSON) first, then a bare chart JSON.
+///
+/// NOTE: Phira serves charts in its native RPE/PEC/PGR/PBC formats, which this
+/// simplified `Chart` model does not yet parse. Until the viewer migrates to
+/// client-side parsing (prpr), surface a clear error instead of a misleading
+/// serde "chart parse" 502.
 pub fn build_chart_blob(bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
     if let Ok(blob) = build_from_zip(bytes) {
         return Ok(blob);
     }
-    let chart: Chart = serde_json::from_slice(bytes)
-        .map_err(|e| ApiError::new(ErrorCode::PhiraApiUnavailable, format!("chart parse: {e}")))?;
+    let chart: Chart = serde_json::from_slice(bytes).map_err(|_| {
+        ApiError::new(
+            ErrorCode::PhiraApiUnavailable,
+            "chart format not supported (native RPE/PEC/PGR/PBC parsing pending client-side migration)",
+        )
+    })?;
     if chart.lines.is_empty() {
         return Err(ApiError::new(ErrorCode::PhiraApiUnavailable, "chart has no notes"));
     }
