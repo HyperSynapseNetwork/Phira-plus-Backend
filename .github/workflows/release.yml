@@ -92,7 +92,9 @@ jobs:
           python3 scripts/check-realtime-contract.py
           python3 scripts/check-config-security.py
           python3 scripts/verify-contract-bundle.py
-          git diff --exit-code -- contracts/openapi.json contracts/types.ts contracts/error-codes.json contracts/contract-version.json
+          # source_commit in contract-version.json is a moving build_ref marker
+          # (never matches a committed value); content verified above.
+          git diff --exit-code -- contracts/openapi.json contracts/types.ts contracts/error-codes.json
 
   build:
     needs: [version, quality-gate]
