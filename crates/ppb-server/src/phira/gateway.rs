@@ -8,10 +8,8 @@ use dashmap::DashMap;
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
-use super::client::PhiraError;
+use super::client::{is_transient_http_error, sleep_backoff, PhiraError, RETRY_MAX_ATTEMPTS, RETRY_TOTAL_BUDGET_MS};
 use crate::middleware::rate_limit::RateLimiter;
-
-const MAX_RETRIES: u32 = 2;
 
 struct CachedValue {
     value: Value,
@@ -94,6 +92,7 @@ impl PhiraGateway {
 
     async fn fetch_with_retry(&self, path: &str, query: &[(&str, String)]) -> Result<Value, PhiraError> {
         let url = format!("{}/{path}", self.base_url);
+        let deadline = Instant::now() + Duration::from_millis(RETRY_TOTAL_BUDGET_MS);
         let mut attempt = 0u32;
         loop {
             let result = self.http.get(&url).query(query).send().await;
@@ -111,17 +110,17 @@ impl PhiraGateway {
                     if status.as_u16() == 404 {
                         return Err(PhiraError::Api(format!("{path} not found")));
                     }
-                    if status.is_server_error() && attempt < MAX_RETRIES {
+                    if status.is_server_error() && attempt < RETRY_MAX_ATTEMPTS {
                         attempt += 1;
-                        tokio::time::sleep(Duration::from_millis(200 * attempt as u64)).await;
+                        sleep_backoff(attempt, deadline).await?;
                         continue;
                     }
                     return Err(PhiraError::Api(format!("{path} failed: status {status}")));
                 }
                 Err(e) => {
-                    if attempt < MAX_RETRIES && is_transient(&e) {
+                    if attempt < RETRY_MAX_ATTEMPTS && is_transient_http_error(&e) {
                         attempt += 1;
-                        tokio::time::sleep(Duration::from_millis(200 * attempt as u64)).await;
+                        sleep_backoff(attempt, deadline).await?;
                         continue;
                     }
                     return Err(PhiraError::Unavailable(e.to_string()));
@@ -318,10 +317,6 @@ fn cache_key(path: &str, query: &[(&str, String)]) -> String {
     let mut parts: Vec<String> = query.iter().map(|(k, v)| format!("{k}={v}")).collect();
     parts.sort();
     format!("{path}?{}", parts.join("&"))
-}
-
-fn is_transient(e: &reqwest::Error) -> bool {
-    e.is_timeout() || e.is_connect()
 }
 
 /// Merge a Phira error into an ApiError (reuse existing mapping + rate limit).

@@ -89,6 +89,32 @@ pub struct PhiraClient {
     base_url: String,
 }
 
+/// Retry budget for transient Phira API failures (Owner: exponential backoff,
+/// total user wait ≤ 5s). Base delay 100ms doubling to 800ms; the 5s deadline
+/// is a hard cap even if a request itself is slow.
+pub(crate) const RETRY_MAX_ATTEMPTS: u32 = 3;
+pub(crate) const RETRY_BASE_DELAY_MS: u64 = 100;
+pub(crate) const RETRY_TOTAL_BUDGET_MS: u64 = 5000;
+
+/// Network-level errors worth retrying (timeout / connect), not HTTP 4xx.
+pub(crate) fn is_transient_http_error(e: &reqwest::Error) -> bool {
+    e.is_timeout() || e.is_connect()
+}
+
+/// Sleep an exponential backoff, failing fast once the total budget is spent.
+pub(crate) async fn sleep_backoff(
+    attempt: u32,
+    deadline: std::time::Instant,
+) -> Result<(), PhiraError> {
+    // 100ms, 200ms, 400ms, 800ms (capped at 800ms).
+    let delay = Duration::from_millis(RETRY_BASE_DELAY_MS << attempt.min(3));
+    if std::time::Instant::now() + delay > deadline {
+        return Err(PhiraError::Unavailable("Phira API retry budget exceeded".to_string()));
+    }
+    tokio::time::sleep(delay).await;
+    Ok(())
+}
+
 impl PhiraClient {
     pub fn new(base_url: &str, timeout_ms: u64) -> Result<Self, ApiError> {
         let http = reqwest::Client::builder()
@@ -103,14 +129,29 @@ impl PhiraClient {
 
     async fn login_post(&self, body: serde_json::Value) -> Result<PhiraLoginResponse, PhiraError> {
         let url = format!("{}/login", self.base_url);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
-        parse_login_response(resp).await
+        let deadline = std::time::Instant::now() + Duration::from_millis(RETRY_TOTAL_BUDGET_MS);
+        let mut attempt = 0u32;
+        loop {
+            match self.http.post(&url).json(&body).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_server_error() && attempt < RETRY_MAX_ATTEMPTS {
+                        attempt += 1;
+                        sleep_backoff(attempt, deadline).await?;
+                        continue;
+                    }
+                    return parse_login_response(resp).await;
+                }
+                Err(e) => {
+                    if is_transient_http_error(&e) && attempt < RETRY_MAX_ATTEMPTS {
+                        attempt += 1;
+                        sleep_backoff(attempt, deadline).await?;
+                        continue;
+                    }
+                    return Err(PhiraError::Unavailable(e.to_string()));
+                }
+            }
+        }
     }
 }
 
@@ -162,23 +203,37 @@ impl PhiraApi for PhiraClient {
 
     async fn me(&self, access_token: &str) -> Result<PhiraMe, PhiraError> {
         let url = format!("{}/me", self.base_url);
-        let resp = self
-            .http
-            .get(&url)
-            .bearer_auth(access_token)
-            .send()
-            .await
-            .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
-        if !status.is_success() {
-            return Err(PhiraError::Api(format!("/me failed: status {status}")));
+        let deadline = std::time::Instant::now() + Duration::from_millis(RETRY_TOTAL_BUDGET_MS);
+        let mut attempt = 0u32;
+        loop {
+            match self.http.get(&url).bearer_auth(access_token).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_server_error() && attempt < RETRY_MAX_ATTEMPTS {
+                        attempt += 1;
+                        sleep_backoff(attempt, deadline).await?;
+                        continue;
+                    }
+                    let text = resp
+                        .text()
+                        .await
+                        .map_err(|e| PhiraError::Unavailable(e.to_string()))?;
+                    if !status.is_success() {
+                        return Err(PhiraError::Api(format!("/me failed: status {status}")));
+                    }
+                    return serde_json::from_str::<PhiraMe>(&text)
+                        .map_err(|_| PhiraError::Api("unexpected /me payload".to_string()));
+                }
+                Err(e) => {
+                    if is_transient_http_error(&e) && attempt < RETRY_MAX_ATTEMPTS {
+                        attempt += 1;
+                        sleep_backoff(attempt, deadline).await?;
+                        continue;
+                    }
+                    return Err(PhiraError::Unavailable(e.to_string()));
+                }
+            }
         }
-        serde_json::from_str::<PhiraMe>(&text)
-            .map_err(|_| PhiraError::Api("unexpected /me payload".to_string()))
     }
 }
 
