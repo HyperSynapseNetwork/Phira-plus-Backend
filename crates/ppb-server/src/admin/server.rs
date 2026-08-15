@@ -41,7 +41,6 @@ pub struct ServerStatsResponse {
     pub port: i64,
     pub http_port: i64,
     pub uptime_secs: i64,
-    #[serde(default)]
     pub server_name: String,
 }
 
