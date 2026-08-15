@@ -119,6 +119,9 @@ impl PhiraClient {
     pub fn new(base_url: &str, timeout_ms: u64) -> Result<Self, ApiError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
+            // Phira endpoints are fixed/known; a 3xx would silently downgrade
+            // POST /login to GET and drop the body, so disable redirects.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|error| { tracing::error!(%error, "Phira HTTP client build failed"); ApiError::internal() })?;
         Ok(Self {
