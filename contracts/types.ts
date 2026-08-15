@@ -366,9 +366,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * GET /api/v1/admin/config/raw — raw PMP config YAML (plain text).
-         * @description Contract: the Panel consumer reads the raw YAML as a `text/plain` string
-         *     (`fetchConfigRaw(): Promise<string>`), not a JSON envelope.
+         * GET /api/v1/admin/config/raw — redacted read-only YAML projection.
+         * @description This is deliberately NOT the literal on-disk file: only descriptor-owned
+         *     fields are projected, sensitive fields are replaced with `[REDACTED]`, and
+         *     unknown fields are omitted. The save path still merges against the real
+         *     source YAML server-side, so unknown fields remain preserved without ever
+         *     being echoed to the browser.
          */
         get: operations["admin_config_raw_get"];
         put?: never;
@@ -474,7 +477,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/admin/coupons — list coupons. */
         get: operations["admin_coupons_get"];
         put?: never;
         post?: never;
@@ -493,7 +495,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/admin/coupons/create — create a coupon (generates a code if blank). */
         post: operations["admin_coupons_create_post"];
         delete?: never;
         options?: never;
@@ -510,7 +511,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/admin/coupons/{id}/revoke — revoke a coupon. */
         post: operations["admin_coupons_id_revoke_post"];
         delete?: never;
         options?: never;
@@ -1323,6 +1323,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/github/login/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auth_github_login_start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/github/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auth_github_start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/github/unbind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["auth_github_unbind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -1517,6 +1565,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/coupons/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["coupons_redeem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/friends": {
         parameters: {
             query?: never;
@@ -1603,6 +1667,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/friends/{phira_id}/room-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** POST /api/v1/friends/{phira_id}/room-invite — invite an accepted friend. */
+        post: operations["friends_phira_id_room_invite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1681,6 +1762,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/multiplayer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/v1/me/multiplayer — durable multiplayer history derived from PMP.
+         * @description Only facts that PMP persisted are summarized here. `playtime_ms` is the
+         *     sum of completed round durations, not a fabricated "time in app" metric.
+         */
+        get: operations["me_multiplayer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/preferences": {
         parameters: {
             query?: never;
@@ -1712,6 +1814,22 @@ export interface paths {
         post?: never;
         /** DELETE /api/v1/me/preferences/{namespace} — delete a namespaced preference. */
         delete: operations["me_preferences_namespace_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/privacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me_privacy_get"];
+        put: operations["me_privacy_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1777,6 +1895,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/replays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/v1/me/replays — owner inventory including non-public visibility. */
+        get: operations["me_replays_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/v1/me/sessions — active sessions for the current account. */
+        get: operations["me_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** DELETE /api/v1/me/sessions/{session_id} — revoke another active session. */
+        delete: operations["me_sessions_session_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -1784,7 +1953,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/notifications — inbox (paginated + unread). */
         get: operations["notifications_get"];
         put?: never;
         post?: never;
@@ -1803,12 +1971,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * POST /api/v1/notifications/{id}/action — run a notification action.
-         * @description §23 #8: social / navigation actions do NOT require High reauth (session +
-         *     CSRF + resource policy suffice). The whitelist forbids arbitrary Action
-         *     Registry IDs, so no elevated context is needed here.
-         */
         post: operations["notifications_id_action_post"];
         delete?: never;
         options?: never;
@@ -1825,7 +1987,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/notifications/{id}/dismiss — dismiss (hide from inbox). */
         post: operations["notifications_id_dismiss_post"];
         delete?: never;
         options?: never;
@@ -1842,10 +2003,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * POST /api/v1/notifications/{id}/input — reply (§23 #8: ordinary chat reply
-         * @description does NOT require High reauth; session + CSRF + chat rate-limit suffice).
-         */
         post: operations["notifications_id_input_post"];
         delete?: never;
         options?: never;
@@ -1862,7 +2019,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** POST /api/v1/notifications/{id}/read — mark read. */
         post: operations["notifications_id_read_post"];
         delete?: never;
         options?: never;
@@ -2052,7 +2208,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List public replays for a player */
+        /**
+         * GET /api/v1/replays?player_id=... — a player's durable round inventory.
+         * @description Only `public` (incl. `inherit`→public) replays are listed; unlisted/private/
+         *     friends/custom overrides are never exposed in the public listing (contract §20).
+         */
         get: operations["replays_get"];
         put?: never;
         post?: never;
@@ -2102,6 +2262,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/replays/{round_uuid}/frames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Full typed telemetry for a Replay viewer. Access is pinned to the same
+         * @description `(round_uuid, player_phira_id)` policy as manifest and WebSocket routes.
+         */
+        get: operations["replays_round_uuid_frames_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/replays/{round_uuid}/manifest": {
         parameters: {
             query?: never;
@@ -2116,6 +2296,66 @@ export interface paths {
         get: operations["replays_round_uuid_manifest_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/replays/{round_uuid}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/v1/replays/{round_uuid}/share?player_id=... — create a share link
+         * @description for the pair (owner).
+         */
+        post: operations["replays_round_uuid_share_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/replays/{round_uuid}/share/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * DELETE /api/v1/replays/{round_uuid}/share/{link_id}?player_id=... — revoke a
+         * @description share link for the pair (owner).
+         */
+        delete: operations["replays_round_uuid_share_link_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/replays/{round_uuid}/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/v1/replays/{round_uuid}/visibility?player_id=... — set visibility
+         * @description for the pair (owner).
+         */
+        post: operations["replays_round_uuid_visibility_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2235,7 +2475,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/v1/users/{phira_id} — Phira user profile. */
+        /** GET /api/v1/users/{phira_id} — public community profile. */
         get: operations["users_phira_id_get"];
         put?: never;
         post?: never;
@@ -2279,46 +2519,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/replays/{round_uuid}/frames": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Full typed telemetry for a Replay viewer. */
-        get: operations["replays_round_uuid_frames_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/github/start": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["auth_github_start_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/auth/github/login/start": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["auth_github_login_start_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/auth/github/unbind": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["auth_github_unbind_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/me/sessions": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_sessions_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/me/sessions/{session_id}": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post?: never; delete: operations["me_sessions_session_id_delete"]; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/me/multiplayer": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_multiplayer_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/me/privacy": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_privacy_get"]; put: operations["me_privacy_put"]; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/me/replays": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get: operations["me_replays_get"]; put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/replays/{round_uuid}/visibility": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["replays_round_uuid_visibility_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/replays/{round_uuid}/share": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["replays_round_uuid_share_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/replays/{round_uuid}/share/{link_id}": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post?: never; delete: operations["replays_round_uuid_share_link_id_delete"]; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/friends/{phira_id}/room-invite": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["friends_phira_id_room_invite_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
-    "/api/v1/coupons/redeem": { parameters: { query?: never; header?: never; path?: never; cookie?: never }; get?: never; put?: never; post: operations["coupons_redeem_post"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never; };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         ActionBody: {
+            /**
+             * @description Stable button id from the inbox wire. Action kind cannot be substituted
+             *     by the caller.
+             */
             action: string;
         };
         AdminRoomActionBody: {
             action: string;
             args?: unknown;
+        };
+        AdminTaskCompleteResponse: {
+            ok: boolean;
+            /** Format: uuid */
+            task_id: string;
+        };
+        AdminTaskItem: {
+            /** Format: date-time */
+            completed_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            created_by?: string | null;
+            /** Format: uuid */
+            id: string;
+            payload: unknown;
+            source: string;
+            status: string;
+            type: string;
+        };
+        AdminTaskListResponse: {
+            items: components["schemas"]["AdminTaskItem"][];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageNum: number;
+            /** Format: int64 */
+            total: number;
         };
         /**
          * @description Admin user list/detail wire item (§22: `ppb_user_id` UUID, `phira_id`,
@@ -2339,11 +2581,16 @@ export interface components {
             updated_at: string;
             username: string;
         };
-        /** @description Wire shape of one inbox notification (contract §8). */
+        /**
+         * @description Wire shape of one inbox notification. Literal title/body remain as legacy
+         *     and push fallbacks; first-party system events additionally carry semantic
+         *     i18n keys + safe params.
+         */
         AppNotificationWire: {
-            actions: unknown[];
+            actions: components["schemas"]["NotificationActionWire"][];
             actor: unknown;
-            body?: unknown;
+            body: string;
+            body_key?: string | null;
             /** Format: date-time */
             created_at: string;
             dedup_key: string;
@@ -2352,11 +2599,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             input?: unknown;
+            params: {
+                [key: string]: unknown;
+            };
             priority: string;
             /** Format: date-time */
             read_at?: string | null;
             target: unknown;
             title: string;
+            title_key?: string | null;
             type: string;
         };
         AuditEvent: {
@@ -2389,6 +2640,19 @@ export interface components {
             pageNum: number;
             /** Format: int64 */
             total: number;
+        };
+        AutomationStepError: {
+            code: components["schemas"]["ErrorCode"];
+            /** @description Debug/legacy fallback only. Formal UI uses `code`. */
+            message: string;
+        };
+        AutomationStepResult: {
+            error?: components["schemas"]["AutomationStepError"] | null;
+            ok: boolean;
+            result?: unknown;
+            step: string;
+            /** Format: int64 */
+            wait_secs?: number | null;
         };
         BroadcastBody: {
             content: string;
@@ -2521,15 +2785,19 @@ export interface components {
             errors: components["schemas"]["ConfigValidationError"][];
             ok: boolean;
         };
-        /** @description Stable field-level config validation reason. Product UI localizes this code; debug message is not formal UI copy. */
-        ConfigValidationIssueCode: "VALUES_MUST_BE_OBJECT" | "EXPECTED_TYPE";
-        /** @description Stable machine-readable field validation issue. `message` is a debug/legacy fallback only. */
         ConfigValidationError: {
-            path: string;
             code: components["schemas"]["ConfigValidationIssueCode"];
-            params: unknown;
             message?: string | null;
+            params?: unknown;
+            path: string;
         };
+        /**
+         * @description Stable machine-readable field validation issue. `message` is a debug/legacy
+         *     fallback only; official Panel UI localizes `code + params` and never renders
+         *     this string as product copy.
+         * @enum {string}
+         */
+        ConfigValidationIssueCode: "VALUES_MUST_BE_OBJECT" | "EXPECTED_TYPE";
         /**
          * @description Form-value edit body (§22 model A): Panel submits `{path: value}` and PPB
          *     validates/generates YAML/saves.
@@ -2547,17 +2815,17 @@ export interface components {
             version: number;
         };
         CreateCouponBody: {
-            action_type: "account_unlock" | "account_role" | "admin_alert" | "custom_hook";
-            code?: string;
+            action_type: string;
             args?: unknown;
-            holder_mode?: "creator" | "manual";
-            /** Format: int64 */
-            holder_phira_id?: number | null;
-            note?: string;
-            /** Format: int32 */
-            max_uses?: number | null;
+            code?: string;
             /** Format: date-time */
             expires_at?: string | null;
+            holder_mode?: string;
+            /** Format: int64 */
+            holder_phira_id?: number | null;
+            /** Format: int32 */
+            max_uses?: number | null;
+            note?: string;
         };
         CreateGroupBody: {
             description?: string;
@@ -2567,6 +2835,9 @@ export interface components {
         };
         CreateJobBody: {
             type: string;
+        };
+        CreateJobResponse: {
+            job: components["schemas"]["Job"];
         };
         CreateRoomBody: {
             endpoint?: string | null;
@@ -2580,11 +2851,12 @@ export interface components {
             description?: string;
             name: string;
         };
-        /** @description Stable machine-readable REST error code. Frontends localize by this value, never by message. */
-        ErrorCode: "INVALID_JSON" | "INVALID_QUERY" | "INVALID_PATH_PARAM" | "METHOD_NOT_ALLOWED" | "REQUEST_BODY_TOO_LARGE" | "INVALID_CONTENT_TYPE" | "VALIDATION_FAILED" | "RATE_LIMITED" | "AUTH_REQUIRED" | "SESSION_EXPIRED" | "PERMISSION_DENIED" | "CSRF_INVALID" | "RESOURCE_NOT_FOUND" | "RESOURCE_CONFLICT" | "CAPABILITY_NOT_SUPPORTED" | "INTERNAL_ERROR" | "LONG_JOB_ACCEPTED" | "LONG_RUNNING_ACTION_REQUIRES_JOB" | "PHIRA_AUTH_FAILED" | "PHIRA_REAUTH_REQUIRED" | "PHIRA_API_UNAVAILABLE" | "GITHUB_OAUTH_NOT_CONFIGURED" | "GITHUB_IDENTITY_NOT_BOUND" | "GITHUB_OAUTH_FAILED" | "GITHUB_API_UNAVAILABLE" | "GITHUB_OAUTH_STATE_INVALID" | "AUTH_LEGAL_CONSENT_REQUIRED" | "AUTH_LEGAL_DOCUMENTS_UNAVAILABLE" | "ROOT_PASSWORD_INVALID" | "ROOT_PASSWORD_CHANGE_REQUIRED" | "CURRENT_SESSION_REVOKE_FORBIDDEN" | "PMP_UNAVAILABLE" | "PMP_COMMAND_FAILED" | "PMP_COMMAND_TIMEOUT" | "PMP_CAPABILITY_MISSING" | "PMP_CONFIG_NOT_AVAILABLE" | "PMP_INVALID_RESPONSE" | "ROOM_NOT_FOUND" | "ROOM_ID_REQUIRED" | "ROOM_HOST_REQUIRED" | "ROOM_USER_NOT_PRESENT" | "ROOM_BATCH_TARGET_REQUIRED" | "ROOM_BATCH_ACTION_UNSUPPORTED" | "ROOM_MOVE_TARGET_REQUIRED" | "ROOM_CHAT_EMPTY" | "ROOM_CHAT_TOO_LONG" | "USER_NOT_FOUND" | "ALREADY_FRIENDS" | "FRIEND_REQUEST_ALREADY_SENT" | "FRIEND_REQUEST_NOT_FOUND" | "FRIEND_RELATION_REQUIRED" | "USER_BLOCKED" | "REPLAY_NOT_FOUND" | "REPLAY_ACCESS_DENIED" | "REPLAY_VISIBILITY_INVALID" | "REPLAY_PLAYER_REQUIRED" | "REPLAY_SHARE_INVALID" | "REPLAY_SHARE_EXPIRED" | "REPLAY_SHARE_REVOKED" | "NOTIFICATION_NOT_FOUND" | "NOTIFICATION_ACTION_NOT_AVAILABLE" | "NOTIFICATION_ACTION_TARGET_INVALID" | "NOTIFICATION_INPUT_NOT_ALLOWED" | "NOTIFICATION_INPUT_EMPTY" | "NOTIFICATION_INPUT_TOO_LONG" | "CONFIG_VALIDATION_FAILED" | "CONFIG_SNAPSHOT_NOT_FOUND" | "CONFIG_SCOPE_INVALID" | "JOB_NOT_FOUND" | "JOB_TYPE_UNKNOWN" | "JOB_ALREADY_RUNNING" | "JOB_NOT_RETRYABLE" | "JOB_NOT_CANCELLABLE" | "REDEMPTION_CODE_NOT_FOUND" | "REDEMPTION_CODE_ALREADY_USED" | "REDEMPTION_CODE_REVOKED" | "REDEMPTION_CODE_EXPIRED" | "REDEMPTION_CODE_LIMIT_REACHED" | "REDEMPTION_ACTION_UNSUPPORTED" | "GROUP_NOT_FOUND" | "GROUP_NAME_REQUIRED" | "USER_ACTION_TARGET_INVALID";
-        /** @description Sanitized frontend-consumable error parameters. */
-        ErrorDetails: {
-            params: Record<string, string | number | boolean | null>;
+        DeploymentCapabilities: {
+            backup: boolean;
+            ppf_build: boolean;
+            startup_args: components["schemas"]["StartupArgSpec"][];
+            supervisor_start: boolean;
+            supervisor_stop: boolean;
         };
         /** @description Serializable error body (`error` member). */
         ErrorBody: {
@@ -2592,6 +2864,23 @@ export interface components {
             details: components["schemas"]["ErrorDetails"];
             message: string;
             request_id: string;
+        };
+        /**
+         * @description Canonical machine-readable REST error registry.
+         *
+         *     Keep variants stable. New domain semantics get a new code; frontends consume
+         *     the generated OpenAPI union rather than maintaining a handwritten list.
+         * @enum {string}
+         */
+        ErrorCode: "INVALID_JSON" | "INVALID_QUERY" | "INVALID_PATH_PARAM" | "METHOD_NOT_ALLOWED" | "REQUEST_BODY_TOO_LARGE" | "INVALID_CONTENT_TYPE" | "VALIDATION_FAILED" | "RATE_LIMITED" | "AUTH_REQUIRED" | "SESSION_EXPIRED" | "PERMISSION_DENIED" | "CSRF_INVALID" | "RESOURCE_NOT_FOUND" | "RESOURCE_CONFLICT" | "CAPABILITY_NOT_SUPPORTED" | "INTERNAL_ERROR" | "LONG_JOB_ACCEPTED" | "LONG_RUNNING_ACTION_REQUIRES_JOB" | "PHIRA_AUTH_FAILED" | "PHIRA_REAUTH_REQUIRED" | "PHIRA_API_UNAVAILABLE" | "GITHUB_OAUTH_NOT_CONFIGURED" | "GITHUB_IDENTITY_NOT_BOUND" | "GITHUB_OAUTH_FAILED" | "GITHUB_API_UNAVAILABLE" | "GITHUB_OAUTH_STATE_INVALID" | "AUTH_LEGAL_CONSENT_REQUIRED" | "AUTH_LEGAL_DOCUMENTS_UNAVAILABLE" | "ROOT_PASSWORD_INVALID" | "ROOT_PASSWORD_CHANGE_REQUIRED" | "CURRENT_SESSION_REVOKE_FORBIDDEN" | "PMP_UNAVAILABLE" | "PMP_COMMAND_FAILED" | "PMP_COMMAND_TIMEOUT" | "PMP_CAPABILITY_MISSING" | "PMP_CONFIG_NOT_AVAILABLE" | "PMP_INVALID_RESPONSE" | "ROOM_NOT_FOUND" | "ROOM_ID_REQUIRED" | "ROOM_HOST_REQUIRED" | "ROOM_USER_NOT_PRESENT" | "ROOM_BATCH_TARGET_REQUIRED" | "ROOM_BATCH_ACTION_UNSUPPORTED" | "ROOM_MOVE_TARGET_REQUIRED" | "ROOM_CHAT_EMPTY" | "ROOM_CHAT_TOO_LONG" | "USER_NOT_FOUND" | "ALREADY_FRIENDS" | "FRIEND_REQUEST_ALREADY_SENT" | "FRIEND_REQUEST_NOT_FOUND" | "FRIEND_RELATION_REQUIRED" | "USER_BLOCKED" | "REPLAY_NOT_FOUND" | "REPLAY_ACCESS_DENIED" | "REPLAY_VISIBILITY_INVALID" | "REPLAY_PLAYER_REQUIRED" | "REPLAY_SHARE_INVALID" | "REPLAY_SHARE_EXPIRED" | "REPLAY_SHARE_REVOKED" | "NOTIFICATION_NOT_FOUND" | "NOTIFICATION_ACTION_NOT_AVAILABLE" | "NOTIFICATION_ACTION_TARGET_INVALID" | "NOTIFICATION_INPUT_NOT_ALLOWED" | "NOTIFICATION_INPUT_EMPTY" | "NOTIFICATION_INPUT_TOO_LONG" | "CONFIG_VALIDATION_FAILED" | "CONFIG_SNAPSHOT_NOT_FOUND" | "CONFIG_SCOPE_INVALID" | "JOB_NOT_FOUND" | "JOB_TYPE_UNKNOWN" | "JOB_ALREADY_RUNNING" | "JOB_NOT_RETRYABLE" | "JOB_NOT_CANCELLABLE" | "REDEMPTION_CODE_NOT_FOUND" | "REDEMPTION_CODE_ALREADY_USED" | "REDEMPTION_CODE_REVOKED" | "REDEMPTION_CODE_EXPIRED" | "REDEMPTION_CODE_LIMIT_REACHED" | "REDEMPTION_ACTION_UNSUPPORTED" | "GROUP_NOT_FOUND" | "GROUP_NAME_REQUIRED" | "USER_ACTION_TARGET_INVALID";
+        /**
+         * @description Safe details body. Unknown backend structures are normalized into `params`
+         *     with scalar values only before a response leaves PPB.
+         */
+        ErrorDetails: {
+            params?: {
+                [key: string]: unknown;
+            };
         };
         /** @description Wrapper for the JSON `{ "error": ... }` envelope. */
         ErrorEnvelope: {
@@ -2602,6 +2891,11 @@ export interface components {
         };
         ExecuteCommandBody: {
             command: string;
+        };
+        FriendRequestSendResponse: {
+            /** Format: uuid */
+            id: string;
+            status: string;
         };
         Group: {
             /** Format: date-time */
@@ -2676,6 +2970,10 @@ export interface components {
             state: string;
             type: string;
         };
+        JobCancelResponse: {
+            /** Format: uuid */
+            cancelled: string;
+        };
         /** @description Paginated job list response (§22 `{items, total, page, pageNum}`). */
         JobListResponse: {
             items: components["schemas"]["Job"][];
@@ -2687,44 +2985,9 @@ export interface components {
             total: number;
         };
         JobRetryResponse: {
-            ok: boolean;
             /** Format: uuid */
             job_id: string;
-        };
-        AdminTaskItem: {
-            /** Format: uuid */
-            id: string;
-            source: string;
-            type: string;
-            status: string;
-            payload: unknown;
-            /** Format: uuid */
-            created_by?: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            completed_at?: string | null;
-        };
-        AdminTaskListResponse: {
-            items: components["schemas"]["AdminTaskItem"][];
-            /** Format: int64 */
-            total: number;
-            /** Format: int64 */
-            page: number;
-            /** Format: int64 */
-            pageNum: number;
-        };
-        AdminTaskCompleteResponse: {
             ok: boolean;
-            /** Format: uuid */
-            task_id: string;
-        };
-        CreateJobResponse: {
-            job: components["schemas"]["Job"];
-        };
-        JobCancelResponse: {
-            /** Format: uuid */
-            cancelled: string;
         };
         JoinIntentBody: {
             room_id: string;
@@ -2775,21 +3038,117 @@ export interface components {
             session: unknown;
             user?: unknown;
         };
-        /** @description One delivery row `{event_id, type, created_at, delivered}`. */
-        NotificationDeliveryItem: {
+        MyMultiplayerResponse: {
+            /** Format: int64 */
+            completed_rounds: number;
+            /** Format: int64 */
+            phira_id: number;
+            /** Format: int64 */
+            playtime_ms: number;
+            recent_rounds: components["schemas"]["MyMultiplayerRound"][];
+            /** Format: int64 */
+            rooms_visited: number;
+            /** Format: int64 */
+            rounds_total: number;
+        };
+        MyMultiplayerRound: {
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            /** Format: int64 */
+            finished_at?: number | null;
+            room_id: string;
+            round_uuid: string;
+            /** Format: int64 */
+            started_at: number;
+        };
+        MyPrivacyResponse: {
+            profile_visibility: string;
+            show_online_status: boolean;
+            show_recent_activity: boolean;
+        };
+        MySessionItem: {
+            client_type: string;
             /** Format: date-time */
             created_at: string;
-            /** Format: int64 */
-            delivered: number;
+            current: boolean;
+            device_name: string;
+            /** Format: date-time */
+            expires_at: string;
             /** Format: uuid */
-            event_id: string;
+            id: string;
+            ip: string;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+        };
+        MySessionsResponse: {
+            items: components["schemas"]["MySessionItem"][];
+        };
+        NotificationActionDraft: {
+            action: components["schemas"]["NotificationActionKind"];
+            danger?: boolean;
+            data?: components["schemas"]["NotificationActionTarget"];
+            label?: string;
+            label_key?: string | null;
+        };
+        /** @enum {string} */
+        NotificationActionKind: "join_room" | "friend_accept" | "friend_reject" | "open_chart" | "open_replay" | "open_room" | "open_user" | "open_profile";
+        NotificationActionResult: {
+            action: components["schemas"]["NotificationActionKind"];
+            /** @enum {string} */
+            status: "completed";
+        } | {
+            action: components["schemas"]["NotificationActionKind"];
+            /** Format: uuid */
+            intent_id: string;
+            /** @enum {string} */
+            status: "pending_join_intent";
+        } | {
+            action: components["schemas"]["NotificationActionKind"];
+            path: string;
+            /** @enum {string} */
+            status: "navigate";
+        };
+        NotificationActionTarget: {
+            /** Format: int64 */
+            chart_id?: number | null;
+            /** Format: uuid */
+            friend_request_id?: string | null;
+            /** Format: int64 */
+            phira_id?: number | null;
+            room_id?: string | null;
+            round_uuid?: string | null;
+        };
+        NotificationActionWire: {
+            action: components["schemas"]["NotificationActionKind"];
+            danger?: boolean;
+            data?: components["schemas"]["NotificationActionTarget"];
+            id: string;
+            label?: string;
+            label_key?: string | null;
+        };
+        /**
+         * @description One delivery row consumed by Panel. `status` describes in-app fanout; push
+         *     delivery has a separate per-send summary and is not backfilled here.
+         */
+        NotificationDeliveryItem: {
+            /** Format: int64 */
+            delivered_count: number;
+            /** Format: int64 */
+            failed_count: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            sent_at: string;
+            status: string;
+            target_summary: string;
+            title: string;
             type: string;
         };
         /** @description Typed `GET /admin/notifications/delivery` response `{items}`. */
         NotificationDeliveryResponse: {
             items: components["schemas"]["NotificationDeliveryItem"][];
         };
-        /** @description Inbox response (§22 `{items, total, page, pageNum, unread}`). */
         NotificationInboxResponse: {
             items: components["schemas"]["AppNotificationWire"][];
             /** Format: int64 */
@@ -2801,6 +3160,32 @@ export interface components {
             /** Format: int64 */
             unread: number;
         };
+        NotificationInputResponse: {
+            ok: boolean;
+            /** @description PMP acknowledgement; nested shape remains owned by PMP. */
+            result: unknown;
+        };
+        /** @description Wire schema (contract §8): `{type, priority, title, body, actor, target, actions, input, deep_link, expires_at, dedup_key}`. */
+        NotificationPayload: {
+            actions?: components["schemas"]["NotificationActionWire"][];
+            /** Format: int64 */
+            actor?: number | null;
+            body?: string;
+            body_key?: string | null;
+            dedup_key?: string;
+            deep_link?: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            input?: unknown;
+            params?: {
+                [key: string]: unknown;
+            };
+            priority?: string;
+            target?: unknown;
+            title?: string;
+            title_key?: string | null;
+            type: string;
+        };
         /** @description Typed `POST /admin/notifications/send` response `{event_id, recipients, push}`. */
         NotificationSendResponse: {
             /** Format: uuid */
@@ -2808,6 +3193,36 @@ export interface components {
             push: components["schemas"]["PushSummary"];
             /** Format: int64 */
             recipients: number;
+        };
+        OwnerReplayListResponse: {
+            items: components["schemas"]["OwnerReplaySummary"][];
+            /** Format: int64 */
+            player_id: number;
+            /** Format: int64 */
+            total: number;
+        };
+        OwnerReplayShareLink: {
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
+        OwnerReplaySummary: {
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            /** Format: int64 */
+            finished_at?: number | null;
+            /** Format: int64 */
+            played_at: number;
+            /** Format: int64 */
+            player_phira_id: number;
+            room_id: string;
+            round_uuid: string;
+            share_links: components["schemas"]["OwnerReplayShareLink"][];
+            visibility: string;
         };
         /** @description Standard paginated response `{items, total, page, pageNum}`. */
         PaginationResponse: {
@@ -2855,9 +3270,39 @@ export interface components {
             session_id?: string | null;
             version?: string | null;
         };
+        PpConfigBody2: {
+            content: unknown;
+        };
+        PpfBuildConfigResponse: {
+            content: unknown;
+            /** Format: int64 */
+            revision: number;
+        };
+        PpfBuildConfigSaveResponse: {
+            ok: boolean;
+            /** Format: int64 */
+            revision: number;
+        };
         /** @description Preferences list response (§22). */
         PreferencesListResponse: {
             preferences: components["schemas"]["UserPreference"][];
+        };
+        PublicUserProfileResponse: {
+            avatar?: string | null;
+            background_url?: string | null;
+            bio?: string | null;
+            /** Format: int64 */
+            friends_count?: number | null;
+            is_blocked: boolean;
+            is_friend: boolean;
+            online_status?: string | null;
+            /** Format: int64 */
+            phira_id: number;
+            profile_visibility: string;
+            /** Format: double */
+            rks?: number | null;
+            stats?: unknown;
+            username: string;
         };
         PushEndpointBody: {
             channel: string;
@@ -2879,51 +3324,128 @@ export interface components {
             password: string;
             risk?: string | null;
         };
+        RedeemCodeBody: {
+            code: string;
+        };
+        RedeemCodeResponse: {
+            action_type: string;
+            ok: boolean;
+            /** Format: date-time */
+            redeemed_at: string;
+            result: unknown;
+        };
         ReplaceMembersBody: {
             user_ids: string[];
         };
         ReplacePermissionsBody: {
             permissions: string[];
         };
-        /** @description Replay detail (metadata, summary, visibility). */
+        ReplayCreatedShareLink: {
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: uuid */
+            id: string;
+        };
+        /** @description Replay detail (summary + visibility). */
         ReplayDetail: {
-            round_uuid: string;
-            /** Format: int64 */
-            player_phira_id: number;
             /** Format: int32 */
             chart_id: number;
             chart_name: string;
-            room_id: string;
-            /** Format: int64 */
-            started_at: number;
             /** Format: int64 */
             finished_at?: number | null;
-            visibility: string;
-            touches: unknown;
             judges: unknown;
+            /** Format: int64 */
+            player_phira_id: number;
+            room_id: string;
+            round_uuid: string;
+            /** Format: int64 */
+            started_at: number;
+            touches: unknown;
+            visibility: string;
+        };
+        ReplayFramesResponse: {
+            judges: components["schemas"]["ReplayJudgeFrame"][];
+            /** Format: int64 */
+            player_phira_id: number;
+            round_uuid: string;
+            touches: components["schemas"]["ReplayTouchPoint"][];
+        };
+        ReplayJudgeFrame: {
+            judgement: string;
+            /** Format: int32 */
+            line_id: number;
+            /** Format: int32 */
+            note_id: number;
+            /** Format: float */
+            time: number;
         };
         ReplayListResponse: {
+            items: components["schemas"]["ReplaySummary"][];
             /** Format: int32 */
             player_id: number;
-            items: components["schemas"]["ReplaySummary"][];
             /** Format: int64 */
             total: number;
         };
-        /** @description Replay manifest summary for one (round_uuid, player_phira_id). */
+        /** @description Replay manifest summary (per `(round_uuid, player_phira_id)` pair). */
         ReplayManifest: {
-            round_uuid: string;
-            /** Format: int64 */
-            player_phira_id: number;
             /** Format: int32 */
             chart_id: number;
             chart_name: string;
-            room_id: string;
-            /** Format: int64 */
-            started_at: number;
             /** Format: int64 */
             finished_at?: number | null;
-            touches: unknown;
             judges: unknown;
+            /** Format: int64 */
+            player_phira_id: number;
+            room_id: string;
+            round_uuid: string;
+            /** Format: int64 */
+            started_at: number;
+            touches: unknown;
+        };
+        ReplayOverride: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            owner_user_id?: string | null;
+            /** Format: int64 */
+            player_phira_id: number;
+            pmp_replay_id: string;
+            /** Format: date-time */
+            updated_at: string;
+            visibility: string;
+        };
+        ReplayShareCreatedResponse: {
+            link: components["schemas"]["ReplayCreatedShareLink"];
+            /** @description Opaque raw token, returned once. Only a hash is persisted. */
+            token: string;
+        };
+        /** @description Public Replay inventory item backed by PMP round metadata. */
+        ReplaySummary: {
+            /** Format: int32 */
+            chart_id: number;
+            chart_name: string;
+            /** Format: int64 */
+            finished_at?: number | null;
+            /** Format: int64 */
+            played_at: number;
+            /** Format: int64 */
+            player_phira_id: number;
+            room_id: string;
+            round_uuid: string;
+            visibility: string;
+        };
+        ReplayTouchPoint: {
+            /** Format: int32 */
+            finger: number;
+            /** Format: float */
+            time: number;
+            /** Format: float */
+            x: number;
+            /** Format: float */
+            y: number;
+        };
+        ReplayVisibilityResponse: {
+            override: components["schemas"]["ReplayOverride"];
         };
         /** @description Resolved share token `{round_uuid, player_phira_id}` (S-3). */
         ResolveShareResponse: {
@@ -2952,10 +3474,37 @@ export interface components {
         RoomBatchBody: {
             action: string;
             args?: unknown;
+            /** @description Validation-only preview. Kept compatible with older Panel payloads. */
+            dry_run?: boolean;
             room_ids: string[];
+        };
+        RoomBatchItemError: {
+            code: components["schemas"]["ErrorCode"];
+            message: string;
+        };
+        RoomBatchItemResult: {
+            error?: components["schemas"]["RoomBatchItemError"] | null;
+            ok: boolean;
+            result?: unknown;
+            room_uuid: string;
+        };
+        RoomBatchResponse: {
+            /** Format: int64 */
+            failed: number;
+            items: components["schemas"]["RoomBatchItemResult"][];
+            /** Format: int64 */
+            succeeded: number;
         };
         RoomCreationBody: {
             enabled: boolean;
+        };
+        RoomInviteBody: {
+            room_id: string;
+        };
+        RoomInviteResponse: {
+            /** Format: uuid */
+            event_id: string;
+            status: string;
         };
         /** @description Paginated room list response (§22 `{items, total, page, pageNum}`). */
         RoomListResponse: {
@@ -2970,12 +3519,36 @@ export interface components {
         RootLoginRequest: {
             password: string;
         };
+        RunbookCancelResponse: {
+            /** Format: uuid */
+            cancelled: string;
+        };
         /** @description A runbook definition (stored as JSONB; snapshot on every run). */
         RunbookDefinition: {
             args?: unknown;
             description?: string;
             name: string;
             steps: components["schemas"]["RunbookStep"][];
+        };
+        RunbookExecutionResponse: {
+            results: components["schemas"]["AutomationStepResult"][];
+            /** Format: uuid */
+            run_id: string;
+            status: string;
+        };
+        RunbookRunRow: {
+            actor: string;
+            arguments_redacted: unknown;
+            definition_snapshot: unknown;
+            /** Format: date-time */
+            finished_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runbook_id: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            status: string;
         };
         RunbookStep: {
             /** @description Empty for a WAIT-only step (design §10.1 `wait: <secs>`). */
@@ -2988,7 +3561,9 @@ export interface components {
             with?: unknown;
         };
         SendBody: {
+            actions?: components["schemas"]["NotificationActionDraft"][];
             body?: string;
+            dedup_key?: string;
             payload?: unknown;
             priority?: string;
             /** @description `{ "all": true }` | `{ "group_id": "<uuid>" }` | `{ "user_ids": [...] }` */
@@ -3027,28 +3602,6 @@ export interface components {
             /** Format: int64 */
             users_online: number;
         };
-        DeploymentCapabilities: {
-            supervisor_start: boolean;
-            supervisor_stop: boolean;
-            startup_args: components["schemas"]["StartupArgSpec"][];
-            ppf_build: boolean;
-            backup: boolean;
-        };
-        StartupArgSpec: {
-            key: string;
-            flag: string;
-            kind: string;
-            required: boolean;
-            min?: number | null;
-            max?: number | null;
-            max_len?: number | null;
-            allowed_values: string[];
-        };
-        MyMultiplayerRound: { round_uuid: string; room_id: string; chart_id: number; chart_name: string; started_at: number; finished_at?: number | null };
-        MyMultiplayerResponse: { phira_id: number; rounds_total: number; completed_rounds: number; rooms_visited: number; playtime_ms: number; recent_rounds: components["schemas"]["MyMultiplayerRound"][] };
-        PpConfigBody2: { content: unknown };
-        PpfBuildConfigResponse: { revision: number; content: unknown };
-        PpfBuildConfigSaveResponse: { ok: boolean; revision: number };
         /** @description Typed server status response (§22). */
         ServerStatusResponse: {
             db_configured: boolean;
@@ -3068,6 +3621,22 @@ export interface components {
             ip: string;
             /** Format: date-time */
             revoked_at?: string | null;
+        };
+        ShareBody: {
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        StartupArgSpec: {
+            allowed_values?: string[];
+            flag: string;
+            key: string;
+            kind?: string;
+            /** Format: int64 */
+            max?: number | null;
+            max_len?: number | null;
+            /** Format: int64 */
+            min?: number | null;
+            required?: boolean;
         };
         /** @description Encrypted subscription wire shape (before encryption at rest). */
         SubscriptionWire: {
@@ -3098,6 +3667,11 @@ export interface components {
             severity: string;
             suggestion?: string | null;
             title: string;
+        };
+        UpdateMyPrivacyBody: {
+            profile_visibility: string;
+            show_online_status: boolean;
+            show_recent_activity: boolean;
         };
         UpdatePreferencesBody: {
             /** Format: int64 */
@@ -3174,75 +3748,9 @@ export interface components {
         UserSessionsResponse: {
             items: components["schemas"]["SessionItem"][];
         };
-        /** @description Public Replay inventory item backed by PMP round metadata. */
-        ReplaySummary: {
-            round_uuid: string;
-            /** Format: int64 */
-            player_phira_id: number;
-            /** Format: int32 */
-            chart_id: number;
-            chart_name: string;
-            room_id: string;
-            /** Format: int64 */
-            played_at: number;
-            /** Format: int64 */
-            finished_at?: number | null;
+        VisibilityBody: {
             visibility: string;
         };
-        ReplayTouchPoint: {
-            /** Format: float */
-            time: number;
-            /** Format: int8 */
-            finger: number;
-            /** Format: float */
-            x: number;
-            /** Format: float */
-            y: number;
-        };
-        ReplayJudgeFrame: {
-            /** Format: float */
-            time: number;
-            /** Format: uint32 */
-            line_id: number;
-            /** Format: uint32 */
-            note_id: number;
-            judgement: string;
-        };
-        ReplayFramesResponse: {
-            round_uuid: string;
-            /** Format: int64 */
-            player_phira_id: number;
-            touches: components["schemas"]["ReplayTouchPoint"][];
-            judges: components["schemas"]["ReplayJudgeFrame"][];
-        };
-        RunbookRunRow: { id: string; runbook_id: string; definition_snapshot: unknown; arguments_redacted: unknown; actor: string; status: string; started_at?: string | null; finished_at?: string | null };
-        AutomationStepError: { code: components["schemas"]["ErrorCode"]; message: string };
-        AutomationStepResult: { step: string; ok: boolean; result?: unknown; error?: components["schemas"]["AutomationStepError"]; wait_secs?: number };
-        RunbookExecutionResponse: { run_id: string; status: string; results: components["schemas"]["AutomationStepResult"][] };
-        RunbookCancelResponse: { cancelled: string };
-        MySessionItem: { id: string; client_type: string; device_name: string; ip: string; created_at: string; expires_at: string; last_seen_at?: string | null; current: boolean };
-        MySessionsResponse: { items: components["schemas"]["MySessionItem"][] };
-        MyPrivacyResponse: { profile_visibility: string; show_online_status: boolean; show_recent_activity: boolean };
-        UpdateMyPrivacyBody: { profile_visibility: string; show_online_status: boolean; show_recent_activity: boolean };
-        OwnerReplayShareLink: { id: string; expires_at?: string | null; revoked_at?: string | null };
-        OwnerReplaySummary: { round_uuid: string; player_phira_id: number; chart_id: number; chart_name: string; room_id: string; played_at: number; finished_at?: number | null; visibility: "inherit" | "public" | "friends" | "private" | "unlisted" | "custom"; share_links: components["schemas"]["OwnerReplayShareLink"][] };
-        OwnerReplayListResponse: { player_id: number; items: components["schemas"]["OwnerReplaySummary"][]; total: number };
-        ReplayOverride: { id: string; pmp_replay_id: string; player_phira_id: number; owner_user_id?: string | null; visibility: string; updated_at: string };
-        ReplayVisibilityResponse: { override: components["schemas"]["ReplayOverride"] };
-        VisibilityBody: { visibility: "inherit" | "public" | "friends" | "private" | "unlisted" | "custom" };
-        ReplayCreatedShareLink: { id: string; expires_at?: string | null };
-        ReplayShareCreatedResponse: { link: components["schemas"]["ReplayCreatedShareLink"]; token: string };
-        ShareBody: { expires_at?: string | null };
-        RoomInviteBody: { room_id: string };
-        RoomInviteResponse: { event_id: string; status: string };
-        RedeemCodeBody: { code: string };
-        RedeemCodeResponse: { ok: boolean; action_type: string; result: unknown; redeemed_at: string };
-        PublicUserProfileResponse: {
-            background_url?: string | null; phira_id: number; username: string; avatar?: string | null; bio?: string | null; online_status?: string | null; profile_visibility: "public" | "friends" | "private"; rks?: number | null; stats?: unknown; friends_count?: number | null; is_friend: boolean; is_blocked: boolean };
-        NotificationActionKind: "join_room" | "friend_accept" | "friend_reject" | "open_chart" | "open_replay" | "open_room" | "open_user" | "open_profile";
-        NotificationActionTarget: { room_id?: string | null; chart_id?: number | null; phira_id?: number | null; round_uuid?: string | null; friend_request_id?: string | null };
-        NotificationActionDraft: { label?: string; label_key?: string | null; action: components["schemas"]["NotificationActionKind"]; data?: components["schemas"]["NotificationActionTarget"]; danger?: boolean };
-        NotificationActionWire: { id: string; label?: string; label_key?: string | null; action: components["schemas"]["NotificationActionKind"]; data?: components["schemas"]["NotificationActionTarget"]; danger?: boolean };
     };
     responses: never;
     parameters: never;
@@ -3267,7 +3775,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PpfBuildConfigResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description permission denied */
@@ -3285,9 +3793,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                action_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3407,9 +3913,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3542,7 +4046,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunbookRunRow"][];
                 };
             };
             /** @description permission denied */
@@ -3560,9 +4064,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3573,7 +4075,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunbookRunRow"];
                 };
             };
             /** @description permission denied */
@@ -3591,9 +4093,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3604,7 +4104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunbookCancelResponse"];
                 };
             };
             /** @description permission denied */
@@ -3684,9 +4184,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3715,9 +4213,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3744,9 +4240,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3779,9 +4273,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3796,7 +4288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunbookExecutionResponse"];
                 };
             };
             /** @description permission denied */
@@ -3956,7 +4448,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PpfBuildConfigResponse"];
                 };
             };
             /** @description permission denied */
@@ -3970,7 +4462,48 @@ export interface operations {
             };
         };
     };
-    admin_config_ppf_put: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["PpConfigBody2"] } }; responses: { 200: { content: { "application/json": components["schemas"]["PpfBuildConfigSaveResponse"] } }; 403: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 422: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
+    admin_config_ppf_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PpConfigBody2"];
+            };
+        };
+        responses: {
+            /** @description PPF build config saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PpfBuildConfigSaveResponse"];
+                };
+            };
+            /** @description permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid build config */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     admin_config_raw_get: {
         parameters: {
             query?: never;
@@ -3980,7 +4513,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description raw config YAML */
+            /** @description redacted canonical config YAML projection */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4022,6 +4555,15 @@ export interface operations {
                     "application/json": components["schemas"]["ConfigRollbackResponse"];
                 };
             };
+            /** @description critical reauth required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description permission denied */
             403: {
                 headers: {
@@ -4053,6 +4595,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfigSaveResponse"];
+                };
+            };
+            /** @description critical reauth required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description permission denied */
@@ -4166,7 +4717,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description coupon list */
+            /** @description redemption code list */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4199,7 +4750,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description coupon created */
+            /** @description redemption code created */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4223,9 +4774,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4314,9 +4863,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4345,9 +4892,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4374,9 +4919,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -4409,9 +4952,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -4442,9 +4983,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -4535,13 +5074,7 @@ export interface operations {
     };
     admin_jobs_tasks_get: {
         parameters: {
-            query?: {
-                /** Format: int64 */
-                page?: number;
-                /** Format: int64 */
-                pageNum?: number;
-                status?: "pending" | "completed";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -4572,9 +5105,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                task_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4603,9 +5134,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                job_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4634,9 +5163,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                job_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4674,9 +5201,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                job_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4721,9 +5246,9 @@ export interface operations {
                 limit?: number | null;
                 /** @description filter by log level (error/warn/info/debug/trace), case-insensitive */
                 level?: string | null;
-                /** @description case-insensitive substring match on message */
+                /** @description case-insensitive substring match on message or error_code */
                 search?: string | null;
-                /** @description focus: return the entry with this log_id (content hash) */
+                /** @description focus: return the occurrence with this log_id */
                 log_id?: string | null;
             };
             header?: never;
@@ -5033,9 +5558,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                name: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5064,9 +5587,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                name: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5093,9 +5614,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                name: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5124,9 +5643,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                name: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5155,10 +5672,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                name: string;
-                action: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -5268,7 +5782,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoomBatchResponse"];
                 };
             };
             /** @description permission denied */
@@ -5286,9 +5800,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5317,9 +5829,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5348,9 +5858,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -5751,9 +6259,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5782,9 +6288,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -5817,9 +6321,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5848,9 +6350,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5879,9 +6379,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5910,9 +6408,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5928,6 +6424,104 @@ export interface operations {
             };
             /** @description permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_github_login_start_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                return_to: string | null;
+                client_type: string | null;
+                accepted: boolean | null;
+                terms_version: string | null;
+                privacy_version: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description redirect to GitHub OAuth */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description current Terms/Privacy versions were not explicitly accepted */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description GitHub OAuth or approved legal documents not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_github_start_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GitHub bind authorization URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description GitHub OAuth not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_github_unbind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GitHub identity unbound */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description unauthenticated */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6139,9 +6733,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6170,9 +6762,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6201,9 +6791,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6232,9 +6820,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6263,9 +6849,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6281,6 +6865,39 @@ export interface operations {
             };
             /** @description phira unavailable */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    coupons_redeem_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedeemCodeBody"];
+            };
+        };
+        responses: {
+            /** @description redemption completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedeemCodeResponse"];
+                };
+            };
+            /** @description code unavailable */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6367,7 +6984,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["FriendRequestSendResponse"];
                 };
             };
             /** @description already friends / request exists */
@@ -6385,9 +7002,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                request_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6414,9 +7029,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                request_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6443,9 +7056,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6458,6 +7069,48 @@ export interface operations {
                 content?: never;
             };
             /** @description user not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    friends_phira_id_room_invite_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoomInviteBody"];
+            };
+        };
+        responses: {
+            /** @description room invite notification created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomInviteResponse"];
+                };
+            };
+            /** @description friend relation required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description user or room not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6592,9 +7245,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                intent_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6623,9 +7274,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                intent_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6639,6 +7288,44 @@ export interface operations {
             };
             /** @description unauthenticated */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    me_multiplayer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description multiplayer summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyMultiplayerResponse"];
+                };
+            };
+            /** @description unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description PMP unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6681,9 +7368,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                namespace: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6712,9 +7397,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                namespace: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -6747,9 +7430,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                namespace: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6763,6 +7444,59 @@ export interface operations {
             };
             /** @description unauthenticated */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    me_privacy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description privacy settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPrivacyResponse"];
+                };
+            };
+        };
+    };
+    me_privacy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMyPrivacyBody"];
+            };
+        };
+        responses: {
+            /** @description privacy settings saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPrivacyResponse"];
+                };
+            };
+            /** @description invalid visibility */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6867,9 +7601,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                endpoint_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6892,11 +7624,108 @@ export interface operations {
             };
         };
     };
-    notifications_get: {
+    me_replays_get: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description owner replay inventory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerReplayListResponse"];
+                };
+            };
+            /** @description unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    me_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description active sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySessionsResponse"];
+                };
+            };
+            /** @description unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    me_sessions_session_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description session revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description session not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description cannot revoke current session */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    notifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: number | null;
+                pageNum: number | null;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6925,9 +7754,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -6936,17 +7763,35 @@ export interface operations {
             };
         };
         responses: {
-            /** @description action result */
+            /** @description typed action result */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationActionResult"];
                 };
             };
             /** @description unauthenticated */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description notification not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description button not available or target invalid */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6960,9 +7805,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6983,15 +7826,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            /** @description notification not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     notifications_id_input_post: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -7006,11 +7856,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationInputResponse"];
                 };
             };
             /** @description unauthenticated */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description notification not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description input invalid or not allowed */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7024,9 +7892,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7040,6 +7906,15 @@ export interface operations {
             };
             /** @description unauthenticated */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description notification not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7182,9 +8057,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                chart_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7213,9 +8086,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                user_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7244,9 +8115,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                chart_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7275,9 +8144,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7305,6 +8172,7 @@ export interface operations {
     replays_get: {
         parameters: {
             query: {
+                /** @description Phira player id */
                 player_id: number;
             };
             header?: never;
@@ -7337,9 +8205,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                token: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7367,11 +8233,14 @@ export interface operations {
     replays_round_uuid_get: {
         parameters: {
             query: {
+                /** @description Phira player id */
                 player_id: number;
-                token?: string;
+                /** @description Optional Replay share token */
+                token?: string | null;
             };
             header?: never;
             path: {
+                /** @description PMP round UUID */
                 round_uuid: string;
             };
             cookie?: never;
@@ -7398,14 +8267,54 @@ export interface operations {
             };
         };
     };
-    replays_round_uuid_manifest_get: {
+    replays_round_uuid_frames_get: {
         parameters: {
             query: {
+                /** @description Phira player id */
                 player_id: number;
-                token?: string;
+                /** @description Optional Replay share token */
+                token?: string | null;
             };
             header?: never;
             path: {
+                /** @description PMP round UUID */
+                round_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description typed Replay telemetry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayFramesResponse"];
+                };
+            };
+            /** @description access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    replays_round_uuid_manifest_get: {
+        parameters: {
+            query: {
+                /** @description Phira player id */
+                player_id: number;
+                /** @description Optional Replay share token */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description PMP round UUID */
                 round_uuid: string;
             };
             cookie?: never;
@@ -7428,6 +8337,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    replays_round_uuid_share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareBody"];
+            };
+        };
+        responses: {
+            /** @description share link created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayShareCreatedResponse"];
+                };
+            };
+        };
+    };
+    replays_round_uuid_share_link_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description share link revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description link not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    replays_round_uuid_visibility_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisibilityBody"];
+            };
+        };
+        responses: {
+            /** @description visibility updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayVisibilityResponse"];
                 };
             };
         };
@@ -7465,9 +8449,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7496,9 +8478,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -7540,9 +8520,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7571,9 +8549,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -7606,9 +8582,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                room_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7666,20 +8640,27 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description user profile */
+            /** @description public community profile */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublicUserProfileResponse"];
+                };
+            };
+            /** @description user not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description phira unavailable */
@@ -7697,9 +8678,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7726,9 +8705,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                phira_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7753,53 +8730,4 @@ export interface operations {
             };
         };
     };
-    replays_round_uuid_frames_get: {
-        parameters: {
-            query: {
-                player_id: number;
-                token?: string;
-            };
-            header?: never;
-            path: {
-                round_uuid: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description typed Replay telemetry */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReplayFramesResponse"];
-                };
-            };
-            /** @description access denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
-    auth_github_start_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": unknown } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
-    auth_github_login_start_get: { parameters: { query?: { return_to?: string | null; client_type?: string | null; accepted?: boolean | null; terms_version?: string | null; privacy_version?: string | null }; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 302: { content?: never }; 422: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
-    auth_github_unbind_post: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 204: { content?: never }; 401: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
-    me_sessions_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MySessionsResponse"] } } } };
-    me_sessions_session_id_delete: { parameters: { query?: never; header?: never; path: { session_id: string }; cookie?: never }; requestBody?: never; responses: { 204: { content?: never }; 404: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 409: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
-    me_multiplayer_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MyMultiplayerResponse"] } }; 401: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } }; 503: { content: { "application/json": components["schemas"]["ErrorEnvelope"] } } } };
-    me_privacy_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["MyPrivacyResponse"] } } } };
-    me_privacy_put: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["UpdateMyPrivacyBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["MyPrivacyResponse"] } } } };
-    me_replays_get: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody?: never; responses: { 200: { content: { "application/json": components["schemas"]["OwnerReplayListResponse"] } } } };
-    replays_round_uuid_visibility_post: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["VisibilityBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["ReplayVisibilityResponse"] } } } };
-    replays_round_uuid_share_post: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["ShareBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["ReplayShareCreatedResponse"] } } } };
-    replays_round_uuid_share_link_id_delete: { parameters: { query: { player_id: number }; header?: never; path: { round_uuid: string; link_id: string }; cookie?: never }; requestBody?: never; responses: { 204: { content?: never } } };
-    friends_phira_id_room_invite_post: { parameters: { query?: never; header?: never; path: { phira_id: number }; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["RoomInviteBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["RoomInviteResponse"] } } } };
-    coupons_redeem_post: { parameters: { query?: never; header?: never; path?: never; cookie?: never }; requestBody: { content: { "application/json": components["schemas"]["RedeemCodeBody"] } }; responses: { 200: { content: { "application/json": components["schemas"]["RedeemCodeResponse"] } } } };
-
 }
